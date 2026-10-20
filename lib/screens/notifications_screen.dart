@@ -1,172 +1,111 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-class NotificationsScreen extends StatelessWidget {
+import '../models/app_models.dart';
+import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/stockwise_ui.dart';
+
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F4),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            _buildSearchBar(),
-            _buildNotificationList(),
-          ],
-        ),
-      ),
-    );
-  }
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
 
-  static Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 130,
-      decoration: const BoxDecoration(color: Color(0xFF7FAA75)),
-      child: Stack(
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Column(
         children: [
-          Positioned(
-            left: 20,
-            top: 22,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
-              ),
-            ),
+          const StockWiseHeader(
+            title: 'Notifications',
+            leading: BackCircleButton(),
           ),
-          const Center(
-            child: Text(
-              'Notifications',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      child: Transform.translate(
-        offset: const Offset(0, -22),
-        child: Container(
-          height: 56,
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Colors.black12,
-                blurRadius: 8,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.search, size: 22, color: Color(0xFFAAAAAA)),
-              SizedBox(width: 12),
-              Text(
-                'Search notifications...',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFFAAAAAA),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildNotificationList() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
-        child: ListView(
-          children: [
-            _buildNotificationCard(Icons.warning_amber_rounded, 'Milk expiring in 7 days', 'Just now', const Color(0xFFD6A03A)),
-            const SizedBox(height: 14),
-            _buildNotificationCard(Icons.error_outline, 'Chicken expiring tomorrow!', 'Just now', const Color(0xFFD9534F)),
-            const SizedBox(height: 14),
-            _buildNotificationCard(Icons.check_circle_outline, 'Yogurt marked as consumed', 'Just now', const Color(0xFF5AA05A)),
-            const SizedBox(height: 14),
-            _buildNotificationCard(Icons.check_circle_outline, 'Eggs marked as consumed', 'Just now', const Color(0xFF5AA05A)),
-            const SizedBox(height: 14),
-            _buildNotificationCard(Icons.warning_amber_rounded, 'Eggs expiring in 3 days', 'Yesterday', const Color(0xFFD6A03A)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildNotificationCard(IconData icon, String title, String time, Color iconColor) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 6,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 24, color: iconColor),
-          ),
-          const SizedBox(width: 14),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF222222),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  time,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF999999),
-                  ),
-                ),
-              ],
+            child: StreamBuilder<List<AppNotification>>(
+              stream: FirestoreService.instance.watchNotifications(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Could not load notifications: ${snapshot.error}',
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final notices = snapshot.data!
+                    .where(
+                      (notice) => '${notice.title} ${notice.body}'
+                          .toLowerCase()
+                          .contains(query.toLowerCase()),
+                    )
+                    .toList();
+                return ListView(
+                  padding: const EdgeInsets.all(18),
+                  children: [
+                    AppSearchField(
+                      hint: 'Search notifications',
+                      onChanged: (value) => setState(() => query = value),
+                    ),
+                    const SizedBox(height: 16),
+                    if (notices.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48),
+                        child: Center(child: Text('No notifications yet.')),
+                      ),
+                    ...notices.map(_card),
+                  ],
+                );
+              },
             ),
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _card(AppNotification notice) {
+    final color = notice.type == 'expiry_warning'
+        ? AppColors.warning
+        : notice.type == 'order_status'
+        ? AppColors.blue
+        : AppColors.primaryDark;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        color: notice.readAt == null ? color.withValues(alpha: .06) : null,
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(13),
+          leading: CircleAvatar(
+            backgroundColor: color.withValues(alpha: .13),
+            child: Icon(_icon(notice.type), color: color),
+          ),
+          title: Text(
+            notice.title,
+            style: const TextStyle(fontWeight: FontWeight.w900),
+          ),
+          subtitle: Text(
+            '${notice.body}\n${DateFormat('dd MMM, HH:mm').format(notice.createdAt)}',
+          ),
+          isThreeLine: true,
+          onTap: notice.readAt == null
+              ? () => FirestoreService.instance.markNotificationRead(notice.id)
+              : null,
+        ),
+      ),
     );
   }
+
+  IconData _icon(String type) => switch (type) {
+    'expiry_warning' => Icons.warning_amber_rounded,
+    'order_status' => Icons.receipt_long_outlined,
+    'stock_consumed' => Icons.inventory_2_outlined,
+    _ => Icons.notifications_outlined,
+  };
 }

@@ -1,258 +1,226 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../models/app_models.dart';
+import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_bottom_nav.dart';
+import '../widgets/stockwise_ui.dart';
 import 'checkout_screen.dart';
+import 'orders_screen.dart';
+import 'profile_screen.dart';
+import 'shop_screen.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F4),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildHeader(context),
-              _buildContent(context),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 130,
-      decoration: const BoxDecoration(color: Color(0xFF7FAA75)),
-      child: Stack(
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Column(
         children: [
-          Positioned(
-            left: 22,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
-              ),
-            ),
-          ),
-          const Center(
-            child: Text(
-              'Cart',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildContent(BuildContext context) {
-    return Transform.translate(
-      offset: const Offset(0, -14),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(18),
-            topRight: Radius.circular(18),
-          ),
-        ),
-        child: Column(
-          children: [
-            _buildCartItem(),
-            _buildCartItem(),
-            const SizedBox(height: 14),
-            _buildSubtotal(),
-            const SizedBox(height: 90),
-            _buildCheckoutButton(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildCartItem() {
-    return Container(
-      padding: const EdgeInsets.only(bottom: 26),
-      margin: const EdgeInsets.only(bottom: 26),
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE5E5E5), width: 1.5),
-        ),
-      ),
-      child: Stack(
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8F8F8),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Center(
-                  child: Icon(Icons.inventory_2_outlined,
-                      size: 28, color: Color(0xFFB5B5B5)),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          const StockWiseHeader(title: 'Cart'),
+          Expanded(
+            child: StreamBuilder<List<CartLine>>(
+              stream: FirestoreService.instance.watchCart(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Could not load cart: ${snapshot.error}'),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final lines = snapshot.data!;
+                final subtotal = lines.fold<int>(
+                  0,
+                  (sum, line) => sum + line.lineTotalCents,
+                );
+                if (lines.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 60,
+                          color: AppColors.muted,
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Your cart is empty',
+                          style: TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.all(18),
                   children: [
-                    const Text(
-                      'Product Name',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF111111),
+                    ...lines.map((line) => _line(context, line)),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Subtotal',
+                              style: TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'RM ${(subtotal / 100).toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Exp: DD/MM/YYYY',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF888888),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CheckoutScreen(lines: lines),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: 105,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFCCCCCC), width: 1.5),
-                        borderRadius: BorderRadius.circular(22),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          Text('−',
-                              style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF111111))),
-                          Text('1',
-                              style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF111111))),
-                          Text('＋',
-                              style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF111111))),
-                        ],
-                      ),
+                      child: const Text('CHECKOUT'),
                     ),
                   ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                );
+              },
+            ),
+          ),
+          _bottomNav(context),
+        ],
+      ),
+    ),
+  );
+
+  Widget _line(BuildContext context, CartLine line) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            ProductArtwork(size: 62, imagePath: line.imagePath),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'RM 20.50',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF111111),
+                  Text(
+                    line.productName,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    'Exp: ${DateFormat('dd/MM/yyyy').format(line.expiryAt)}',
+                    style: const TextStyle(
+                      color: AppColors.muted,
+                      fontSize: 12,
                     ),
                   ),
-                  const SizedBox(height: 34),
-                  GestureDetector(
-                    onTap: () {},
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
+                  const SizedBox(height: 7),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () =>
+                            _quantity(context, line, line.quantity - 1),
+                        icon: const Icon(Icons.remove_circle_outline_rounded),
                       ),
-                      child: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
-                    ),
+                      Text(
+                        '${line.quantity}',
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      IconButton(
+                        onPressed: () =>
+                            _quantity(context, line, line.quantity + 1),
+                        icon: const Icon(Icons.add_circle_outline_rounded),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildSubtotal() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Subtotal',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF111111),
             ),
-          ),
-          Text(
-            'RM 41.00',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF111111),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'RM ${(line.lineTotalCents / 100).toStringAsFixed(2)}',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                IconButton(
+                  color: AppColors.danger,
+                  tooltip: 'Remove',
+                  onPressed: () =>
+                      FirestoreService.instance.removeCartItem(line.id),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildCheckoutButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 62,
-      child: ElevatedButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CheckoutScreen()),
-          );
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF7FAA75),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 4,
-          shadowColor: const Color(0xFF7FAA75).withValues(alpha: 0.3),
-        ),
-        child: const Text(
-          'CHECKOUT',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-          ),
+          ],
         ),
       ),
-    );
+    ),
+  );
+
+  Future<void> _quantity(
+    BuildContext context,
+    CartLine line,
+    int quantity,
+  ) async {
+    try {
+      await FirestoreService.instance.updateCartQuantity(line, quantity);
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
   }
+
+  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+    currentIndex: 1,
+    items: [
+      NavItem(
+        icon: Icons.storefront_outlined,
+        activeIcon: Icons.storefront_rounded,
+        label: 'Shop',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ShopScreen()),
+        ),
+      ),
+      const NavItem(
+        icon: Icons.shopping_cart_outlined,
+        activeIcon: Icons.shopping_cart_rounded,
+        label: 'Cart',
+      ),
+      NavItem(
+        icon: Icons.receipt_long_outlined,
+        activeIcon: Icons.receipt_long_rounded,
+        label: 'Orders',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OrdersScreen(isAdmin: false)),
+        ),
+      ),
+      NavItem(
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+        label: 'Profile',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        ),
+      ),
+    ],
+  );
 }

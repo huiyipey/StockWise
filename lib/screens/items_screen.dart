@@ -1,0 +1,222 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../models/app_models.dart';
+import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_bottom_nav.dart';
+import '../widgets/stockwise_ui.dart';
+import 'add_item_screen.dart';
+import 'admin_item_detail_screen.dart';
+import 'home_screen.dart';
+import 'orders_screen.dart';
+import 'profile_screen.dart';
+import 'waste_analysis_screen.dart';
+
+class ItemsScreen extends StatefulWidget {
+  const ItemsScreen({super.key});
+
+  @override
+  State<ItemsScreen> createState() => _ItemsScreenState();
+}
+
+class _ItemsScreenState extends State<ItemsScreen> {
+  String query = '';
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Column(
+        children: [
+          StockWiseHeader(
+            title: 'Items',
+            trailing: IconButton(
+              tooltip: 'Add item',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddItemScreen()),
+              ),
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<List<InventoryBatch>>(
+              stream: FirestoreService.instance.watchInventory(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _message(
+                    'Could not load inventory',
+                    '${snapshot.error}',
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final items = snapshot.data!
+                    .where(
+                      (item) => item.productName.toLowerCase().contains(
+                        query.toLowerCase(),
+                      ),
+                    )
+                    .toList();
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
+                  children: [
+                    AppSearchField(
+                      hint: 'Search inventory',
+                      onChanged: (value) => setState(() => query = value),
+                    ),
+                    const SizedBox(height: 14),
+                    if (items.isEmpty)
+                      _message(
+                        'No inventory found',
+                        'Add a product batch to this store.',
+                      ),
+                    ...items.map(_itemCard),
+                  ],
+                );
+              },
+            ),
+          ),
+          _bottomNav(context),
+        ],
+      ),
+    ),
+    floatingActionButton: FloatingActionButton(
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AddItemScreen()),
+      ),
+      child: const Icon(Icons.add_rounded),
+    ),
+  );
+
+  Widget _itemCard(InventoryBatch item) {
+    final days = item.daysUntilExpiry;
+    final color = days <= 2
+        ? AppColors.danger
+        : days <= 7
+        ? AppColors.warning
+        : AppColors.primaryDark;
+    final label = days < 0
+        ? 'Expired'
+        : days == 0
+        ? 'Today'
+        : '$days days';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Card(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AdminItemDetailScreen(item: item),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                ProductArtwork(size: 58, imagePath: item.imagePath),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.productName,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Exp: ${DateFormat('dd/MM/yyyy').format(item.expiryAt)}  •  Qty: ${item.quantityOnHand}',
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.categoryId.replaceAll('-', ' '),
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                StatusPill(label, color: color),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _message(String title, String body) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 48),
+    child: Column(
+      children: [
+        const Icon(
+          Icons.inventory_2_outlined,
+          size: 48,
+          color: AppColors.muted,
+        ),
+        const SizedBox(height: 12),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 5),
+        Text(body, textAlign: TextAlign.center),
+      ],
+    ),
+  );
+
+  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+    currentIndex: 1,
+    items: [
+      NavItem(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        ),
+      ),
+      const NavItem(
+        icon: Icons.inventory_2_outlined,
+        activeIcon: Icons.inventory_2_rounded,
+        label: 'Items',
+      ),
+      NavItem(
+        icon: Icons.bar_chart_outlined,
+        activeIcon: Icons.bar_chart_rounded,
+        label: 'Report',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const WasteAnalysisScreen()),
+        ),
+      ),
+      NavItem(
+        icon: Icons.shopping_cart_outlined,
+        activeIcon: Icons.shopping_cart_rounded,
+        label: 'Orders',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        ),
+      ),
+      NavItem(
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+        label: 'Profile',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        ),
+      ),
+    ],
+  );
+}

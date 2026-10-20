@@ -1,239 +1,248 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../services/firestore_service.dart';
+import '../services/store_session.dart';
+import '../theme/app_theme.dart';
+import '../widgets/glass_bottom_nav.dart';
+import 'cart_screen.dart';
+import 'home_screen.dart';
+import 'items_screen.dart';
 import 'login_screen.dart';
+import 'orders_screen.dart';
+import 'shop_screen.dart';
+import 'store_gate_screen.dart';
+import 'waste_analysis_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final session = StoreSession.instance;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildHeader(),
-              _buildProfileCard(context),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  static Widget _buildHeader() {
-    return Container(
-      width: double.infinity,
-      height: 120,
-      decoration: const BoxDecoration(color: Color(0xFF7FAA75)),
-      child: Stack(
-        children: [
-          const Center(
-            child: Text(
-              'My Profile',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Positioned(
-            right: 20,
-            top: 24,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.edit_outlined, color: Colors.black, size: 22),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildProfileCard(BuildContext context) {
-    return Transform.translate(
-      offset: const Offset(0, -15),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(24, 36, 24, 50),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(22),
-            topRight: Radius.circular(22),
-          ),
-        ),
         child: Column(
           children: [
             Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFFEFEFEF), width: 4),
-                color: const Color(0xFFFAFAFA),
-              ),
-              child: const Center(
-                child: Icon(Icons.person_outline, size: 50, color: Color(0xFF666666)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Name',
-              style: TextStyle(
-                fontSize: 30,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF222222),
+              height: 96,
+              color: AppColors.primary,
+              alignment: Alignment.center,
+              child: const Text(
+                'My Profile',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'testingstock@gmail.com',
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF777777),
+            Expanded(
+              child: StreamBuilder<Map<String, dynamic>>(
+                stream: FirestoreService.instance.watchUserProfile(),
+                builder: (context, snapshot) {
+                  final data = snapshot.data ?? const <String, dynamic>{};
+                  final preferences = Map<String, dynamic>.from(
+                    data['preferences'] as Map? ?? const {},
+                  );
+                  final enabled = preferences['expiryAlerts'] as bool? ?? true;
+                  return ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      const CircleAvatar(
+                        radius: 48,
+                        backgroundColor: AppColors.primarySoft,
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 46,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        data['displayName'] as String? ??
+                            user?.displayName ??
+                            'StockWise User',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      Text(
+                        user?.email ?? '',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.muted),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${session.store?.name ?? ''}  •  ${session.role.toUpperCase()}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: AppColors.primaryDark,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      Card(
+                        child: Column(
+                          children: [
+                            SwitchListTile.adaptive(
+                              secondary: const Icon(
+                                Icons.notifications_outlined,
+                              ),
+                              title: const Text(
+                                'Receive Notifications',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              subtitle: const Text(
+                                'Expiry, promotion, and order updates',
+                              ),
+                              value: enabled,
+                              onChanged: FirestoreService
+                                  .instance
+                                  .updateNotificationPreference,
+                            ),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.swap_horiz_rounded),
+                              title: const Text(
+                                'Switch store',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () => _switchStore(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.danger,
+                        ),
+                        onPressed: () => _logout(context),
+                        icon: const Icon(Icons.logout_rounded),
+                        label: const Text('LOG OUT'),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 36),
-            _buildMenuItem(Icons.settings_outlined, 'Account Settings'),
-            const SizedBox(height: 16),
-            _buildMenuItem(Icons.history, 'Order History'),
-            const SizedBox(height: 16),
-            _buildNotificationRow(),
-            const SizedBox(height: 60),
-            _buildLogoutButton(context),
+            _bottomNav(context),
           ],
         ),
       ),
     );
   }
 
-  static Widget _buildMenuItem(IconData icon, String label) {
-    return Container(
-      width: double.infinity,
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, size: 22, color: const Color(0xFF333333)),
-          ),
-          const SizedBox(width: 16),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF333333),
-            ),
-          ),
-          const Spacer(),
-          const Icon(Icons.chevron_right, size: 24, color: Color(0xFFAAAAAA)),
-        ],
-      ),
+  Future<void> _switchStore(BuildContext context) async {
+    StoreSession.instance.clear();
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const StoreGateScreen()),
+      (_) => false,
     );
   }
 
-  static Widget _buildNotificationRow() {
-    return Container(
-      width: double.infinity,
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.notifications_outlined, size: 22, color: Color(0xFF333333)),
-              SizedBox(width: 16),
-              Text(
-                'Receive Notifications',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF333333),
-                ),
-              ),
-            ],
-          ),
-          _ToggleSwitch(),
-        ],
-      ),
+  Future<void> _logout(BuildContext context) async {
+    StoreSession.instance.clear();
+    await FirebaseAuth.instance.signOut();
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
     );
   }
 
-  static Widget _buildLogoutButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 62,
-      child: ElevatedButton(
-        onPressed: () {
-          Navigator.pushAndRemoveUntil(
+  Widget _bottomNav(BuildContext context) {
+    if (StoreSession.instance.canManage) {
+      return GlassBottomNav(
+        currentIndex: 4,
+        items: [
+          NavItem(
+            icon: Icons.home_outlined,
+            activeIcon: Icons.home_rounded,
+            label: 'Home',
+            onTap: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            ),
+          ),
+          NavItem(
+            icon: Icons.inventory_2_outlined,
+            activeIcon: Icons.inventory_2_rounded,
+            label: 'Items',
+            onTap: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const ItemsScreen()),
+            ),
+          ),
+          NavItem(
+            icon: Icons.bar_chart_outlined,
+            activeIcon: Icons.bar_chart_rounded,
+            label: 'Report',
+            onTap: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const WasteAnalysisScreen()),
+            ),
+          ),
+          NavItem(
+            icon: Icons.shopping_cart_outlined,
+            activeIcon: Icons.shopping_cart_rounded,
+            label: 'Orders',
+            onTap: () => Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const OrdersScreen()),
+            ),
+          ),
+          const NavItem(
+            icon: Icons.person_outline_rounded,
+            activeIcon: Icons.person_rounded,
+            label: 'Profile',
+          ),
+        ],
+      );
+    }
+    return GlassBottomNav(
+      currentIndex: 3,
+      items: [
+        NavItem(
+          icon: Icons.storefront_outlined,
+          activeIcon: Icons.storefront_rounded,
+          label: 'Shop',
+          onTap: () => Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (_) => false,
-          );
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFFEF5A5F),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          elevation: 0,
-        ),
-        child: const Text(
-          'LOG OUT',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
+            MaterialPageRoute(builder: (_) => const ShopScreen()),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ToggleSwitch extends StatelessWidget {
-  const _ToggleSwitch();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 54,
-      height: 30,
-      decoration: BoxDecoration(
-        color: const Color(0xFF7B58C5),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Align(
-        alignment: Alignment.centerRight,
-        child: Padding(
-          padding: EdgeInsets.all(4),
-          child: CircleAvatar(
-            radius: 11,
-            backgroundColor: Colors.white,
+        NavItem(
+          icon: Icons.shopping_cart_outlined,
+          activeIcon: Icons.shopping_cart_rounded,
+          label: 'Cart',
+          onTap: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const CartScreen()),
           ),
         ),
-      ),
+        NavItem(
+          icon: Icons.receipt_long_outlined,
+          activeIcon: Icons.receipt_long_rounded,
+          label: 'Orders',
+          onTap: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const OrdersScreen(isAdmin: false),
+            ),
+          ),
+        ),
+        const NavItem(
+          icon: Icons.person_outline_rounded,
+          activeIcon: Icons.person_rounded,
+          label: 'Profile',
+        ),
+      ],
     );
   }
 }

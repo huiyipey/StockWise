@@ -1,0 +1,223 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function owns(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function memberPath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId)/members/$(request.auth.uid);
+    }
+
+    function isActiveMember(storeId) {
+      return signedIn()
+        && exists(memberPath(storeId))
+        && get(memberPath(storeId)).data.isActive == true;
+    }
+
+    function hasStoreRole(storeId, roles) {
+      return isActiveMember(storeId)
+        && get(memberPath(storeId)).data.role in roles;
+    }
+
+    function managesInventory(storeId) {
+      return hasStoreRole(storeId, ['owner', 'manager', 'staff']);
+    }
+
+    function managesStore(storeId) {
+      return hasStoreRole(storeId, ['owner', 'manager']);
+    }
+
+    function isBootstrapOwner(storeId) {
+      return signedIn()
+        && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid
+          == request.auth.uid;
+    }
+
+    function validCartItem(storeId, batchId) {
+      let batch = get(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(batchId)).data;
+      let sellingPrice = batch.promotionEnabled == true
+        && batch.promotionPriceCents != null
+          ? batch.promotionPriceCents
+          : batch.basePriceCents;
+      return request.resource.data.storeId == storeId
+        && request.resource.data.batchId == batchId
+        && request.resource.data.productId == batch.productId
+        && request.resource.data.productName == batch.productName
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.quantity
+          <= batch.quantityOnHand - batch.quantityReserved
+        && request.resource.data.unitPriceCents == sellingPrice;
+    }
+
+    match /users/{uid} {
+      allow create, read, update: if owns(uid);
+      allow delete: if false;
+
+      match /addresses/{addressId} {
+        allow read, write: if owns(uid);
+      }
+
+      match /devices/{deviceId} {
+        allow read, write: if owns(uid);
+      }
+    }
+
+    // Authorize watchMyMemberships across all members subcollections.
+    // The query must constrain userId to the signed-in user's UID.
+    match /{path=**}/members/{memberId} {
+      allow list: if signedIn() && resource.data.userId == request.auth.uid;
+    }
+    match /stores/{storeId} {
+      allow read: if signedIn() && (resource.data.status == 'active' || isActiveMember(storeId));
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'active';
+      allow update: if managesStore(storeId);
+      allow delete: if hasStoreRole(storeId, ['owner']);
+
+      match /members/{uid} {
+        allow read: if (signedIn() && resource.data.userId == request.auth.uid)
+          || isActiveMember(storeId);
+        allow create: if signedIn() && (
+          (owns(uid)
+            && request.resource.data.role == 'owner'
+            && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid == request.auth.uid)
+          || (hasStoreRole(storeId, ['owner'])
+            && request.resource.data.role in ['manager', 'staff'])
+          || (hasStoreRole(storeId, ['manager'])
+            && request.resource.data.role == 'staff')
+        );
+        allow update: if hasStoreRole(storeId, ['owner'])
+          || (hasStoreRole(storeId, ['manager'])
+            && resource.data.role == 'staff'
+            && request.resource.data.role == 'staff');
+        allow delete: if hasStoreRole(storeId, ['owner']) && uid != request.auth.uid;
+      }
+
+      match /categories/{categoryId} {
+        allow read: if signedIn();
+        allow write: if managesInventory(storeId) || isBootstrapOwner(storeId);
+      }
+
+      match /products/{productId} {
+        allow read: if signedIn();
+        allow write: if managesInventory(storeId);
+      }
+
+      match /inventoryBatches/{batchId} {
+        allow read: if signedIn();
+        allow create, delete: if managesInventory(storeId);
+        allow update: if managesInventory(storeId) || (
+          signedIn()
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['quantityOnHand', 'status', 'updatedAt'])
+          && exists(/databases/$(database)/documents/stores/$(storeId)/carts/$(request.auth.uid)/items/$(batchId))
+          && request.resource.data.quantityOnHand
+            == resource.data.quantityOnHand
+              - get(/databases/$(database)/documents/stores/$(storeId)/carts/$(request.auth.uid)/items/$(batchId)).data.quantity
+          && request.resource.data.quantityOnHand >= 0
+          && ((request.resource.data.quantityOnHand == 0
+              && request.resource.data.status == 'depleted')
+            || (request.resource.data.quantityOnHand > 0
+              && request.resource.data.status == 'active'))
+        );
+      }
+
+      match /inventoryEvents/{eventId} {
+        allow read: if managesInventory(storeId);
+        allow create: if managesInventory(storeId) || (
+          signedIn()
+          && request.resource.data.eventType == 'sold'
+          && request.resource.data.actorUid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/stores/$(storeId)/orders/$(request.resource.data.orderId)).data.userId
+            == request.auth.uid
+        );
+        allow update, delete: if false;
+      }
+
+      match /carts/{uid} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid)
+          && request.resource.data.ownerUid == uid
+          && request.resource.data.storeId == storeId;
+        allow delete: if owns(uid) || managesStore(storeId);
+
+        match /items/{batchId} {
+          allow read, delete: if owns(uid);
+          allow create: if owns(uid) && validCartItem(storeId, batchId);
+          allow update: if owns(uid)
+            && validCartItem(storeId, batchId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['quantity', 'updatedAt']);
+        }
+      }
+
+      match /orders/{orderId} {
+        allow create: if signedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.storeId == storeId
+          && request.resource.data.status == 'to_pay'
+          && request.resource.data.paymentStatus == 'unpaid'
+          && request.resource.data.subtotalCents is int
+          && request.resource.data.subtotalCents >= 0
+          && request.resource.data.shippingFeeCents is int
+          && request.resource.data.shippingFeeCents >= 0
+          && request.resource.data.totalCents
+            == request.resource.data.subtotalCents
+              + request.resource.data.shippingFeeCents;
+        allow read: if signedIn()
+          && (resource.data.userId == request.auth.uid || managesInventory(storeId));
+        allow update: if managesInventory(storeId);
+        allow delete: if false;
+
+        match /items/{itemId} {
+          allow create: if signedIn()
+            && getAfter(/databases/$(database)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
+              == request.auth.uid
+            && request.resource.data.storeId == storeId
+            && request.resource.data.quantity is int
+            && request.resource.data.quantity > 0
+            && request.resource.data.batchId is string
+            && request.resource.data.productId
+              == getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.productId
+            && request.resource.data.unitPriceCents
+              == (getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionEnabled == true
+                && getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionPriceCents != null
+                  ? getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionPriceCents
+                  : getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.basePriceCents)
+            && request.resource.data.lineTotalCents
+              == request.resource.data.quantity * request.resource.data.unitPriceCents;
+          allow read: if signedIn()
+            && (get(/databases/$(database)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
+              == request.auth.uid || managesInventory(storeId));
+          allow update, delete: if false;
+        }
+      }
+
+      match /notifications/{notificationId} {
+        allow create: if signedIn()
+          && (request.resource.data.recipientUid == request.auth.uid || managesInventory(storeId));
+        allow read: if signedIn()
+          && (resource.data.recipientUid == request.auth.uid || managesInventory(storeId));
+        allow update: if signedIn()
+          && resource.data.recipientUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+        allow delete: if false;
+      }
+
+      match /settings/{settingId} {
+        allow read: if signedIn();
+        allow write: if managesStore(storeId)
+          || (settingId in ['inventory', 'commerce']
+            && isBootstrapOwner(storeId));
+      }
+    }
+  }
+}
