@@ -1,358 +1,328 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../models/app_models.dart';
+import '../services/firestore_service.dart';
+import '../services/store_session.dart';
+import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/stockwise_ui.dart';
 import 'add_item_screen.dart';
-import 'item_detail_screen.dart';
+import 'admin_item_detail_screen.dart';
+import 'items_screen.dart';
 import 'notifications_screen.dart';
+import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF4F4F4),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildHeader(context),
-                  _buildContent(context),
-                ],
-              ),
-            ),
-            _buildBottomNav(context),
-          ],
-        ),
-      ),
-    );
-  }
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-  static Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 320,
-      padding: const EdgeInsets.fromLTRB(28, 36, 28, 0),
-      decoration: const BoxDecoration(color: Color(0xFF79AD74)),
-      child: Stack(
+class _HomeScreenState extends State<HomeScreen> {
+  String category = 'all';
+  DateTimeRange? expiryRange;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: Column(
         children: [
-          const Positioned(
-            top: 0,
-            left: 28,
-            child: Text(
-              'StockWise',
-              style: TextStyle(
+          StockWiseHeader(
+            title: StoreSession.instance.store?.name ?? 'StockWise',
+            trailing: IconButton(
+              tooltip: 'Notifications',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+              ),
+              icon: const Icon(
+                Icons.notifications_outlined,
                 color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
               ),
             ),
           ),
-          Positioned(
-            top: 0,
-            right: 24,
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+          Expanded(
+            child: StreamBuilder<List<InventoryBatch>>(
+              stream: FirestoreService.instance.watchInventory(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text('Could not load inventory: ${snapshot.error}'),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final active = snapshot.data!
+                    .where(
+                      (item) =>
+                          item.status == 'active' && item.quantityOnHand > 0,
+                    )
+                    .toList();
+                final categories =
+                    active.map((item) => item.categoryId).toSet().toList()
+                      ..sort();
+                final expiring = active.where((item) {
+                  if (item.daysUntilExpiry > 7) return false;
+                  if (category != 'all' && item.categoryId != category) {
+                    return false;
+                  }
+                  return _inRange(item.expiryAt);
+                }).toList();
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+                  children: [
+                    Text(
+                      'Inventory overview',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _stat(
+                            'Active batches',
+                            '${active.length}',
+                            AppColors.primaryDark,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _stat(
+                            'Expiring in 7 days',
+                            '${expiring.length}',
+                            AppColors.warning,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Expiring stock',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const ItemsScreen(),
+                            ),
+                          ),
+                          child: const Text('View all'),
+                        ),
+                      ],
+                    ),
+                    _filters(categories),
+                    const SizedBox(height: 10),
+                    if (expiring.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No stock expires in the next 7 days.'),
+                        ),
+                      ),
+                    ...expiring
+                        .take(5)
+                        .map((item) => _batchCard(context, item)),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const AddItemScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('ADD INVENTORY'),
+                    ),
+                  ],
                 );
               },
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.notifications_outlined,
-                  color: Color(0xFFF5D94C),
-                  size: 28,
-                ),
-              ),
             ),
           ),
-          const Positioned(
-            top: 100,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                Text(
-                  'Welcome Back!',
-                  style: TextStyle(
-                    color: Color(0xFF444444),
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                SizedBox(height: 10),
-                Text(
-                  'Quick glance at your stock',
-                  style: TextStyle(
-                    color: Color(0xFF5B5B5B),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _bottomNav(context),
         ],
       ),
-    );
-  }
+    ),
+  );
 
-  static Widget _buildContent(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 0, 22, 100),
+  Widget _stat(String label, String value, Color color) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 24),
-          _buildExpiringSoonCard(),
-          const SizedBox(height: 22),
-          const Text(
-            'Expiring Stock',
+          Text(
+            value,
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 27,
               fontWeight: FontWeight.w900,
+              color: color,
             ),
           ),
-          const SizedBox(height: 14),
-          _buildStockCard(context),
-          const SizedBox(height: 70),
-          _buildAddButton(context),
-        ],
-      ),
-    );
-  }
-
-  static Widget _buildExpiringSoonCard() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 12,
-            offset: Offset(0, 4),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
+    ),
+  );
+
+  Widget _filters(List<String> categories) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF3E0),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.access_time, size: 18, color: Color(0xFFF7A623)),
+          DropdownButtonFormField<String>(
+            initialValue: categories.contains(category) ? category : 'all',
+            decoration: const InputDecoration(labelText: 'Category'),
+            items: [
+              const DropdownMenuItem(
+                value: 'all',
+                child: Text('All categories'),
               ),
-              const SizedBox(width: 10),
-              const Text(
-                'Expiring Soon',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
+              ...categories.map(
+                (value) => DropdownMenuItem(
+                  value: value,
+                  child: Text(value.replaceAll('-', ' ')),
                 ),
               ),
             ],
+            onChanged: (value) => setState(() => category = value ?? 'all'),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildCircleIndicator('2 days', const Color(0xFFF44336), const Color(0xFFFFEBEE)),
-              _buildCircleIndicator('3 days', const Color(0xFFF7A623), const Color(0xFFFFF8E1)),
-              _buildCircleIndicator('7 days', const Color(0xFF7AC943), const Color(0xFFE8F5E9)),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickExpiryRange,
+                  icon: const Icon(Icons.date_range_outlined),
+                  label: Text(
+                    expiryRange == null
+                        ? 'Filter expiry date'
+                        : '${DateFormat('dd/MM/yy').format(expiryRange!.start)} – ${DateFormat('dd/MM/yy').format(expiryRange!.end)}',
+                  ),
+                ),
+              ),
+              if (expiryRange != null)
+                IconButton(
+                  tooltip: 'Clear date filter',
+                  onPressed: () => setState(() => expiryRange = null),
+                  icon: const Icon(Icons.close_rounded),
+                ),
             ],
           ),
         ],
       ),
+    ),
+  );
+
+  bool _inRange(DateTime date) {
+    final range = expiryRange;
+    if (range == null) return true;
+    final day = DateTime(date.year, date.month, date.day);
+    final start = DateTime(
+      range.start.year,
+      range.start.month,
+      range.start.day,
     );
+    final end = DateTime(range.end.year, range.end.month, range.end.day);
+    return !day.isBefore(start) && !day.isAfter(end);
   }
 
-  static Widget _buildCircleIndicator(String label, Color borderColor, Color bgColor) {
-    return Column(
-      children: [
-        Container(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: bgColor,
-            border: Border.all(color: borderColor, width: 6),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF555555),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Category',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF555555),
-          ),
-        ),
-      ],
+  Future<void> _pickExpiryRange() async {
+    final now = DateTime.now();
+    final selected = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 10),
+      initialDateRange: expiryRange,
     );
+    if (selected != null) setState(() => expiryRange = selected);
   }
 
-  static Widget _buildStockCard(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
+  Widget _batchCard(BuildContext context, InventoryBatch item) => Card(
+    child: ListTile(
+      contentPadding: const EdgeInsets.all(12),
+      leading: ProductArtwork(size: 52, imagePath: item.imagePath),
+      title: Text(
+        item.productName,
+        style: const TextStyle(fontWeight: FontWeight.w900),
+      ),
+      subtitle: Text(
+        'Exp: ${DateFormat('dd/MM/yyyy').format(item.expiryAt)}  •  Qty: ${item.quantityOnHand}',
+      ),
+      trailing: StatusPill(
+        item.daysUntilExpiry < 0 ? 'Expired' : '${item.daysUntilExpiry} days',
+        color: item.daysUntilExpiry <= 2 ? AppColors.danger : AppColors.warning,
+      ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AdminItemDetailScreen(item: item)),
+      ),
+    ),
+  );
+
+  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+    currentIndex: 0,
+    items: [
+      const NavItem(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home',
+      ),
+      NavItem(
+        icon: Icons.inventory_2_outlined,
+        activeIcon: Icons.inventory_2_rounded,
+        label: 'Items',
+        onTap: () => Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const ItemDetailScreen()),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F8F0),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Center(
-                child: Icon(Icons.inventory_2_outlined,
-                    size: 26, color: Color(0xFF75A972)),
-              ),
-            ),
-            const SizedBox(width: 18),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Name',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF444444),
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Exp: DD/MM/YYYY\nQty: 1',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF888888),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F5E9),
-                borderRadius: BorderRadius.circular(22),
-              ),
-              child: const Text(
-                '10 days',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF75A972),
-                ),
-              ),
-            ),
-          ],
+          MaterialPageRoute(builder: (_) => const ItemsScreen()),
         ),
       ),
-    );
-  }
-
-  static Widget _buildAddButton(BuildContext context) {
-    return Center(
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AddItemScreen()),
-          );
-        },
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF79AD74),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF79AD74).withValues(alpha: 0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(Icons.add, color: Colors.white, size: 36),
-          ),
+      NavItem(
+        icon: Icons.bar_chart_outlined,
+        activeIcon: Icons.bar_chart_rounded,
+        label: 'Report',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const WasteAnalysisScreen()),
         ),
       ),
-    );
-  }
-
-  static Widget _buildBottomNav(BuildContext context) {
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
-      child: GlassBottomNav(
-        currentIndex: 0,
-        activeColor: const Color(0xFF5B4B9A),
-        items: [
-          const NavItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Home'),
-          NavItem(icon: Icons.inventory_2_outlined, activeIcon: Icons.inventory_2, label: 'Items', onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const AddItemScreen()));
-          }),
-          NavItem(icon: Icons.bar_chart_outlined, activeIcon: Icons.bar_chart, label: 'Report', onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const WasteAnalysisScreen()));
-          }),
-          NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile', onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
-          }),
-        ],
+      NavItem(
+        icon: Icons.shopping_cart_outlined,
+        activeIcon: Icons.shopping_cart_rounded,
+        label: 'Orders',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
+        ),
       ),
-    );
-  }
+      NavItem(
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+        label: 'Profile',
+        onTap: () => Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const ProfileScreen()),
+        ),
+      ),
+    ],
+  );
 }
