@@ -26,11 +26,25 @@ service cloud.firestore {
     }
 
     function managesInventory(storeId) {
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
       return hasStoreRole(storeId, ['owner', 'admin', 'manager', 'staff']);
     }
 
     function managesStore(storeId) {
       return hasStoreRole(storeId, ['owner', 'admin']);
+<<<<<<< HEAD
+=======
+=======
+      return hasStoreRole(storeId, ['owner', 'manager', 'staff']);
+    }
+
+    function managesStore(storeId) {
+      return hasStoreRole(storeId, ['owner', 'manager']);
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     }
 
     function isBootstrapOwner(storeId) {
@@ -74,11 +88,20 @@ service cloud.firestore {
     match /{path=**}/members/{memberId} {
       allow list: if signedIn() && resource.data.userId == request.auth.uid;
     }
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     match /{path=**}/adminInvites/{inviteId} {
       allow list: if signedIn()
         && resource.data.emailLowercase
           == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailLowercase;
     }
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     match /stores/{storeId} {
       allow read: if signedIn() && (resource.data.status == 'active' || isActiveMember(storeId));
       allow create: if signedIn()
@@ -95,6 +118,10 @@ service cloud.firestore {
             && request.resource.data.role == 'owner'
             && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid == request.auth.uid)
           || (hasStoreRole(storeId, ['owner'])
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
             && request.resource.data.role in ['admin', 'manager', 'staff'])
           || (owns(uid)
             && request.resource.data.role == 'admin'
@@ -133,6 +160,22 @@ service cloud.firestore {
         allow delete: if managesStore(storeId);
       }
 
+<<<<<<< HEAD
+=======
+=======
+            && request.resource.data.role in ['manager', 'staff'])
+          || (hasStoreRole(storeId, ['manager'])
+            && request.resource.data.role == 'staff')
+        );
+        allow update: if hasStoreRole(storeId, ['owner'])
+          || (hasStoreRole(storeId, ['manager'])
+            && resource.data.role == 'staff'
+            && request.resource.data.role == 'staff');
+        allow delete: if hasStoreRole(storeId, ['owner']) && uid != request.auth.uid;
+      }
+
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
       match /categories/{categoryId} {
         allow read: if signedIn();
         allow write: if managesInventory(storeId) || isBootstrapOwner(storeId);
@@ -197,9 +240,18 @@ service cloud.firestore {
           && request.resource.data.storeId == storeId
           && request.resource.data.status == 'to_pay'
           && request.resource.data.paymentStatus == 'unpaid'
+<<<<<<< HEAD
           && request.resource.data.fulfillmentType == 'delivery'
           && request.resource.data.payment.methodLabel
             in ['Bank transfer', 'Touch n Go']
+=======
+<<<<<<< HEAD
+          && request.resource.data.fulfillmentType == 'delivery'
+          && request.resource.data.payment.methodLabel
+            in ['Bank transfer', 'Touch n Go']
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
           && request.resource.data.subtotalCents is int
           && request.resource.data.subtotalCents >= 0
           && request.resource.data.shippingFeeCents is int
@@ -209,6 +261,10 @@ service cloud.firestore {
               + request.resource.data.shippingFeeCents;
         allow read: if signedIn()
           && (resource.data.userId == request.auth.uid || managesInventory(storeId));
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
         allow update: if managesInventory(storeId) || (
           signedIn()
           && resource.data.userId == request.auth.uid
@@ -219,6 +275,12 @@ service cloud.firestore {
             'stores/' + storeId + '/order-attachments/' + orderId + '/.*'
           )
         );
+<<<<<<< HEAD
+=======
+=======
+        allow update: if managesInventory(storeId);
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
         allow delete: if false;
 
         match /items/{itemId} {

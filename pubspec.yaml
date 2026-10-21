@@ -40,7 +40,10 @@ dependencies:
   firebase_storage: ^13.5.0
   image_picker: ^1.2.3
   intl: ^0.20.3
+<<<<<<< HEAD
   mobile_scanner: ^7.4.1
+=======
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
 dev_dependencies:
   flutter_test:

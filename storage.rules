@@ -18,12 +18,21 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     function ownsOrder(storeId, orderId) {
       return signedIn()
         && firestore.get(/databases/(default)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
           == request.auth.uid;
     }
 
+<<<<<<< HEAD
+=======
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     match /stores/{storeId}/product-images/{productId}/{fileName} {
       allow read: if signedIn();
       allow write: if member(storeId) && imageUpload();
@@ -35,9 +44,19 @@ service firebase.storage {
     }
 
     match /stores/{storeId}/order-attachments/{orderId}/{fileName} {
+<<<<<<< HEAD
       allow read: if member(storeId) || ownsOrder(storeId, orderId);
       allow write: if (member(storeId) || ownsOrder(storeId, orderId))
         && imageUpload();
+=======
+<<<<<<< HEAD
+      allow read: if member(storeId) || ownsOrder(storeId, orderId);
+      allow write: if (member(storeId) || ownsOrder(storeId, orderId))
+        && imageUpload();
+=======
+      allow read, write: if member(storeId);
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     }
   }
 }

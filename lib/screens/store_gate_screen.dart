@@ -217,7 +217,14 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
 
   String _roleLabel(String role) => switch (role) {
     'owner' => 'Owner',
+<<<<<<< HEAD
     'admin' => 'Admin',
+=======
+<<<<<<< HEAD
+    'admin' => 'Admin',
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     'manager' => 'Manager',
     'staff' => 'Staff',
     _ => 'Customer',

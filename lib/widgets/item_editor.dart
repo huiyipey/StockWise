@@ -5,7 +5,10 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+<<<<<<< HEAD
 import '../screens/barcode_scanner_screen.dart';
+=======
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 import 'stockwise_ui.dart';
 
 class ItemEditor extends StatefulWidget {
@@ -169,6 +172,7 @@ class _ItemEditorState extends State<ItemEditor> {
                               TextFormField(
                                 controller: barcode,
                                 keyboardType: TextInputType.number,
+<<<<<<< HEAD
                                 decoration: InputDecoration(
                                   labelText: 'Barcode',
                                   prefixIcon: const Icon(
@@ -181,6 +185,13 @@ class _ItemEditorState extends State<ItemEditor> {
                                       Icons.document_scanner_outlined,
                                     ),
                                   ),
+=======
+                                decoration: const InputDecoration(
+                                  labelText: 'Barcode',
+                                  prefixIcon: Icon(
+                                    Icons.qr_code_scanner_rounded,
+                                  ),
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                                 ),
                               ),
                               SwitchListTile.adaptive(
@@ -333,6 +344,7 @@ class _ItemEditorState extends State<ItemEditor> {
     if (picked != null) setState(() => image = picked);
   }
 
+<<<<<<< HEAD
   Future<void> _scanBarcode() async {
     final value = await Navigator.push<String>(
       context,
@@ -343,6 +355,8 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+=======
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'Required' : null;
   String? _priceValidator(String? value) {

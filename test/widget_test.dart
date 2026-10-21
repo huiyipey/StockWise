@@ -16,7 +16,15 @@ void main() {
 
   test('Store session keeps the selected store and role isolated', () {
     const store = StoreInfo(id: 'store-a', name: 'Main Shop', code: 'MAIN');
+<<<<<<< HEAD
     StoreSession.instance.select(store, role: 'admin');
+=======
+<<<<<<< HEAD
+    StoreSession.instance.select(store, role: 'admin');
+=======
+    StoreSession.instance.select(store, role: 'manager');
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
+>>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
     expect(StoreSession.instance.storeId, 'store-a');
     expect(StoreSession.instance.canManage, isTrue);
