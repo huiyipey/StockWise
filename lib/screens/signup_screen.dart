@@ -1,8 +1,58 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'login_screen.dart';
 
-class SignupScreen extends StatelessWidget {
+class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  String? _error;
+  bool _isLoading = false;
+
+  Future<void> _register() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Enter your email and password');
+      return;
+    }
+    if (password != _confirmPasswordController.text) {
+      setState(() => _error = 'Passwords do not match');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      if (mounted) Navigator.popUntil(context, (route) => route.isFirst);
+    } on FirebaseAuthException catch (error) {
+      setState(() => _error = error.message ?? 'Unable to create account');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +83,30 @@ class SignupScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 30),
-                _buildTextField('Email'),
+                if (_error != null) ...[
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFFD32F2F),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                _buildTextField(_emailController, 'Email'),
                 const SizedBox(height: 18),
-                _buildTextField('Password', isPassword: true),
+                _buildTextField(
+                  _passwordController,
+                  'Password',
+                  isPassword: true,
+                ),
                 const SizedBox(height: 18),
-                _buildTextField('Confirm Password', isPassword: true),
+                _buildTextField(
+                  _confirmPasswordController,
+                  'Confirm Password',
+                  isPassword: true,
+                ),
                 const SizedBox(height: 55),
                 _buildRegisterButton(),
                 const SizedBox(height: 16),
@@ -50,11 +119,16 @@ class SignupScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildTextField(String hint, {bool isPassword = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint, {
+    bool isPassword = false,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: 62,
       child: TextField(
+        controller: controller,
         obscureText: isPassword,
         decoration: InputDecoration(
           hintText: hint,
@@ -86,12 +160,12 @@ class SignupScreen extends StatelessWidget {
     );
   }
 
-  static Widget _buildRegisterButton() {
+  Widget _buildRegisterButton() {
     return SizedBox(
       width: double.infinity,
       height: 62,
       child: ElevatedButton(
-        onPressed: () {},
+        onPressed: _isLoading ? null : _register,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF75A972),
           shape: RoundedRectangleBorder(
@@ -100,19 +174,28 @@ class SignupScreen extends StatelessWidget {
           elevation: 4,
           shadowColor: Colors.black26,
         ),
-        child: const Text(
-          'REGISTER',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        child: _isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'REGISTER',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
       ),
     );
   }
 
-  static Widget _buildLoginNowLink(BuildContext context) {
+  Widget _buildLoginNowLink(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -126,10 +209,7 @@ class SignupScreen extends StatelessWidget {
         ),
         GestureDetector(
           onTap: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
+            Navigator.pop(context);
           },
           child: const Text(
             'Login Now',

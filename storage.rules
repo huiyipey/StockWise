@@ -1,0 +1,43 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function member(storeId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function imageUpload() {
+      return request.resource != null
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    function ownsOrder(storeId, orderId) {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
+          == request.auth.uid;
+    }
+
+    match /stores/{storeId}/product-images/{productId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if member(storeId) && imageUpload();
+    }
+
+    match /user-avatars/{uid}/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid && imageUpload();
+    }
+
+    match /stores/{storeId}/order-attachments/{orderId}/{fileName} {
+      allow read: if member(storeId) || ownsOrder(storeId, orderId);
+      allow write: if (member(storeId) || ownsOrder(storeId, orderId))
+        && imageUpload();
+    }
+  }
+}
