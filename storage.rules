@@ -18,12 +18,15 @@ service firebase.storage {
         && request.resource.contentType.matches('image/.*');
     }
 
+<<<<<<< HEAD
     function ownsOrder(storeId, orderId) {
       return signedIn()
         && firestore.get(/databases/(default)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
           == request.auth.uid;
     }
 
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
     match /stores/{storeId}/product-images/{productId}/{fileName} {
       allow read: if signedIn();
       allow write: if member(storeId) && imageUpload();
@@ -35,9 +38,13 @@ service firebase.storage {
     }
 
     match /stores/{storeId}/order-attachments/{orderId}/{fileName} {
+<<<<<<< HEAD
       allow read: if member(storeId) || ownsOrder(storeId, orderId);
       allow write: if (member(storeId) || ownsOrder(storeId, orderId))
         && imageUpload();
+=======
+      allow read, write: if member(storeId);
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
     }
   }
 }

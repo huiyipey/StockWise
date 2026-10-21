@@ -1,7 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import 'signup_screen.dart';
-import 'home_screen.dart';
-import 'shop_screen.dart';
+import 'store_gate_screen.dart';
+import '../services/store_session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,23 +16,73 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _error;
+  bool _isLoading = false;
 
-  void _login(BuildContext context) {
+  Future<void> _login(BuildContext context) async {
     final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+    final password = _passwordController.text;
 
-    if (email == 'admin@stockwise.com' && password == 'admin123') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Enter your email and password');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-    } else if (email == 'user@stockwise.com' && password == 'user123') {
-      Navigator.pushReplacement(
+      if (!context.mounted) return;
+      StoreSession.instance.clear();
+      Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const ShopScreen()),
+        MaterialPageRoute(builder: (_) => const StoreGateScreen()),
+        (_) => false,
       );
-    } else {
-      setState(() => _error = 'Invalid email or password');
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _error = _messageFor(error));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _messageFor(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'invalid-email':
+        return 'Enter a valid email address';
+      case 'user-disabled':
+        return 'This account has been disabled';
+      case 'too-many-requests':
+        return 'Too many attempts. Please try again later';
+      case 'invalid-credential':
+      case 'user-not-found':
+      case 'wrong-password':
+        return 'Invalid email or password';
+      default:
+        return error.message ?? 'Unable to sign in';
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Enter your email first');
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset email sent')),
+      );
+    } on FirebaseAuthException catch (error) {
+      if (mounted) setState(() => _error = _messageFor(error));
     }
   }
 
@@ -95,21 +147,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   _buildTextField(_emailController, 'Email'),
                   const SizedBox(height: 18),
-                  _buildTextField(_passwordController, 'Password', isPassword: true),
+                  _buildTextField(
+                    _passwordController,
+                    'Password',
+                    isPassword: true,
+                  ),
                   const SizedBox(height: 24),
                   _buildLoginButton(context),
                   const SizedBox(height: 18),
                   _buildLinks(context),
                   const SizedBox(height: 20),
-                  const Text(
-                    'Demo: admin@stockwise.com / admin123\n      user@stockwise.com / user123',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF999999),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -119,8 +166,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint,
-      {bool isPassword = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint, {
+    bool isPassword = false,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: 56,
@@ -162,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
       width: double.infinity,
       height: 56,
       child: ElevatedButton(
-        onPressed: () => _login(context),
+        onPressed: _isLoading ? null : () => _login(context),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF75A972),
           shape: RoundedRectangleBorder(
@@ -171,14 +221,23 @@ class _LoginScreenState extends State<LoginScreen> {
           elevation: 4,
           shadowColor: Colors.black26,
         ),
-        child: const Text(
-          'LOGIN',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        child: _isLoading
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'LOGIN',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
       ),
     );
   }
@@ -188,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         GestureDetector(
-          onTap: () {},
+          onTap: _resetPassword,
           child: const Text(
             'Forgot Password',
             style: TextStyle(

@@ -12,7 +12,10 @@ import 'login_screen.dart';
 import 'orders_screen.dart';
 import 'shop_screen.dart';
 import 'store_gate_screen.dart';
+<<<<<<< HEAD
 import 'staff_management_screen.dart';
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 import 'waste_analysis_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -112,6 +115,7 @@ class ProfileScreen extends StatelessWidget {
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: () => _switchStore(context),
                             ),
+<<<<<<< HEAD
                             if (session.canManageMembers) ...[
                               const Divider(height: 1),
                               ListTile(
@@ -135,6 +139,8 @@ class ProfileScreen extends StatelessWidget {
                                 ),
                               ),
                             ],
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
                           ],
                         ),
                       ),

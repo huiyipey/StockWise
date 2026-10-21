@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import 'package:image_picker/image_picker.dart';
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
@@ -24,8 +27,11 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late String status = widget.order.status;
   bool saving = false;
+<<<<<<< HEAD
   bool uploadingReceipt = false;
   late String? receiptPath = widget.order.receiptPath;
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -57,10 +63,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           _label(widget.order.fulfillmentType),
                         ),
                         _row('Payment', _label(widget.order.paymentStatus)),
+<<<<<<< HEAD
                         _row(
                           'Method',
                           widget.order.payment['methodLabel'] as String? ?? '-',
                         ),
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
                       ],
                     ),
                   ),
@@ -147,6 +156,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ),
                   ),
                 ),
+<<<<<<< HEAD
                 const SizedBox(height: 14),
                 Text(
                   'Payment receipt',
@@ -188,6 +198,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ),
                   ),
                 ),
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
                 if (widget.isAdmin) ...[
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
@@ -259,6 +271,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (mounted) setState(() => saving = false);
     }
   }
+<<<<<<< HEAD
 
   Future<void> _uploadReceipt() async {
     final file = await ImagePicker().pickImage(
@@ -289,4 +302,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (mounted) setState(() => uploadingReceipt = false);
     }
   }
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 }

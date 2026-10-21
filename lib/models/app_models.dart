@@ -182,7 +182,10 @@ class StoreOrder {
   final int shippingFeeCents;
   final int totalCents;
   final DateTime placedAt;
+<<<<<<< HEAD
   final String? receiptPath;
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 
   const StoreOrder({
     required this.id,
@@ -197,7 +200,10 @@ class StoreOrder {
     required this.shippingFeeCents,
     required this.totalCents,
     required this.placedAt,
+<<<<<<< HEAD
     this.receiptPath,
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
   });
 
   factory StoreOrder.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -215,7 +221,10 @@ class StoreOrder {
       shippingFeeCents: _int(data['shippingFeeCents']),
       totalCents: _int(data['totalCents']),
       placedAt: _date(data['placedAt']),
+<<<<<<< HEAD
       receiptPath: data['receiptPath'] as String?,
+=======
+>>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
     );
   }
 }
