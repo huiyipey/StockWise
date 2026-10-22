@@ -5,10 +5,7 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
-<<<<<<< HEAD
 import '../screens/barcode_scanner_screen.dart';
-=======
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 import 'stockwise_ui.dart';
 
 class ItemEditor extends StatefulWidget {
@@ -79,15 +76,22 @@ class _ItemEditorState extends State<ItemEditor> {
             leading: const BackCircleButton(),
           ),
           Expanded(
-            child: StreamBuilder<List<String>>(
-              stream: FirestoreService.instance.watchCategories(),
+            child: StreamBuilder<List<StoreCategory>>(
+              stream: FirestoreService.instance.watchCategoryRecords(),
               builder: (context, snapshot) {
-                final categories = snapshot.data ?? const <String>[];
-                final matching = categories.where(
-                  (value) =>
-                      category != null && _slug(value) == _slug(category!),
-                );
-                if (matching.isNotEmpty) category = matching.first;
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text(
+                      'Could not load categories. Please reopen this page.',
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final categories = snapshot.data!
+                    .where((c) => c.active || c.id == widget.item?.categoryId)
+                    .toList();
                 return Form(
                   key: formKey,
                   child: ListView(
@@ -127,7 +131,8 @@ class _ItemEditorState extends State<ItemEditor> {
                               _quantityRow(),
                               const SizedBox(height: 12),
                               DropdownButtonFormField<String>(
-                                initialValue: categories.contains(category)
+                                initialValue:
+                                    categories.any((c) => c.id == category)
                                     ? category
                                     : null,
                                 decoration: const InputDecoration(
@@ -136,8 +141,10 @@ class _ItemEditorState extends State<ItemEditor> {
                                 items: categories
                                     .map(
                                       (value) => DropdownMenuItem(
-                                        value: value,
-                                        child: Text(value),
+                                        value: value.id,
+                                        child: Text(
+                                          '${value.name}${value.active ? '' : ' (archived)'}',
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -172,7 +179,6 @@ class _ItemEditorState extends State<ItemEditor> {
                               TextFormField(
                                 controller: barcode,
                                 keyboardType: TextInputType.number,
-<<<<<<< HEAD
                                 decoration: InputDecoration(
                                   labelText: 'Barcode',
                                   prefixIcon: const Icon(
@@ -185,13 +191,6 @@ class _ItemEditorState extends State<ItemEditor> {
                                       Icons.document_scanner_outlined,
                                     ),
                                   ),
-=======
-                                decoration: const InputDecoration(
-                                  labelText: 'Barcode',
-                                  prefixIcon: Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                  ),
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                                 ),
                               ),
                               SwitchListTile.adaptive(
@@ -344,7 +343,6 @@ class _ItemEditorState extends State<ItemEditor> {
     if (picked != null) setState(() => image = picked);
   }
 
-<<<<<<< HEAD
   Future<void> _scanBarcode() async {
     final value = await Navigator.push<String>(
       context,
@@ -355,8 +353,6 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
-=======
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'Required' : null;
   String? _priceValidator(String? value) {
@@ -365,7 +361,6 @@ class _ItemEditorState extends State<ItemEditor> {
   }
 
   int _cents(String value) => (double.parse(value.trim()) * 100).round();
-  String _slug(String value) => value.toLowerCase().replaceAll(' ', '-');
 
   Future<void> _save() async {
     if (!(formKey.currentState?.validate() ?? false)) return;

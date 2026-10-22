@@ -63,17 +63,6 @@ class AdminItemDetailScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 18),
-<<<<<<< HEAD
-=======
-                ElevatedButton.icon(
-                  onPressed: item.quantityOnHand > 0
-                      ? () => _consume(context)
-                      : null,
-                  icon: const Icon(Icons.check_circle_outline_rounded),
-                  label: const Text('MARK ONE AS CONSUMED'),
-                ),
-                const SizedBox(height: 10),
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 OutlinedButton.icon(
                   onPressed: () => Navigator.push(
                     context,
@@ -119,28 +108,9 @@ class AdminItemDetailScreen extends StatelessWidget {
       ],
     ),
   );
-<<<<<<< HEAD
 
   String _money(int cents) => 'RM ${(cents / 100).toStringAsFixed(2)}';
 
-=======
-
-  String _money(int cents) => 'RM ${(cents / 100).toStringAsFixed(2)}';
-
-  Future<void> _consume(BuildContext context) async {
-    try {
-      await FirestoreService.instance.consumeBatch(item);
-      if (context.mounted) Navigator.pop(context);
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
-  }
-
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Future<void> _discard(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
@@ -16,6 +17,39 @@ class StoreGateScreen extends StatefulWidget {
 
 class _StoreGateScreenState extends State<StoreGateScreen> {
   bool creating = false;
+  bool checkingInvites = false;
+
+  Future<void> _checkInvites({bool sendVerification = false}) async {
+    setState(() => checkingInvites = true);
+    try {
+      if (sendVerification) {
+        await FirebaseAuth.instance.currentUser!.sendEmailVerification();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Verification email sent. Open the link, then tap Refresh staff access.',
+              ),
+            ),
+          );
+        }
+      } else {
+        await FirebaseAuth.instance.currentUser!.reload();
+        await FirebaseAuth.instance.currentUser!.getIdToken(true);
+        await FirestoreService.instance.ensureUserProfile();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not refresh access. Try again shortly.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => checkingInvites = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +74,9 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
               builder: (context, membershipSnapshot) {
                 if (membershipSnapshot.hasError) {
                   return _ErrorState(error: membershipSnapshot.error);
+                }
+                if (!membershipSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
                 }
                 final memberships =
                     membershipSnapshot.data ?? const <StoreMembership>[];
@@ -129,6 +166,17 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                   },
                 ),
         ),
+        if (FirebaseAuth.instance.currentUser?.emailVerified != true)
+          TextButton(
+            onPressed: checkingInvites
+                ? null
+                : () => _checkInvites(sendVerification: true),
+            child: const Text('Verify email to accept staff invitations'),
+          ),
+        TextButton(
+          onPressed: checkingInvites ? null : _checkInvites,
+          child: Text(checkingInvites ? 'Checking…' : 'Refresh staff access'),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
           child: OutlinedButton.icon(
@@ -217,14 +265,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
 
   String _roleLabel(String role) => switch (role) {
     'owner' => 'Owner',
-<<<<<<< HEAD
     'admin' => 'Admin',
-=======
-<<<<<<< HEAD
-    'admin' => 'Admin',
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     'manager' => 'Manager',
     'staff' => 'Staff',
     _ => 'Customer',

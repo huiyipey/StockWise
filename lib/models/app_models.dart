@@ -8,6 +8,23 @@ DateTime _date(dynamic value, {DateTime? fallback}) {
 
 int _int(dynamic value) => value is num ? value.round() : 0;
 
+class StoreCategory {
+  final String id;
+  final String name;
+  final bool active;
+  const StoreCategory({
+    required this.id,
+    required this.name,
+    required this.active,
+  });
+  factory StoreCategory.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      StoreCategory(
+        id: doc.id,
+        name: doc.data()?['name'] as String? ?? doc.id,
+        active: doc.data()?['isActive'] == true,
+      );
+}
+
 class StoreInfo {
   final String id;
   final String name;
@@ -182,14 +199,7 @@ class StoreOrder {
   final int shippingFeeCents;
   final int totalCents;
   final DateTime placedAt;
-<<<<<<< HEAD
   final String? receiptPath;
-=======
-<<<<<<< HEAD
-  final String? receiptPath;
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   const StoreOrder({
     required this.id,
@@ -204,14 +214,7 @@ class StoreOrder {
     required this.shippingFeeCents,
     required this.totalCents,
     required this.placedAt,
-<<<<<<< HEAD
     this.receiptPath,
-=======
-<<<<<<< HEAD
-    this.receiptPath,
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   });
 
   factory StoreOrder.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -229,14 +232,7 @@ class StoreOrder {
       shippingFeeCents: _int(data['shippingFeeCents']),
       totalCents: _int(data['totalCents']),
       placedAt: _date(data['placedAt']),
-<<<<<<< HEAD
       receiptPath: data['receiptPath'] as String?,
-=======
-<<<<<<< HEAD
-      receiptPath: data['receiptPath'] as String?,
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     );
   }
 }

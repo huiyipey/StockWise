@@ -11,6 +11,8 @@ import 'cart_screen.dart';
 import 'item_detail_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
+import 'shopping_assistant_screen.dart';
+import '../widgets/category_name.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
@@ -21,14 +23,20 @@ class ShopScreen extends StatefulWidget {
 
 class _ShopScreenState extends State<ShopScreen> {
   String query = '';
-<<<<<<< HEAD
   String category = 'all';
   DateTimeRange? expiryRange;
-=======
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
+    floatingActionButton: FloatingActionButton.extended(
+      onPressed: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ShoppingAssistantScreen()),
+      ),
+      icon: const Icon(Icons.auto_awesome),
+      label: const Text('Ask StockWise'),
+    ),
     body: SafeArea(
       child: Column(
         children: [
@@ -72,11 +80,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   ],
                 ),
                 const Text(
-<<<<<<< HEAD
                   'Shop',
-=======
-                  'Promotion',
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 29,
@@ -98,25 +102,16 @@ class _ShopScreenState extends State<ShopScreen> {
           ),
           Expanded(
             child: StreamBuilder<List<InventoryBatch>>(
-<<<<<<< HEAD
               stream: FirestoreService.instance.watchInventory(),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
                     child: Text('Could not load products: ${snapshot.error}'),
-=======
-              stream: FirestoreService.instance.watchPromotions(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Could not load promotions: ${snapshot.error}'),
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                   );
                 }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-<<<<<<< HEAD
                 final sellable = snapshot.data!
                     .where(
                       (item) =>
@@ -136,7 +131,7 @@ class _ShopScreenState extends State<ShopScreen> {
                     .where((item) => !item.promotionEnabled)
                     .toList();
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 96),
                   children: [
                     _filters(categories),
                     const SizedBox(height: 20),
@@ -148,47 +143,15 @@ class _ShopScreenState extends State<ShopScreen> {
                     const SizedBox(height: 24),
                     _section('Normal Products', normal),
                   ],
-=======
-                final items = snapshot.data!
-                    .where(
-                      (item) => item.productName.toLowerCase().contains(
-                        query.toLowerCase(),
-                      ),
-                    )
-                    .toList();
-                if (items.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(28),
-                      child: Text(
-                        'No active promotions in this store yet.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-                return GridView.builder(
-                  padding: const EdgeInsets.all(18),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: .68,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) => _productCard(items[index]),
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 );
               },
             ),
           ),
-          _bottomNav(context),
         ],
       ),
     ),
   );
 
-<<<<<<< HEAD
   bool _matchesFilters(InventoryBatch item) {
     if (!item.productName.toLowerCase().contains(query.toLowerCase())) {
       return false;
@@ -227,10 +190,8 @@ class _ShopScreenState extends State<ShopScreen> {
                 child: Text('All categories'),
               ),
               ...categories.map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text(value.replaceAll('-', ' ')),
-                ),
+                (value) =>
+                    DropdownMenuItem(value: value, child: CategoryName(value)),
               ),
             ],
             onChanged: (value) => setState(() => category = value ?? 'all'),
@@ -402,88 +363,6 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
-=======
-  Widget _productCard(InventoryBatch item) => Card(
-    child: InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ItemDetailScreen(item: item)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: ProductArtwork(size: 100, imagePath: item.imagePath),
-                ),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: IconButton.filledTonal(
-                    tooltip: 'Add to cart',
-                    onPressed: () => _add(item),
-                    style: IconButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: AppColors.warning,
-                    ),
-                    icon: const Icon(Icons.add_rounded),
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              item.productName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'RM ${(item.sellingPriceCents / 100).toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: AppColors.primaryDark,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Exp: ${DateFormat('dd/MM/yyyy').format(item.expiryAt)}',
-              style: const TextStyle(color: AppColors.muted, fontSize: 11),
-            ),
-            Text(
-              '${item.availableQuantity} available',
-              style: const TextStyle(color: AppColors.muted, fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-
-  Future<void> _add(InventoryBatch item) async {
-    try {
-      await FirestoreService.instance.addToCart(item);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${item.productName} added to cart')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    }
-  }
-
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Widget _bottomNav(BuildContext context) => GlassBottomNav(
     currentIndex: 0,
     items: [

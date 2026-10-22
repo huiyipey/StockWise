@@ -12,6 +12,8 @@ import 'home_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
+import 'category_management_screen.dart';
+import '../widgets/category_name.dart';
 
 class ItemsScreen extends StatefulWidget {
   const ItemsScreen({super.key});
@@ -22,16 +24,8 @@ class ItemsScreen extends StatefulWidget {
 
 class _ItemsScreenState extends State<ItemsScreen> {
   String query = '';
-<<<<<<< HEAD
   String category = 'all';
   DateTimeRange? expiryRange;
-=======
-<<<<<<< HEAD
-  String category = 'all';
-  DateTimeRange? expiryRange;
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -49,6 +43,19 @@ class _ItemsScreenState extends State<ItemsScreen> {
               icon: const Icon(Icons.add_rounded, color: Colors.white),
             ),
           ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CategoryManagementScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.category_outlined),
+              label: const Text('Manage categories'),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<InventoryBatch>>(
               stream: FirestoreService.instance.watchInventory(),
@@ -62,10 +69,6 @@ class _ItemsScreenState extends State<ItemsScreen> {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 final categories =
                     snapshot.data!
                         .map((item) => item.categoryId)
@@ -82,18 +85,6 @@ class _ItemsScreenState extends State<ItemsScreen> {
                       matchesCategory &&
                       _inRange(item.expiryAt);
                 }).toList();
-<<<<<<< HEAD
-=======
-=======
-                final items = snapshot.data!
-                    .where(
-                      (item) => item.productName.toLowerCase().contains(
-                        query.toLowerCase(),
-                      ),
-                    )
-                    .toList();
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
                   children: [
@@ -101,16 +92,8 @@ class _ItemsScreenState extends State<ItemsScreen> {
                       hint: 'Search inventory',
                       onChanged: (value) => setState(() => query = value),
                     ),
-<<<<<<< HEAD
                     const SizedBox(height: 10),
                     _filters(categories),
-=======
-<<<<<<< HEAD
-                    const SizedBox(height: 10),
-                    _filters(categories),
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                     const SizedBox(height: 14),
                     if (items.isEmpty)
                       _message(
@@ -123,7 +106,6 @@ class _ItemsScreenState extends State<ItemsScreen> {
               },
             ),
           ),
-          _bottomNav(context),
         ],
       ),
     ),
@@ -134,6 +116,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
       ),
       child: const Icon(Icons.add_rounded),
     ),
+    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
   );
 
   Widget _itemCard(InventoryBatch item) {
@@ -182,8 +165,8 @@ class _ItemsScreenState extends State<ItemsScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        item.categoryId.replaceAll('-', ' '),
+                      CategoryName(
+                        item.categoryId,
                         style: const TextStyle(
                           color: AppColors.muted,
                           fontSize: 12,
@@ -201,10 +184,6 @@ class _ItemsScreenState extends State<ItemsScreen> {
     );
   }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Widget _filters(List<String> categories) => Card(
     child: Padding(
       padding: const EdgeInsets.all(12),
@@ -219,10 +198,8 @@ class _ItemsScreenState extends State<ItemsScreen> {
                 child: Text('All categories'),
               ),
               ...categories.map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text(value.replaceAll('-', ' ')),
-                ),
+                (value) =>
+                    DropdownMenuItem(value: value, child: CategoryName(value)),
               ),
             ],
             onChanged: (value) => setState(() => category = value ?? 'all'),
@@ -278,11 +255,6 @@ class _ItemsScreenState extends State<ItemsScreen> {
     if (selected != null) setState(() => expiryRange = selected);
   }
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Widget _message(String title, String body) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 48),
     child: Column(

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/app_models.dart';
 import 'store_session.dart';
+import 'image_upload.dart';
 
 class FirestoreService {
   FirestoreService._();
@@ -38,16 +39,12 @@ class FirestoreService {
     final existing = await userRef.get();
     final profile = <String, dynamic>{
       'email': user.email,
-<<<<<<< HEAD
       'emailLowercase': user.email?.trim().toLowerCase(),
-=======
-<<<<<<< HEAD
-      'emailLowercase': user.email?.trim().toLowerCase(),
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
-      'displayName': user.displayName ?? _nameFromEmail(user.email),
-      'photoPath': user.photoURL,
+      'displayName':
+          existing.data()?['displayName'] ??
+          user.displayName ??
+          _nameFromEmail(user.email),
+      'photoPath': existing.data()?['photoPath'] ?? user.photoURL,
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (!existing.exists) {
@@ -61,12 +58,10 @@ class FirestoreService {
       });
     }
     await userRef.set(profile, SetOptions(merge: true));
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     final emailLowercase = user.email?.trim().toLowerCase();
-    if (emailLowercase != null && emailLowercase.isNotEmpty) {
+    if (user.emailVerified &&
+        emailLowercase != null &&
+        emailLowercase.isNotEmpty) {
       await _acceptAdminInvitations(emailLowercase);
     }
   }
@@ -109,11 +104,6 @@ class FirestoreService {
         });
       });
     }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   }
 
   String _nameFromEmail(String? email) {
@@ -175,14 +165,7 @@ class FirestoreService {
     batch.set(storeRef.collection('members').doc(user.uid), {
       'storeId': storeRef.id,
       'userId': user.uid,
-<<<<<<< HEAD
       'email': user.email,
-=======
-<<<<<<< HEAD
-      'email': user.email,
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
       'role': 'owner',
       'isActive': true,
       'joinedAt': FieldValue.serverTimestamp(),
@@ -238,10 +221,6 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Stream<List<Map<String, dynamic>>> watchStoreMembers() => _storeRef
       .collection('members')
       .snapshots()
@@ -297,11 +276,6 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Stream<List<String>> watchCategories() => _storeRef
       .collection('categories')
       .where('isActive', isEqualTo: true)
@@ -319,6 +293,52 @@ class FirestoreService {
       .orderBy('expiryAt')
       .snapshots()
       .map((snapshot) => snapshot.docs.map(InventoryBatch.fromDoc).toList());
+
+  Stream<List<StoreCategory>> watchCategoryRecords() =>
+      _storeRef.collection('categories').snapshots().map((s) {
+        final result = s.docs.map(StoreCategory.fromDoc).toList();
+        result.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
+        return result;
+      });
+
+  Future<void> saveCategory(
+    String name, {
+    String? id,
+    bool active = true,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed.length > 60) {
+      throw ArgumentError('Use a category name of 1–60 characters.');
+    }
+    final categoryId =
+        id ??
+        trimmed
+            .toLowerCase()
+            .replaceAll(RegExp(r'\s+'), '-')
+            .replaceAll('/', '-');
+    if (categoryId == '.' || categoryId == '..') {
+      throw ArgumentError('Use a descriptive category name.');
+    }
+    final ref = _storeRef.collection('categories').doc(categoryId);
+    await _db.runTransaction((tx) async {
+      final existing = await tx.get(ref);
+      if (id == null && existing.exists) {
+        throw StateError(
+          'This category already exists. Restore it if archived.',
+        );
+      }
+      tx.set(ref, {
+        'storeId': _storeId,
+        'name': trimmed,
+        'slug': categoryId,
+        'isActive': active,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (!existing.exists) 'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
 
   Stream<List<InventoryBatch>> watchPromotions() => watchInventory().map(
     (items) => items
@@ -378,7 +398,7 @@ class FirestoreService {
         : _storeRef.collection('inventoryBatches').doc(existing.id);
     final uploadedPath = await uploadProductImage(image, productRef.id);
     final imagePath = uploadedPath ?? existing?.imagePath;
-    final categoryId = category.toLowerCase().replaceAll(' ', '-');
+    final categoryId = category;
     final write = _db.batch();
     final productData = <String, dynamic>{
       'storeId': _storeId,
@@ -450,15 +470,6 @@ class FirestoreService {
     await write.commit();
   }
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-  Future<void> consumeBatch(InventoryBatch batch, {int quantity = 1}) =>
-      _reduceBatch(batch, quantity: quantity, eventType: 'consumed');
-
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Future<void> discardBatch(
     InventoryBatch batch, {
     required int quantity,
@@ -597,21 +608,12 @@ class FirestoreService {
     required Map<String, dynamic> receiver,
     required String paymentMethod,
   }) async {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     if (fulfillmentType != 'delivery') {
       throw ArgumentError('Only delivery orders are supported.');
     }
     if (!const {'Bank transfer', 'Touch n Go'}.contains(paymentMethod)) {
       throw ArgumentError('Select a supported payment method.');
     }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     final cartItemsRef = _storeRef
         .collection('carts')
         .doc(_user.uid)
@@ -623,19 +625,8 @@ class FirestoreService {
         .collection('settings')
         .doc('commerce')
         .get();
-<<<<<<< HEAD
     final deliveryFee =
         (settings.data()?['deliveryFeeCents'] as num?)?.round() ?? 500;
-=======
-<<<<<<< HEAD
-    final deliveryFee =
-        (settings.data()?['deliveryFeeCents'] as num?)?.round() ?? 500;
-=======
-    final deliveryFee = fulfillmentType == 'delivery'
-        ? ((settings.data()?['deliveryFeeCents'] as num?)?.round() ?? 500)
-        : 0;
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     final subtotal = cartLines.fold<int>(
       0,
       (total, line) => total + line.lineTotalCents,
@@ -737,23 +728,17 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Future<String> uploadOrderReceipt(XFile file, String orderId) async {
-    final bytes = await file.readAsBytes();
-    final extension = file.name.contains('.')
-        ? file.name.split('.').last.toLowerCase()
-        : 'jpg';
+    final upload = await ImageUpload.read(file);
+    final storeRef = _storeRef;
     final ref = _storage.ref(
-      'stores/$_storeId/order-attachments/$orderId/receipt.$extension',
+      'stores/${storeRef.id}/order-attachments/$orderId/receipt-${DateTime.now().microsecondsSinceEpoch}.${upload.extension}',
     );
     await ref.putData(
-      bytes,
-      SettableMetadata(contentType: file.mimeType ?? 'image/jpeg'),
+      upload.bytes,
+      SettableMetadata(contentType: upload.contentType),
     );
-    await _storeRef.collection('orders').doc(orderId).update({
+    await storeRef.collection('orders').doc(orderId).update({
       'receiptPath': ref.fullPath,
       'receiptUploadedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -761,11 +746,6 @@ class FirestoreService {
     return ref.fullPath;
   }
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Future<void> updateOrderStatus(StoreOrder order, String status) async {
     final paid = status == 'to_pay' ? 'unpaid' : 'paid';
     await _storeRef.collection('orders').doc(order.id).update({

@@ -13,21 +13,10 @@ class StoreSession extends ChangeNotifier {
   StoreInfo? get store => _store;
   String? get storeId => _store?.id;
   String get role => _role;
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   bool get canManage =>
       const {'owner', 'admin', 'manager', 'staff'}.contains(_role);
   bool get canManageMembers => const {'owner', 'admin'}.contains(_role);
   bool get isOwner => _role == 'owner';
-<<<<<<< HEAD
-=======
-=======
-  bool get canManage => const {'owner', 'manager', 'staff'}.contains(_role);
-  bool get canManageMembers => const {'owner', 'manager'}.contains(_role);
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   void select(StoreInfo store, {String role = 'customer'}) {
     _store = store;

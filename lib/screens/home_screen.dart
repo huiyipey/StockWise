@@ -14,15 +14,12 @@ import 'notifications_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
+import '../widgets/category_name.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
@@ -31,11 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTimeRange? expiryRange;
 
   @override
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
       child: Column(
@@ -72,10 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           item.status == 'active' && item.quantityOnHand > 0,
                     )
                     .toList();
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 final categories =
                     active.map((item) => item.categoryId).toSet().toList()
                       ..sort();
@@ -86,14 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                   return _inRange(item.expiryAt);
                 }).toList();
-<<<<<<< HEAD
-=======
-=======
-                final expiring = active
-                    .where((item) => item.daysUntilExpiry <= 7)
-                    .toList();
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   children: [
@@ -144,16 +124,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
-<<<<<<< HEAD
                     _filters(categories),
                     const SizedBox(height: 10),
-=======
-<<<<<<< HEAD
-                    _filters(categories),
-                    const SizedBox(height: 10),
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                     if (expiring.isEmpty)
                       const Card(
                         child: Padding(
@@ -212,10 +184,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ),
   );
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   Widget _filters(List<String> categories) => Card(
     child: Padding(
@@ -231,10 +199,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Text('All categories'),
               ),
               ...categories.map(
-                (value) => DropdownMenuItem(
-                  value: value,
-                  child: Text(value.replaceAll('-', ' ')),
-                ),
+                (value) =>
+                    DropdownMenuItem(value: value, child: CategoryName(value)),
               ),
             ],
             onChanged: (value) => setState(() => category = value ?? 'all'),
@@ -289,8 +255,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (selected != null) setState(() => expiryRange = selected);
   }
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
 
   Widget _batchCard(BuildContext context, InventoryBatch item) => Card(
     child: ListTile(

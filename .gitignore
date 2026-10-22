@@ -1,4 +1,6 @@
 # Miscellaneous
+functions/node_modules/
+functions/.env*
 *.class
 *.log
 *.pyc
@@ -11,7 +13,6 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-test/
 
 # IntelliJ related
 *.iml

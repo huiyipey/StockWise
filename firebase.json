@@ -19,6 +19,7 @@
       }
     }
   },
+  "functions": [{"source": "functions", "codebase": "stockwise", "runtime": "nodejs22"}],
   "auth": {
     "providers": {
       "emailPassword": true

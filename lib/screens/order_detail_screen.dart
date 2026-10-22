@@ -1,12 +1,5 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
 import 'package:image_picker/image_picker.dart';
-=======
-<<<<<<< HEAD
-import 'package:image_picker/image_picker.dart';
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
@@ -31,16 +24,8 @@ class OrderDetailScreen extends StatefulWidget {
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late String status = widget.order.status;
   bool saving = false;
-<<<<<<< HEAD
   bool uploadingReceipt = false;
   late String? receiptPath = widget.order.receiptPath;
-=======
-<<<<<<< HEAD
-  bool uploadingReceipt = false;
-  late String? receiptPath = widget.order.receiptPath;
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -72,19 +57,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           _label(widget.order.fulfillmentType),
                         ),
                         _row('Payment', _label(widget.order.paymentStatus)),
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                         _row(
                           'Method',
                           widget.order.payment['methodLabel'] as String? ?? '-',
                         ),
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                       ],
                     ),
                   ),
@@ -171,10 +147,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ),
                   ),
                 ),
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 const SizedBox(height: 14),
                 Text(
                   'Payment receipt',
@@ -216,11 +188,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ),
                   ),
                 ),
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                 if (widget.isAdmin) ...[
                   const SizedBox(height: 18),
                   DropdownButtonFormField<String>(
@@ -292,20 +259,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (mounted) setState(() => saving = false);
     }
   }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 
   Future<void> _uploadReceipt() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1800,
-    );
-    if (file == null) return;
+    if (uploadingReceipt) return;
     setState(() => uploadingReceipt = true);
     try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1800,
+      );
+      if (file == null || !mounted) return;
       final path = await FirestoreService.instance.uploadOrderReceipt(
         file,
         widget.order.id,
@@ -326,9 +290,4 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (mounted) setState(() => uploadingReceipt = false);
     }
   }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 }

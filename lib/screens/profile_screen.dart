@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../services/firestore_service.dart';
@@ -12,15 +13,12 @@ import 'login_screen.dart';
 import 'orders_screen.dart';
 import 'shop_screen.dart';
 import 'store_gate_screen.dart';
-<<<<<<< HEAD
 import 'staff_management_screen.dart';
-=======
-<<<<<<< HEAD
-import 'staff_management_screen.dart';
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
 import 'waste_analysis_screen.dart';
+import 'edit_profile_screen.dart';
+import '../services/profile_service.dart';
+import '../widgets/profile_avatar.dart';
+import '../widgets/report_email_preference.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -58,13 +56,9 @@ class ProfileScreen extends StatelessWidget {
                   return ListView(
                     padding: const EdgeInsets.all(20),
                     children: [
-                      const CircleAvatar(
-                        radius: 48,
-                        backgroundColor: AppColors.primarySoft,
-                        child: Icon(
-                          Icons.person_rounded,
-                          size: 46,
-                          color: AppColors.primaryDark,
+                      Center(
+                        child: ProfileAvatar(
+                          path: data['photoPath'] as String?,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -93,6 +87,43 @@ class ProfileScreen extends StatelessWidget {
                       Card(
                         child: Column(
                           children: [
+                            ListTile(
+                              leading: const Icon(Icons.edit_outlined),
+                              title: const Text('Edit profile'),
+                              subtitle: const Text(
+                                'Username, account image, phone and password',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: !snapshot.hasData || snapshot.hasError
+                                  ? null
+                                  : () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => EditProfileScreen(
+                                          initial: data,
+                                          email: user?.email ?? '',
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                            if (session.canManage && session.storeId != null)
+                              ReportEmailPreference(
+                                key: ValueKey(session.storeId),
+                                values:
+                                    ProfileService.preference(
+                                      session.storeId!,
+                                    ).snapshots().map(
+                                      (doc) =>
+                                          doc.data()?['reportEmails'] != false,
+                                    ),
+                                save: (value) =>
+                                    ProfileService.preference(
+                                      session.storeId!,
+                                    ).set({
+                                      'reportEmails': value,
+                                      'updatedAt': FieldValue.serverTimestamp(),
+                                    }),
+                              ),
                             SwitchListTile.adaptive(
                               secondary: const Icon(
                                 Icons.notifications_outlined,
@@ -119,10 +150,6 @@ class ProfileScreen extends StatelessWidget {
                               trailing: const Icon(Icons.chevron_right_rounded),
                               onTap: () => _switchStore(context),
                             ),
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                             if (session.canManageMembers) ...[
                               const Divider(height: 1),
                               ListTile(
@@ -146,11 +173,6 @@ class ProfileScreen extends StatelessWidget {
                                 ),
                               ),
                             ],
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
                           ],
                         ),
                       ),

@@ -65,6 +65,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.7.3"
+  cloud_functions:
+    dependency: "direct main"
+    description:
+      name: cloud_functions
+      sha256: da1ee44d3fee29ac45d39c48228e06fa81064d292c44a0f20dd4133d948550d8
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.4.0"
+  cloud_functions_platform_interface:
+    dependency: transitive
+    description:
+      name: cloud_functions_platform_interface
+      sha256: "5f81c0a3e5e45942edd787ce44650db40ed8ac6dd81db7eab3ba6e68c71d05fa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.7"
+  cloud_functions_web:
+    dependency: transitive
+    description:
+      name: cloud_functions_web
+      sha256: fca862c4babe8c17e9aa20dc1a521ab24dd04d1296491beb0000245f3e04b648
+      url: "https://pub.dev"
+    source: hosted
+    version: "5.1.13"
   collection:
     dependency: transitive
     description:
@@ -206,6 +230,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_file_dialog:
+    dependency: "direct main"
+    description:
+      name: flutter_file_dialog
+      sha256: "2bb0ac16fe5a390eae8f718e80cc0807fcf3ae2b4c3b9ab1e1c2a130bf904d4f"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.3.2"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -384,7 +416,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
-<<<<<<< HEAD
   mobile_scanner:
     dependency: "direct main"
     description:
@@ -393,8 +424,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.4.1"
-=======
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
   path:
     dependency: transitive
     description:

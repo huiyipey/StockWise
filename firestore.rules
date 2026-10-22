@@ -26,25 +26,11 @@ service cloud.firestore {
     }
 
     function managesInventory(storeId) {
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
       return hasStoreRole(storeId, ['owner', 'admin', 'manager', 'staff']);
     }
 
     function managesStore(storeId) {
       return hasStoreRole(storeId, ['owner', 'admin']);
-<<<<<<< HEAD
-=======
-=======
-      return hasStoreRole(storeId, ['owner', 'manager', 'staff']);
-    }
-
-    function managesStore(storeId) {
-      return hasStoreRole(storeId, ['owner', 'manager']);
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     }
 
     function isBootstrapOwner(storeId) {
@@ -74,6 +60,14 @@ service cloud.firestore {
       allow create, read, update: if owns(uid);
       allow delete: if false;
 
+      match /storePreferences/{storeId} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid)
+          && request.resource.data.keys().hasOnly(['reportEmails', 'updatedAt'])
+          && request.resource.data.reportEmails is bool;
+        allow delete: if false;
+      }
+
       match /addresses/{addressId} {
         allow read, write: if owns(uid);
       }
@@ -83,25 +77,24 @@ service cloud.firestore {
       }
     }
 
+    match /systemStatus/reportEmail {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /assistantUsage/{uid} {
+      allow read, write: if false;
+    }
+
     // Authorize watchMyMemberships across all members subcollections.
     // The query must constrain userId to the signed-in user's UID.
     match /{path=**}/members/{memberId} {
       allow list: if signedIn() && resource.data.userId == request.auth.uid;
     }
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     match /{path=**}/adminInvites/{inviteId} {
       allow list: if signedIn()
         && resource.data.emailLowercase
-          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailLowercase;
+          == request.auth.token.email.lower();
     }
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
     match /stores/{storeId} {
       allow read: if signedIn() && (resource.data.status == 'active' || isActiveMember(storeId));
       allow create: if signedIn()
@@ -111,24 +104,21 @@ service cloud.firestore {
       allow delete: if hasStoreRole(storeId, ['owner']);
 
       match /members/{uid} {
-        allow read: if (signedIn() && resource.data.userId == request.auth.uid)
-          || isActiveMember(storeId);
+        allow get: if owns(uid) || isActiveMember(storeId);
+        allow list: if (signedIn() && resource.data.userId == request.auth.uid) || isActiveMember(storeId);
         allow create: if signedIn() && (
           (owns(uid)
             && request.resource.data.role == 'owner'
             && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid == request.auth.uid)
           || (hasStoreRole(storeId, ['owner'])
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
             && request.resource.data.role in ['admin', 'manager', 'staff'])
           || (owns(uid)
             && request.resource.data.role == 'admin'
+            && request.auth.token.email_verified == true
             && request.resource.data.invitationId is string
             && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.status == 'pending'
             && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.emailLowercase
-              == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailLowercase)
+              == request.auth.token.email.lower())
         );
         allow update: if (hasStoreRole(storeId, ['owner'])
             && request.resource.data.role == resource.data.role)
@@ -142,7 +132,7 @@ service cloud.firestore {
         allow read: if managesStore(storeId)
           || (signedIn()
             && resource.data.emailLowercase
-              == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailLowercase);
+              == request.auth.token.email.lower());
         allow create: if managesStore(storeId)
           && request.resource.data.storeId == storeId
           && request.resource.data.role == 'admin'
@@ -151,7 +141,7 @@ service cloud.firestore {
           signedIn()
           && resource.data.status == 'pending'
           && resource.data.emailLowercase
-            == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.emailLowercase
+            == request.auth.token.email.lower()
           && request.resource.data.status == 'accepted'
           && request.resource.data.acceptedBy == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -160,25 +150,20 @@ service cloud.firestore {
         allow delete: if managesStore(storeId);
       }
 
-<<<<<<< HEAD
-=======
-=======
-            && request.resource.data.role in ['manager', 'staff'])
-          || (hasStoreRole(storeId, ['manager'])
-            && request.resource.data.role == 'staff')
-        );
-        allow update: if hasStoreRole(storeId, ['owner'])
-          || (hasStoreRole(storeId, ['manager'])
-            && resource.data.role == 'staff'
-            && request.resource.data.role == 'staff');
-        allow delete: if hasStoreRole(storeId, ['owner']) && uid != request.auth.uid;
-      }
-
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
       match /categories/{categoryId} {
         allow read: if signedIn();
-        allow write: if managesInventory(storeId) || isBootstrapOwner(storeId);
+        allow create, update: if (managesInventory(storeId) || isBootstrapOwner(storeId))
+          && request.resource.data.storeId == storeId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 60
+          && request.resource.data.isActive is bool;
+        allow delete: if false;
+      }
+
+      match /reportDeliveries/{deliveryId} {
+        allow read: if managesInventory(storeId);
+        allow write: if false;
       }
 
       match /products/{productId} {
@@ -240,18 +225,9 @@ service cloud.firestore {
           && request.resource.data.storeId == storeId
           && request.resource.data.status == 'to_pay'
           && request.resource.data.paymentStatus == 'unpaid'
-<<<<<<< HEAD
           && request.resource.data.fulfillmentType == 'delivery'
           && request.resource.data.payment.methodLabel
             in ['Bank transfer', 'Touch n Go']
-=======
-<<<<<<< HEAD
-          && request.resource.data.fulfillmentType == 'delivery'
-          && request.resource.data.payment.methodLabel
-            in ['Bank transfer', 'Touch n Go']
-=======
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
           && request.resource.data.subtotalCents is int
           && request.resource.data.subtotalCents >= 0
           && request.resource.data.shippingFeeCents is int
@@ -261,10 +237,6 @@ service cloud.firestore {
               + request.resource.data.shippingFeeCents;
         allow read: if signedIn()
           && (resource.data.userId == request.auth.uid || managesInventory(storeId));
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
         allow update: if managesInventory(storeId) || (
           signedIn()
           && resource.data.userId == request.auth.uid
@@ -275,12 +247,6 @@ service cloud.firestore {
             'stores/' + storeId + '/order-attachments/' + orderId + '/.*'
           )
         );
-<<<<<<< HEAD
-=======
-=======
-        allow update: if managesInventory(storeId);
->>>>>>> 831768e476072760b30a26d67dfa6f0d1864723f
->>>>>>> c329d3aa1357b4e87b680ad91ce3b6d980a28249
         allow delete: if false;
 
         match /items/{itemId} {
