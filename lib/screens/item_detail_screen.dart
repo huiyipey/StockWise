@@ -25,7 +25,12 @@ class ItemDetailScreen extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               children: [
                 Center(
-                  child: ProductArtwork(size: 180, imagePath: item.imagePath),
+                  child: ProductArtwork(
+                    size: 180,
+                    imagePath: item.imagePath,
+                    enlargeOnTap: true,
+                    imageLabel: item.productName,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Text(
@@ -66,7 +71,7 @@ class ItemDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: item.availableQuantity > 0
+                  onPressed: item.canSellAt(DateTime.now())
                       ? () => _add(context)
                       : null,
                   icon: const Icon(Icons.add_shopping_cart_rounded),

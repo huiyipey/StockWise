@@ -3,10 +3,13 @@ import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
+import '../services/inventory_list.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/expiry_date_filter.dart';
 import '../widgets/stockwise_ui.dart';
 import 'add_item_screen.dart';
+import 'barcode_scanner_screen.dart';
 import 'admin_item_detail_screen.dart';
 import 'home_screen.dart';
 import 'orders_screen.dart';
@@ -14,6 +17,7 @@ import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
 import 'category_management_screen.dart';
 import '../widgets/category_name.dart';
+import '../widgets/category_filter.dart';
 
 class ItemsScreen extends StatefulWidget {
   const ItemsScreen({super.key});
@@ -23,26 +27,38 @@ class ItemsScreen extends StatefulWidget {
 }
 
 class _ItemsScreenState extends State<ItemsScreen> {
+  final searchController = TextEditingController();
   String query = '';
   String category = 'all';
   DateTimeRange? expiryRange;
+  bool expiryAscending = true;
+
+  @override
+  void dispose() {
+    searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _scanBarcode() async {
+    FocusScope.of(context).unfocus();
+    final value = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const BarcodeScannerScreen()),
+    );
+    if (value == null || !mounted) return;
+    setState(() {
+      searchController.text = value;
+      query = value;
+    });
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
+      bottom: false,
       child: Column(
         children: [
-          StockWiseHeader(
-            title: 'Items',
-            trailing: IconButton(
-              tooltip: 'Add item',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddItemScreen()),
-              ),
-              icon: const Icon(Icons.add_rounded, color: Colors.white),
-            ),
-          ),
+          const StockWiseHeader(title: 'Items'),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
@@ -75,21 +91,33 @@ class _ItemsScreenState extends State<ItemsScreen> {
                         .toSet()
                         .toList()
                       ..sort();
-                final items = snapshot.data!.where((item) {
-                  final matchesName = item.productName.toLowerCase().contains(
-                    query.toLowerCase(),
-                  );
-                  final matchesCategory =
-                      category == 'all' || item.categoryId == category;
-                  return matchesName &&
-                      matchesCategory &&
-                      _inRange(item.expiryAt);
-                }).toList();
+                final today = DateTime.now();
+                final items =
+                    snapshot.data!.where((item) {
+                      final matchesCategory =
+                          category == 'all' || item.categoryId == category;
+                      return matchesInventorySearch(item, query) &&
+                          matchesCategory &&
+                          _inRange(item.expiryAt);
+                    }).toList()..sort(
+                      (a, b) => compareAdminInventory(
+                        a,
+                        b,
+                        ascending: expiryAscending,
+                        today: today,
+                      ),
+                    );
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 88),
                   children: [
                     AppSearchField(
-                      hint: 'Search inventory',
+                      hint: 'Search name or barcode',
+                      controller: searchController,
+                      suffixIcon: IconButton(
+                        tooltip: 'Scan barcode to search',
+                        onPressed: _scanBarcode,
+                        icon: const Icon(Icons.qr_code_scanner_rounded),
+                      ),
                       onChanged: (value) => setState(() => query = value),
                     ),
                     const SizedBox(height: 10),
@@ -109,14 +137,15 @@ class _ItemsScreenState extends State<ItemsScreen> {
         ],
       ),
     ),
+    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
     floatingActionButton: FloatingActionButton(
+      tooltip: 'Add item',
       onPressed: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const AddItemScreen()),
       ),
       child: const Icon(Icons.add_rounded),
     ),
-    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
   );
 
   Widget _itemCard(InventoryBatch item) {
@@ -189,42 +218,19 @@ class _ItemsScreenState extends State<ItemsScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: categories.contains(category) ? category : 'all',
-            decoration: const InputDecoration(labelText: 'Category'),
-            items: [
-              const DropdownMenuItem(
-                value: 'all',
-                child: Text('All categories'),
-              ),
-              ...categories.map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: CategoryName(value)),
-              ),
-            ],
-            onChanged: (value) => setState(() => category = value ?? 'all'),
+          CategoryFilter(
+            categoryIds: categories,
+            selected: category,
+            onChanged: (value) => setState(() => category = value),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickExpiryRange,
-                  icon: const Icon(Icons.date_range_outlined),
-                  label: Text(
-                    expiryRange == null
-                        ? 'Filter expiry date'
-                        : '${DateFormat('dd/MM/yy').format(expiryRange!.start)} – ${DateFormat('dd/MM/yy').format(expiryRange!.end)}',
-                  ),
-                ),
-              ),
-              if (expiryRange != null)
-                IconButton(
-                  tooltip: 'Clear date filter',
-                  onPressed: () => setState(() => expiryRange = null),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-            ],
+          ExpiryDateFilter(
+            range: expiryRange,
+            ascending: expiryAscending,
+            onPickRange: _pickExpiryRange,
+            onClearRange: () => setState(() => expiryRange = null),
+            onToggleSort: () =>
+                setState(() => expiryAscending = !expiryAscending),
           ),
         ],
       ),

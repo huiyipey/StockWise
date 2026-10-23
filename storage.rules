@@ -31,7 +31,8 @@ service firebase.storage {
 
     match /user-avatars/{uid}/{fileName} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid && imageUpload();
+      allow create, update: if signedIn() && request.auth.uid == uid && imageUpload();
+      allow delete: if signedIn() && request.auth.uid == uid;
     }
 
     match /stores/{storeId}/order-attachments/{orderId}/{fileName} {

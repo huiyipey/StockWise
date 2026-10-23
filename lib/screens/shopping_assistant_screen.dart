@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
+import '../services/shopping_assistant_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
 import 'item_detail_screen.dart';
 
 class ShoppingAssistantScreen extends StatefulWidget {
-  const ShoppingAssistantScreen({super.key});
+  final Stream<List<InventoryBatch>>? inventoryStream;
+  final AssistantRequester? onAsk;
+  const ShoppingAssistantScreen({super.key, this.inventoryStream, this.onAsk});
   @override
   State<ShoppingAssistantScreen> createState() =>
       _ShoppingAssistantScreenState();
@@ -16,47 +19,64 @@ class ShoppingAssistantScreen extends StatefulWidget {
 
 class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
   final question = TextEditingController();
+  final scroll = ScrollController();
+  final latestMessage = GlobalKey();
   final List<Map<String, String>> messages = [];
+  final List<Map<String, String>> conversation = [];
   final selected = <String>{};
   List<Map<String, dynamic>> picks = [];
-  late final inventory = FirestoreService.instance.watchInventory();
+  late final inventory =
+      widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   bool busy = false, started = false;
   @override
   void dispose() {
     question.dispose();
+    scroll.dispose();
     super.dispose();
   }
 
   Future<void> _ask([String? prompt]) async {
     if (busy) return;
     final text = prompt ?? question.text.trim();
+    FocusScope.of(context).unfocus();
+    if (scroll.hasClients) scroll.jumpTo(0);
     setState(() {
       busy = true;
       started = true;
       if (text.isNotEmpty) messages.add({'role': 'You', 'text': text});
     });
-    question.clear();
     try {
-      final response =
-          await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
-              .httpsCallable(
-                'shoppingAssistant',
-                options: HttpsCallableOptions(
-                  timeout: const Duration(seconds: 120),
-                ),
-              )
-              .call({
-                'storeId': StoreSession.instance.storeId,
-                'question': text,
-                'productIds': selected.toList(),
-              });
+      final previous = recentAssistantConversation(conversation);
+      final Map<String, dynamic> data;
+      if (widget.onAsk != null) {
+        data = await widget.onAsk!(
+          question: text,
+          productIds: selected.toList(),
+          conversation: previous,
+        );
+      } else {
+        final storeId = StoreSession.instance.storeId;
+        if (storeId == null) throw StateError('Select a store first.');
+        data = await askShoppingAssistant(
+          storeId: storeId,
+          question: text,
+          productIds: selected.toList(),
+          conversation: previous,
+        );
+      }
       if (!mounted) return;
-      final data = Map<String, dynamic>.from(response.data as Map);
       setState(() {
         picks = (data['recommendations'] as List)
             .map((v) => Map<String, dynamic>.from(v as Map))
             .toList();
         messages.add({'role': 'StockWise', 'text': data['answer'] as String});
+        if (text.isNotEmpty && data['aiAvailable'] == true) {
+          conversation.addAll([
+            {'role': 'user', 'text': text},
+            {'role': 'model', 'text': data['answer'] as String},
+          ]);
+          if (prompt == null && question.text.trim() == text) question.clear();
+        }
       });
     } on FirebaseFunctionsException catch (error) {
       if (mounted) {
@@ -79,7 +99,19 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final target = latestMessage.currentContext;
+          if (mounted && target != null) {
+            Scrollable.ensureVisible(
+              target,
+              duration: const Duration(milliseconds: 250),
+              alignment: .1,
+            );
+          }
+        });
+      }
     }
   }
 
@@ -89,7 +121,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
       child: Column(
         children: [
           const StockWiseHeader(
-            title: 'Shopping Assistant',
+            title: 'Ask StockWise',
             leading: BackCircleButton(),
           ),
           Expanded(
@@ -105,6 +137,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                     )
                     .toList();
                 return ListView(
+                  controller: scroll,
                   padding: const EdgeInsets.all(18),
                   children: [
                     Card(
@@ -119,15 +152,15 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'Find your next favourite',
+                              'Ask StockWise anything',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                             const Text(
-                              'Get suggestions from your recent purchases in this store, or select two products and ask how they compare.',
+                              'Get suggestions from your recent purchases, compare products, or ask Gemini general questions.',
                             ),
                             const SizedBox(height: 10),
                             const Text(
-                              'When you ask, your question, product details and purchased product names are sent to Google’s AI service. Addresses, emails and receipts are excluded. Answers may be inaccurate; check the label for ingredients and allergens.',
+                              'Your questions, recent conversation, store product details and purchased product names are sent to Google’s AI service. Your account email, delivery address and receipts are not included automatically. Answers may be inaccurate; check product labels for ingredients and allergens.',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.muted,
@@ -146,6 +179,13 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                         ),
                       ),
                     ),
+                    if (messages.isNotEmpty)
+                      Column(children: messages.map(_messageCard).toList()),
+                    if (busy)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
                     if (picks.isNotEmpty) ...[
                       const SizedBox(height: 12),
                       Text(
@@ -238,34 +278,6 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                         ),
                       ],
                     ),
-                    ...messages.map(
-                      (m) => Card(
-                        color: m['role'] == 'You'
-                            ? AppColors.primarySoft
-                            : null,
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                m['role']!,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              SelectableText(m['text']!),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (busy)
-                      const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
                   ],
                 );
               },
@@ -284,7 +296,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                     maxLines: 3,
                     enabled: !busy,
                     decoration: const InputDecoration(
-                      hintText: 'Ask about a product…',
+                      hintText: 'Ask StockWise anything…',
                       counterText: '',
                     ),
                   ),
@@ -301,6 +313,25 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _messageCard(Map<String, String> message) => Card(
+    key: identical(message, messages.last) ? latestMessage : null,
+    color: message['role'] == 'You' ? AppColors.primarySoft : null,
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message['role']!,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 5),
+          SelectableText(message['text']!),
         ],
       ),
     ),

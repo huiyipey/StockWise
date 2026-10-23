@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
 
 class StaffManagementScreen extends StatefulWidget {
-  const StaffManagementScreen({super.key});
+  final Stream<List<Map<String, dynamic>>>? membersStream;
+  final Stream<List<Map<String, dynamic>>>? invitesStream;
+  final Future<void> Function(String)? sendInvite;
+
+  const StaffManagementScreen({
+    super.key,
+    this.membersStream,
+    this.invitesStream,
+    this.sendInvite,
+  });
 
   @override
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
@@ -13,6 +23,10 @@ class StaffManagementScreen extends StatefulWidget {
 
 class _StaffManagementScreenState extends State<StaffManagementScreen> {
   bool inviting = false;
+  late final members =
+      widget.membersStream ?? FirestoreService.instance.watchStoreMembers();
+  late final invites =
+      widget.invitesStream ?? FirestoreService.instance.watchAdminInvites();
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -25,7 +39,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: FirestoreService.instance.watchStoreMembers(),
+              stream: members,
               builder: (context, memberSnapshot) {
                 if (memberSnapshot.hasError) {
                   return Center(child: Text('${memberSnapshot.error}'));
@@ -34,7 +48,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 return StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: FirestoreService.instance.watchAdminInvites(),
+                  stream: invites,
                   builder: (context, inviteSnapshot) {
                     final members = memberSnapshot.data!
                         .where((item) => item['role'] != 'customer')
@@ -151,10 +165,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         ],
       ),
     );
-    if (result == null || result.trim().isEmpty) return;
+    if (result == null || result.trim().isEmpty || !mounted) return;
     setState(() => inviting = true);
     try {
-      await FirestoreService.instance.inviteAdmin(result);
+      await (widget.sendInvite ?? FirestoreService.instance.inviteAdmin)(
+        result,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -163,6 +179,36 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             ),
           ),
         );
+      }
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        if (error.code == 'not-found' &&
+            error.details is Map &&
+            error.details['reason'] == 'email-not-found') {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Email does not exist'),
+              content: const Text(
+                'This email does not exist. Please enter a valid email.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                error.message ?? 'Could not add admin. Please try again.',
+              ),
+            ),
+          );
+        }
       }
     } catch (error) {
       if (mounted) {

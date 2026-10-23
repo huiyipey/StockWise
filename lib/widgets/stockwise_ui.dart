@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
+import '../screens/product_image_screen.dart';
 
 class StockWiseHeader extends StatelessWidget {
   final String title;
@@ -60,16 +61,26 @@ class BackCircleButton extends StatelessWidget {
 class AppSearchField extends StatelessWidget {
   final String hint;
   final ValueChanged<String>? onChanged;
+  final TextEditingController? controller;
+  final Widget? suffixIcon;
 
-  const AppSearchField({super.key, this.hint = 'Search', this.onChanged});
+  const AppSearchField({
+    super.key,
+    this.hint = 'Search',
+    this.onChanged,
+    this.controller,
+    this.suffixIcon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
+      controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
         prefixIcon: const Icon(Icons.search_rounded, color: AppColors.muted),
+        suffixIcon: suffixIcon,
         isDense: true,
       ),
     );
@@ -79,8 +90,16 @@ class AppSearchField extends StatelessWidget {
 class ProductArtwork extends StatelessWidget {
   final double size;
   final String? imagePath;
+  final bool enlargeOnTap;
+  final String? imageLabel;
 
-  const ProductArtwork({super.key, this.size = 58, this.imagePath});
+  const ProductArtwork({
+    super.key,
+    this.size = 58,
+    this.imagePath,
+    this.enlargeOnTap = false,
+    this.imageLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -90,13 +109,52 @@ class ProductArtwork extends StatelessWidget {
         width: size,
         height: size,
         child: FutureBuilder<String?>(
-          future: FirestoreService.instance.imageUrl(imagePath),
+          future: imagePath == null || imagePath!.isEmpty
+              ? Future.value(null)
+              : imagePath!.startsWith('http')
+              ? Future.value(imagePath)
+              : FirestoreService.instance.imageUrl(imagePath),
           builder: (context, snapshot) {
             if (snapshot.data != null) {
-              return Image.network(
+              final image = Image.network(
                 snapshot.data!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, _, _) => _placeholder(),
+              );
+              if (!enlargeOnTap) return image;
+              return Tooltip(
+                message: 'Enlarge image',
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      fullscreenDialog: true,
+                      builder: (_) => ProductImageScreen(
+                        image: NetworkImage(snapshot.data!),
+                        title: imageLabel ?? 'Product image',
+                      ),
+                    ),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      image,
+                      const Positioned(
+                        right: 6,
+                        bottom: 6,
+                        child: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Colors.black54,
+                          child: Icon(
+                            Icons.zoom_in_rounded,
+                            color: Colors.white,
+                            size: 19,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
             }
             return _placeholder();

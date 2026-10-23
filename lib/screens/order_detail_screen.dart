@@ -261,15 +261,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   }
 
   Future<void> _uploadReceipt() async {
-    if (uploadingReceipt) return;
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1800,
+    );
+    if (file == null) return;
     setState(() => uploadingReceipt = true);
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1800,
-      );
-      if (file == null || !mounted) return;
       final path = await FirestoreService.instance.uploadOrderReceipt(
         file,
         widget.order.id,

@@ -6,13 +6,15 @@ import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/expiry_date_filter.dart';
 import '../widgets/stockwise_ui.dart';
 import 'cart_screen.dart';
 import 'item_detail_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'shopping_assistant_screen.dart';
-import '../widgets/category_name.dart';
+import '../widgets/category_filter.dart';
+import '../widgets/store_chat_button.dart';
 
 class ShopScreen extends StatefulWidget {
   const ShopScreen({super.key});
@@ -25,10 +27,10 @@ class _ShopScreenState extends State<ShopScreen> {
   String query = '';
   String category = 'all';
   DateTimeRange? expiryRange;
+  bool expiryAscending = true;
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
     floatingActionButton: FloatingActionButton.extended(
       onPressed: () => Navigator.push(
         context,
@@ -38,6 +40,7 @@ class _ShopScreenState extends State<ShopScreen> {
       label: const Text('Ask StockWise'),
     ),
     body: SafeArea(
+      bottom: false,
       child: Column(
         children: [
           Container(
@@ -58,6 +61,7 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                       ),
                     ),
+                    const StoreChatButton(),
                     StreamBuilder<List<CartLine>>(
                       stream: FirestoreService.instance.watchCart(),
                       builder: (context, snapshot) => Badge(
@@ -123,7 +127,12 @@ class _ShopScreenState extends State<ShopScreen> {
                 final categories =
                     sellable.map((item) => item.categoryId).toSet().toList()
                       ..sort();
-                final filtered = sellable.where(_matchesFilters).toList();
+                final filtered = sellable.where(_matchesFilters).toList()
+                  ..sort(
+                    (a, b) => expiryAscending
+                        ? a.expiryAt.compareTo(b.expiryAt)
+                        : b.expiryAt.compareTo(a.expiryAt),
+                  );
                 final promotions = filtered
                     .where((item) => item.promotionEnabled)
                     .toList();
@@ -150,6 +159,7 @@ class _ShopScreenState extends State<ShopScreen> {
         ],
       ),
     ),
+    bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
   );
 
   bool _matchesFilters(InventoryBatch item) {
@@ -178,45 +188,23 @@ class _ShopScreenState extends State<ShopScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: categories.contains(category) ? category : 'all',
+          CategoryFilter(
+            categoryIds: categories,
+            selected: category,
             decoration: const InputDecoration(
               labelText: 'Filter by category',
               prefixIcon: Icon(Icons.filter_alt_outlined),
             ),
-            items: [
-              const DropdownMenuItem(
-                value: 'all',
-                child: Text('All categories'),
-              ),
-              ...categories.map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: CategoryName(value)),
-              ),
-            ],
-            onChanged: (value) => setState(() => category = value ?? 'all'),
+            onChanged: (value) => setState(() => category = value),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickExpiryRange,
-                  icon: const Icon(Icons.date_range_outlined),
-                  label: Text(
-                    expiryRange == null
-                        ? 'Filter by expiry date'
-                        : '${DateFormat('dd/MM/yy').format(expiryRange!.start)} – ${DateFormat('dd/MM/yy').format(expiryRange!.end)}',
-                  ),
-                ),
-              ),
-              if (expiryRange != null)
-                IconButton(
-                  tooltip: 'Clear date filter',
-                  onPressed: () => setState(() => expiryRange = null),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-            ],
+          ExpiryDateFilter(
+            range: expiryRange,
+            ascending: expiryAscending,
+            onPickRange: _pickExpiryRange,
+            onClearRange: () => setState(() => expiryRange = null),
+            onToggleSort: () =>
+                setState(() => expiryAscending = !expiryAscending),
           ),
         ],
       ),

@@ -26,7 +26,12 @@ class AdminItemDetailScreen extends StatelessWidget {
               padding: const EdgeInsets.all(18),
               children: [
                 Center(
-                  child: ProductArtwork(size: 150, imagePath: item.imagePath),
+                  child: ProductArtwork(
+                    size: 150,
+                    imagePath: item.imagePath,
+                    enlargeOnTap: true,
+                    imageLabel: item.productName,
+                  ),
                 ),
                 const SizedBox(height: 18),
                 Text(
@@ -95,13 +100,18 @@ class AdminItemDetailScreen extends StatelessWidget {
   Widget _row(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.muted)),
-        const Spacer(),
-        Flexible(
+        Expanded(
+          flex: 2,
+          child: Text(label, style: const TextStyle(color: AppColors.muted)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 3,
           child: Text(
             value,
-            textAlign: TextAlign.end,
+            textAlign: TextAlign.start,
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
         ),

@@ -1,13 +1,15 @@
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/app_models.dart';
+import '../models/barcode_product.dart';
+import 'profile_fields.dart';
 import 'store_session.dart';
-import 'image_upload.dart';
 
 class FirestoreService {
   FirestoreService._();
@@ -41,10 +43,10 @@ class FirestoreService {
       'email': user.email,
       'emailLowercase': user.email?.trim().toLowerCase(),
       'displayName':
-          existing.data()?['displayName'] ??
+          existing.data()?['displayName'] as String? ??
           user.displayName ??
           _nameFromEmail(user.email),
-      'photoPath': existing.data()?['photoPath'] ?? user.photoURL,
+      'photoPath': existing.data()?['photoPath'] as String? ?? user.photoURL,
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (!existing.exists) {
@@ -250,24 +252,9 @@ class FirestoreService {
     if (normalized == _user.email?.trim().toLowerCase()) {
       throw ArgumentError('The store owner already has full access.');
     }
-    final existingMember = await _storeRef
-        .collection('members')
-        .where('email', isEqualTo: normalized)
-        .limit(1)
-        .get();
-    if (existingMember.docs.isNotEmpty &&
-        existingMember.docs.first.data()['isActive'] == true) {
-      throw StateError('This person already has store access.');
-    }
-    await _storeRef.collection('adminInvites').doc(normalized).set({
-      'storeId': _storeId,
-      'emailLowercase': normalized,
-      'role': 'admin',
-      'status': 'pending',
-      'invitedBy': _user.uid,
-      'invitedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+        .httpsCallable('createAdminInvite')
+        .call({'storeId': _storeId, 'email': normalized});
   }
 
   Future<void> setMemberActive(String uid, bool isActive) =>
@@ -276,17 +263,10 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-  Stream<List<String>> watchCategories() => _storeRef
-      .collection('categories')
-      .where('isActive', isEqualTo: true)
-      .snapshots()
-      .map((snapshot) {
-        final names = snapshot.docs
-            .map((doc) => doc.data()['name'] as String? ?? doc.id)
-            .toList();
-        names.sort();
-        return names;
-      });
+  Stream<List<String>> watchCategories() => watchCategoryRecords().map(
+    (categories) =>
+        categories.where((c) => c.active).map((c) => c.name).toList(),
+  );
 
   Stream<List<InventoryBatch>> watchInventory() => _storeRef
       .collection('inventoryBatches')
@@ -297,9 +277,7 @@ class FirestoreService {
   Stream<List<StoreCategory>> watchCategoryRecords() =>
       _storeRef.collection('categories').snapshots().map((s) {
         final result = s.docs.map(StoreCategory.fromDoc).toList();
-        result.sort(
-          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        );
+        result.sort(StoreCategory.compare);
         return result;
       });
 
@@ -322,6 +300,16 @@ class FirestoreService {
       throw ArgumentError('Use a descriptive category name.');
     }
     final ref = _storeRef.collection('categories').doc(categoryId);
+    final existingCategories = id == null
+        ? await _storeRef.collection('categories').get()
+        : null;
+    final nextOrder =
+        existingCategories == null || existingCategories.docs.isEmpty
+        ? 0
+        : existingCategories.docs
+                  .map((doc) => (doc.data()['sortOrder'] as num? ?? 0).toInt())
+                  .reduce((a, b) => a > b ? a : b) +
+              1;
     await _db.runTransaction((tx) async {
       final existing = await tx.get(ref);
       if (id == null && existing.exists) {
@@ -336,8 +324,20 @@ class FirestoreService {
         'isActive': active,
         'updatedAt': FieldValue.serverTimestamp(),
         if (!existing.exists) 'createdAt': FieldValue.serverTimestamp(),
+        if (!existing.exists) 'sortOrder': nextOrder,
       }, SetOptions(merge: true));
     });
+  }
+
+  Future<void> reorderCategories(List<StoreCategory> categories) async {
+    final write = _db.batch();
+    for (var index = 0; index < categories.length; index++) {
+      write.update(
+        _storeRef.collection('categories').doc(categories[index].id),
+        {'sortOrder': index, 'updatedAt': FieldValue.serverTimestamp()},
+      );
+    }
+    await write.commit();
   }
 
   Stream<List<InventoryBatch>> watchPromotions() => watchInventory().map(
@@ -368,8 +368,41 @@ class FirestoreService {
     return ref.fullPath;
   }
 
+  Future<BarcodeProduct?> findProductByBarcode(String barcode) async {
+    final code = barcode.trim();
+    if (code.isEmpty) return null;
+    final store = _storeRef;
+    final snapshot = await store
+        .collection('products')
+        .where('barcode', isEqualTo: code)
+        .get();
+    return latestBarcodeProduct(
+      snapshot.docs.map(
+        (doc) => BarcodeProduct.fromData(doc.id, store.id, doc.data()),
+      ),
+    );
+  }
+
+  Future<void> saveInventoryDraft(InventoryItemInput input) =>
+      saveInventoryItem(
+        existing: input.existing,
+        reusedProduct: input.reusedProduct,
+        name: input.name,
+        category: input.category,
+        unitLabel: input.unitLabel,
+        barcode: input.barcode,
+        expiryAt: input.expiryAt,
+        quantity: input.quantity,
+        basePriceCents: input.basePriceCents,
+        promotionEnabled: input.promotionEnabled,
+        promotionPriceCents: input.promotionPriceCents,
+        notifyOnExpiry: input.notifyOnExpiry,
+        image: input.image,
+      );
+
   Future<void> saveInventoryItem({
     InventoryBatch? existing,
+    BarcodeProduct? reusedProduct,
     required String name,
     required String category,
     required String unitLabel,
@@ -390,14 +423,21 @@ class FirestoreService {
       throw ArgumentError('Enter a valid promotion price.');
     }
 
+    if (reusedProduct != null &&
+        (existing != null ||
+            reusedProduct.storeId != _storeId ||
+            reusedProduct.barcode != barcode?.trim())) {
+      throw ArgumentError('Look up the barcode again for the selected store.');
+    }
     final productRef = existing == null
-        ? _storeRef.collection('products').doc()
+        ? _storeRef.collection('products').doc(reusedProduct?.id)
         : _storeRef.collection('products').doc(existing.productId);
     final batchRef = existing == null
         ? _storeRef.collection('inventoryBatches').doc()
         : _storeRef.collection('inventoryBatches').doc(existing.id);
     final uploadedPath = await uploadProductImage(image, productRef.id);
-    final imagePath = uploadedPath ?? existing?.imagePath;
+    final imagePath =
+        uploadedPath ?? existing?.imagePath ?? reusedProduct?.imagePath;
     final categoryId = category;
     final write = _db.batch();
     final productData = <String, dynamic>{
@@ -435,7 +475,9 @@ class FirestoreService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (existing == null) {
-      productData['createdAt'] = FieldValue.serverTimestamp();
+      if (reusedProduct == null) {
+        productData['createdAt'] = FieldValue.serverTimestamp();
+      }
       inventoryData['createdAt'] = FieldValue.serverTimestamp();
     }
     write.set(productRef, productData, SetOptions(merge: true));
@@ -543,7 +585,13 @@ class FirestoreService {
       final batchSnap = await transaction.get(
         _storeRef.collection('inventoryBatches').doc(batch.id),
       );
+      if (!batchSnap.exists) {
+        throw StateError('This item is no longer available.');
+      }
       final currentBatch = InventoryBatch.fromDoc(batchSnap);
+      if (!currentBatch.canSellAt(DateTime.now())) {
+        throw StateError('This item is no longer available.');
+      }
       final itemSnap = await transaction.get(itemRef);
       final currentQuantity = itemSnap.exists
           ? (itemSnap.data()?['quantity'] as num? ?? 0).round()
@@ -588,7 +636,12 @@ class FirestoreService {
         .collection('inventoryBatches')
         .doc(line.batchId)
         .get();
-    final available = InventoryBatch.fromDoc(batch).availableQuantity;
+    if (!batch.exists) throw StateError('This item is no longer available.');
+    final current = InventoryBatch.fromDoc(batch);
+    if (!current.canSellAt(DateTime.now())) {
+      throw StateError('This item is no longer available.');
+    }
+    final available = current.availableQuantity;
     if (quantity > available) throw StateError('Only $available available.');
     await ref.update({
       'quantity': quantity,
@@ -645,6 +698,11 @@ class FirestoreService {
           throw StateError('${line.productName} is no longer available.');
         }
         final batch = InventoryBatch.fromDoc(batchSnap);
+        if (!batch.canSellAt(DateTime.now())) {
+          throw StateError(
+            '${line.productName} is no longer available. Please remove it from your cart.',
+          );
+        }
         if (batch.availableQuantity < line.quantity) {
           throw StateError(
             'Only ${batch.availableQuantity} ${line.productName} available.',
@@ -729,16 +787,18 @@ class FirestoreService {
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
 
   Future<String> uploadOrderReceipt(XFile file, String orderId) async {
-    final upload = await ImageUpload.read(file);
-    final storeRef = _storeRef;
+    final bytes = await file.readAsBytes();
+    final extension = file.name.contains('.')
+        ? file.name.split('.').last.toLowerCase()
+        : 'jpg';
     final ref = _storage.ref(
-      'stores/${storeRef.id}/order-attachments/$orderId/receipt-${DateTime.now().microsecondsSinceEpoch}.${upload.extension}',
+      'stores/$_storeId/order-attachments/$orderId/receipt.$extension',
     );
     await ref.putData(
-      upload.bytes,
-      SettableMetadata(contentType: upload.contentType),
+      bytes,
+      SettableMetadata(contentType: file.mimeType ?? 'image/jpeg'),
     );
-    await storeRef.collection('orders').doc(orderId).update({
+    await _storeRef.collection('orders').doc(orderId).update({
       'receiptPath': ref.fullPath,
       'receiptUploadedAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -816,6 +876,81 @@ class FirestoreService {
       .doc(_user.uid)
       .snapshots()
       .map((doc) => doc.data() ?? const <String, dynamic>{});
+
+  Future<void> updateUserProfile({
+    required String displayName,
+    required String phoneNumber,
+    XFile? photo,
+  }) async {
+    final nameError = profileNameError(displayName);
+    final phoneError = profilePhoneError(phoneNumber);
+    if (nameError != null || phoneError != null) {
+      throw ArgumentError(nameError ?? phoneError);
+    }
+    final user = _user;
+    final userRef = _db.collection('users').doc(user.uid);
+    final previous = await userRef.get();
+    final previousName = user.displayName;
+    final oldPhoto = previous.data()?['photoPath'] as String?;
+    Reference? uploaded;
+    var authUpdated = false;
+    try {
+      if (photo != null) {
+        final bytes = await photo.readAsBytes();
+        if (bytes.length >= 5 * 1024 * 1024) {
+          throw ArgumentError('Choose a photo smaller than 5 MB.');
+        }
+        final extension = photo.name.split('.').last.toLowerCase();
+        final contentType =
+            photo.mimeType ??
+            switch (extension) {
+              'png' => 'image/png',
+              'webp' => 'image/webp',
+              'gif' => 'image/gif',
+              _ => 'image/jpeg',
+            };
+        uploaded = _storage.ref(
+          'user-avatars/${user.uid}/avatar-${DateTime.now().microsecondsSinceEpoch}.$extension',
+        );
+        await uploaded.putData(
+          bytes,
+          SettableMetadata(contentType: contentType),
+        );
+      }
+      await user.updateDisplayName(displayName.trim());
+      authUpdated = true;
+      await userRef.set({
+        'displayName': displayName.trim(),
+        'phoneNumber': phoneNumber.trim(),
+        if (uploaded != null) 'photoPath': uploaded.fullPath,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      if (authUpdated) {
+        try {
+          await user.updateDisplayName(previousName);
+        } catch (_) {
+          /* Retry remains available. */
+        }
+      }
+      if (uploaded != null) {
+        try {
+          await uploaded.delete();
+        } catch (_) {
+          /* Do not mask the save error. */
+        }
+      }
+      rethrow;
+    }
+    if (uploaded != null &&
+        oldPhoto?.startsWith('user-avatars/${user.uid}/') == true) {
+      try {
+        await _storage.ref(oldPhoto).delete();
+      } catch (_) {
+        /* The new profile is already saved. */
+      }
+    }
+  }
 
   Future<void> updateNotificationPreference(bool enabled) =>
       _db.collection('users').doc(_user.uid).set({

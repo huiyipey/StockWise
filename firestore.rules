@@ -56,17 +56,47 @@ service cloud.firestore {
         && request.resource.data.unitPriceCents == sellingPrice;
     }
 
+    function chatReadable(storeId, customerId) {
+      return owns(customerId) || managesStore(storeId);
+    }
+
+    function validChatMessage(storeId, customerId, data) {
+      return signedIn()
+        && data.keys().hasOnly(['senderId', 'senderName', 'senderRole', 'text', 'sentAt'])
+        && data.senderId == request.auth.uid
+        && ((managesStore(storeId) && data.senderRole == 'admin')
+          || (!managesStore(storeId) && owns(customerId) && data.senderRole == 'customer'))
+        && data.senderName is string
+        && data.senderName.size() > 0 && data.senderName.size() <= 80
+        && data.senderName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.sentAt == request.time;
+    }
+
+    function validChatPreview(storeId, customerId) {
+      let data = request.resource.data;
+      let path = /databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)/messages/$(data.lastMessageId);
+      let message = getAfter(path).data;
+      return data.lastMessageId is string
+        && !exists(path)
+        && data.lastMessage == message.text
+        && data.lastMessageAt == message.sentAt
+        && data.lastSenderId == message.senderId
+        && data.lastSenderRole == message.senderRole
+        && validChatMessage(storeId, customerId, message);
+    }
+
+    function validChatRead(field) {
+      let data = request.resource.data;
+      return data.diff(resource.data).affectedKeys().hasOnly([field])
+        && data[field] is timestamp && data[field] <= request.time
+        && data[field] <= resource.data.lastMessageAt
+        && (resource.data[field] == null || data[field] >= resource.data[field]);
+    }
+
     match /users/{uid} {
       allow create, read, update: if owns(uid);
       allow delete: if false;
-
-      match /storePreferences/{storeId} {
-        allow read: if owns(uid);
-        allow create, update: if owns(uid)
-          && request.resource.data.keys().hasOnly(['reportEmails', 'updatedAt'])
-          && request.resource.data.reportEmails is bool;
-        allow delete: if false;
-      }
 
       match /addresses/{addressId} {
         allow read, write: if owns(uid);
@@ -269,6 +299,49 @@ service cloud.firestore {
           allow read: if signedIn()
             && (get(/databases/$(database)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
               == request.auth.uid || managesInventory(storeId));
+          allow update, delete: if false;
+        }
+      }
+
+      // One private customer conversation per store; active owner/admin share the inbox.
+      match /conversations/{customerId} {
+        allow get: if chatReadable(storeId, customerId);
+        allow list: if managesStore(storeId);
+        allow create: if owns(customerId) && !managesStore(storeId)
+          && get(/databases/$(database)/documents/stores/$(storeId)).data.status == 'active'
+          && request.resource.data.keys().hasOnly(['storeId', 'customerId', 'customerName',
+            'lastMessageId', 'lastMessage', 'lastMessageAt', 'lastSenderId', 'lastSenderRole',
+            'customerReadAt', 'adminReadAt'])
+          && request.resource.data.storeId == storeId
+          && request.resource.data.customerId == customerId
+          && request.resource.data.customerName
+            == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+          && request.resource.data.customerReadAt == request.time
+          && request.resource.data.adminReadAt == null
+          && validChatPreview(storeId, customerId);
+        allow update: if (owns(customerId) && !managesStore(storeId)
+            && validChatRead('customerReadAt'))
+          || (managesStore(storeId) && validChatRead('adminReadAt'))
+          || (validChatPreview(storeId, customerId)
+            && request.resource.data.storeId == resource.data.storeId
+            && request.resource.data.customerId == resource.data.customerId
+            && ((managesStore(storeId)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'lastMessageId', 'lastMessage', 'lastMessageAt', 'lastSenderId', 'lastSenderRole', 'adminReadAt'])
+                && request.resource.data.adminReadAt == request.time)
+              || (owns(customerId) && !managesStore(storeId)
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                  'lastMessageId', 'lastMessage', 'lastMessageAt', 'lastSenderId', 'lastSenderRole', 'customerReadAt', 'customerName'])
+                && request.resource.data.customerReadAt == request.time
+                && request.resource.data.customerName
+                  == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName)));
+        allow delete: if false;
+
+        match /messages/{messageId} {
+          allow read: if chatReadable(storeId, customerId);
+          allow create: if validChatMessage(storeId, customerId, request.resource.data)
+            && getAfter(/databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)).data.lastMessageId == messageId
+            && getAfter(/databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)).data.lastSenderId == request.auth.uid;
           allow update, delete: if false;
         }
       }

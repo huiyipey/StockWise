@@ -1,12 +1,21 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
+import '../services/profile_fields.dart';
+import '../services/address_book_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/profile_avatar.dart';
+import '../widgets/store_chat_button.dart';
+import '../services/store_chat_service.dart';
+import '../services/password_change_service.dart';
 import 'cart_screen.dart';
+import 'address_book_screen.dart';
+import 'edit_profile_screen.dart';
+import 'change_password_screen.dart';
 import 'home_screen.dart';
 import 'items_screen.dart';
 import 'login_screen.dart';
@@ -15,17 +24,46 @@ import 'shop_screen.dart';
 import 'store_gate_screen.dart';
 import 'staff_management_screen.dart';
 import 'waste_analysis_screen.dart';
-import 'edit_profile_screen.dart';
-import '../services/profile_service.dart';
-import '../widgets/profile_avatar.dart';
-import '../widgets/report_email_preference.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+class ProfileScreen extends StatefulWidget {
+  final Stream<Map<String, dynamic>>? profileStream;
+  final String? accountEmail;
+  final ProfileSaver? onSave;
+  final Future<XFile?> Function()? pickPhoto;
+  final AddressBookRepository? addressRepository;
+  final StoreChatRepository? chatRepository;
+  final PasswordChanger? onChangePassword;
+
+  const ProfileScreen({
+    super.key,
+    this.profileStream,
+    this.accountEmail,
+    this.onSave,
+    this.pickPhoto,
+    this.addressRepository,
+    this.chatRepository,
+    this.onChangePassword,
+  });
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final scroll = ScrollController();
+  late final profile =
+      widget.profileStream ?? FirestoreService.instance.watchUserProfile();
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final email =
+        widget.accountEmail ?? FirebaseAuth.instance.currentUser?.email ?? '';
     final session = StoreSession.instance;
     return Scaffold(
       body: SafeArea(
@@ -46,34 +84,45 @@ class ProfileScreen extends StatelessWidget {
             ),
             Expanded(
               child: StreamBuilder<Map<String, dynamic>>(
-                stream: FirestoreService.instance.watchUserProfile(),
+                stream: profile,
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(
+                      child: Text(
+                        'Could not load your profile. Please reopen this page.',
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
                   final data = snapshot.data ?? const <String, dynamic>{};
                   final preferences = Map<String, dynamic>.from(
                     data['preferences'] as Map? ?? const {},
                   );
                   final enabled = preferences['expiryAlerts'] as bool? ?? true;
                   return ListView(
+                    controller: scroll,
                     padding: const EdgeInsets.all(20),
                     children: [
-                      Center(
-                        child: ProfileAvatar(
-                          path: data['photoPath'] as String?,
-                        ),
-                      ),
+                      ProfileAvatar(photoPath: data['photoPath'] as String?),
                       const SizedBox(height: 14),
                       Text(
-                        data['displayName'] as String? ??
-                            user?.displayName ??
-                            'StockWise User',
+                        data['displayName'] as String? ?? 'StockWise User',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       Text(
-                        user?.email ?? '',
+                        email,
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: AppColors.muted),
                       ),
+                      if ((data['phoneNumber'] as String? ?? '').isNotEmpty)
+                        Text(
+                          data['phoneNumber'] as String,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.muted),
+                        ),
                       const SizedBox(height: 8),
                       Text(
                         '${session.store?.name ?? ''}  •  ${session.role.toUpperCase()}',
@@ -89,41 +138,78 @@ class ProfileScreen extends StatelessWidget {
                           children: [
                             ListTile(
                               leading: const Icon(Icons.edit_outlined),
-                              title: const Text('Edit profile'),
-                              subtitle: const Text(
-                                'Username, account image, phone and password',
+                              title: const Text(
+                                'Edit profile',
+                                style: TextStyle(fontWeight: FontWeight.w800),
                               ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: !snapshot.hasData || snapshot.hasError
-                                  ? null
-                                  : () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => EditProfileScreen(
-                                          initial: data,
-                                          email: user?.email ?? '',
-                                        ),
-                                      ),
-                                    ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () => _editProfile(context, data, email),
                             ),
-                            if (session.canManage && session.storeId != null)
-                              ReportEmailPreference(
-                                key: ValueKey(session.storeId),
-                                values:
-                                    ProfileService.preference(
-                                      session.storeId!,
-                                    ).snapshots().map(
-                                      (doc) =>
-                                          doc.data()?['reportEmails'] != false,
-                                    ),
-                                save: (value) =>
-                                    ProfileService.preference(
-                                      session.storeId!,
-                                    ).set({
-                                      'reportEmails': value,
-                                      'updatedAt': FieldValue.serverTimestamp(),
-                                    }),
+                            const Divider(height: 1),
+                            ListTile(
+                              leading: const Icon(Icons.lock_outline_rounded),
+                              title: const Text(
+                                'Change password',
+                                style: TextStyle(fontWeight: FontWeight.w800),
                               ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () => _changePassword(context),
+                            ),
+                            const Divider(height: 1),
+                            if (session.canManageMembers ||
+                                !session.canManage) ...[
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                ),
+                                title: Text(
+                                  session.canManageMembers
+                                      ? 'Customer messages'
+                                      : 'Chat with admin',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => openStoreChat(
+                                  context,
+                                  repository: widget.chatRepository,
+                                ),
+                              ),
+                              const Divider(height: 1),
+                            ],
+                            if (!session.canManage) ...[
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.contact_mail_outlined,
+                                ),
+                                title: const Text(
+                                  'Address book',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                                subtitle: const Text(
+                                  'Saved delivery addresses',
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                ),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AddressBookScreen(
+                                      initialName:
+                                          data['displayName'] as String? ?? '',
+                                      initialPhone:
+                                          data['phoneNumber'] as String? ?? '',
+                                      repository: widget.addressRepository,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const Divider(height: 1),
+                            ],
                             SwitchListTile.adaptive(
                               secondary: const Icon(
                                 Icons.notifications_outlined,
@@ -136,9 +222,8 @@ class ProfileScreen extends StatelessWidget {
                                 'Expiry, promotion, and order updates',
                               ),
                               value: enabled,
-                              onChanged: FirestoreService
-                                  .instance
-                                  .updateNotificationPreference,
+                              onChanged: (value) => FirestoreService.instance
+                                  .updateNotificationPreference(value),
                             ),
                             const Divider(height: 1),
                             ListTile(
@@ -195,6 +280,47 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _editProfile(
+    BuildContext context,
+    Map<String, dynamic> data,
+    String email,
+  ) async {
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EditProfileScreen(
+          displayName: data['displayName'] as String? ?? '',
+          phoneNumber: data['phoneNumber'] as String? ?? '',
+          photoPath: data['photoPath'] as String?,
+          email: email,
+          onSave: widget.onSave,
+          pickPhoto: widget.pickPhoto,
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      if (scroll.hasClients) scroll.jumpTo(0);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+    }
+  }
+
+  Future<void> _changePassword(BuildContext context) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            ChangePasswordScreen(onChangePassword: widget.onChangePassword),
+      ),
+    );
+    if (changed == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password changed successfully')),
+      );
+    }
   }
 
   Future<void> _switchStore(BuildContext context) async {

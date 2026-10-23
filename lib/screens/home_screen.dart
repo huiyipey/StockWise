@@ -6,15 +6,16 @@ import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/expiry_date_filter.dart';
 import '../widgets/stockwise_ui.dart';
 import 'add_item_screen.dart';
 import 'admin_item_detail_screen.dart';
 import 'items_screen.dart';
-import 'notifications_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
-import '../widgets/category_name.dart';
+import '../widgets/category_filter.dart';
+import '../widgets/store_chat_button.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String category = 'all';
   DateTimeRange? expiryRange;
+  bool expiryAscending = true;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -34,17 +36,9 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           StockWiseHeader(
             title: StoreSession.instance.store?.name ?? 'StockWise',
-            trailing: IconButton(
-              tooltip: 'Notifications',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-              ),
-              icon: const Icon(
-                Icons.notifications_outlined,
-                color: Colors.white,
-              ),
-            ),
+            trailing: StoreSession.instance.canManageMembers
+                ? const StoreChatButton()
+                : null,
           ),
           Expanded(
             child: StreamBuilder<List<InventoryBatch>>(
@@ -67,13 +61,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 final categories =
                     active.map((item) => item.categoryId).toSet().toList()
                       ..sort();
-                final expiring = active.where((item) {
-                  if (item.daysUntilExpiry > 7) return false;
-                  if (category != 'all' && item.categoryId != category) {
-                    return false;
-                  }
-                  return _inRange(item.expiryAt);
-                }).toList();
+                final now = DateTime.now();
+                final expiring =
+                    active.where((item) {
+                      final days = item.daysUntilExpiryFrom(now);
+                      if (days < 0 || days > 7) return false;
+                      if (category != 'all' && item.categoryId != category) {
+                        return false;
+                      }
+                      return _inRange(item.expiryAt);
+                    }).toList()..sort(
+                      (a, b) => expiryAscending
+                          ? a.expiryAt.compareTo(b.expiryAt)
+                          : b.expiryAt.compareTo(a.expiryAt),
+                    );
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
                   children: [
@@ -136,20 +137,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ...expiring
                         .take(5)
                         .map((item) => _batchCard(context, item)),
-                    const SizedBox(height: 20),
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const AddItemScreen(),
-                        ),
-                      ),
-                      icon: const Icon(Icons.add_rounded),
-                      label: const Text('ADD INVENTORY'),
-                    ),
                   ],
                 );
               },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddItemScreen()),
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('ADD INVENTORY'),
             ),
           ),
           _bottomNav(context),
@@ -190,42 +191,19 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: categories.contains(category) ? category : 'all',
-            decoration: const InputDecoration(labelText: 'Category'),
-            items: [
-              const DropdownMenuItem(
-                value: 'all',
-                child: Text('All categories'),
-              ),
-              ...categories.map(
-                (value) =>
-                    DropdownMenuItem(value: value, child: CategoryName(value)),
-              ),
-            ],
-            onChanged: (value) => setState(() => category = value ?? 'all'),
+          CategoryFilter(
+            categoryIds: categories,
+            selected: category,
+            onChanged: (value) => setState(() => category = value),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _pickExpiryRange,
-                  icon: const Icon(Icons.date_range_outlined),
-                  label: Text(
-                    expiryRange == null
-                        ? 'Filter expiry date'
-                        : '${DateFormat('dd/MM/yy').format(expiryRange!.start)} – ${DateFormat('dd/MM/yy').format(expiryRange!.end)}',
-                  ),
-                ),
-              ),
-              if (expiryRange != null)
-                IconButton(
-                  tooltip: 'Clear date filter',
-                  onPressed: () => setState(() => expiryRange = null),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-            ],
+          ExpiryDateFilter(
+            range: expiryRange,
+            ascending: expiryAscending,
+            onPickRange: _pickExpiryRange,
+            onClearRange: () => setState(() => expiryRange = null),
+            onToggleSort: () =>
+                setState(() => expiryAscending = !expiryAscending),
           ),
         ],
       ),

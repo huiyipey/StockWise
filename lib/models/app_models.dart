@@ -12,16 +12,27 @@ class StoreCategory {
   final String id;
   final String name;
   final bool active;
+  final int sortOrder;
   const StoreCategory({
     required this.id,
     required this.name,
     required this.active,
+    this.sortOrder = 0,
   });
+
+  static int compare(StoreCategory a, StoreCategory b) {
+    final order = a.sortOrder.compareTo(b.sortOrder);
+    if (order != 0) return order;
+    final name = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    return name != 0 ? name : a.id.compareTo(b.id);
+  }
+
   factory StoreCategory.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
       StoreCategory(
         id: doc.id,
         name: doc.data()?['name'] as String? ?? doc.id,
         active: doc.data()?['isActive'] == true,
+        sortOrder: _int(doc.data()?['sortOrder']),
       );
 }
 
@@ -122,7 +133,20 @@ class InventoryBatch {
   int get sellingPriceCents => promotionEnabled && promotionPriceCents != null
       ? promotionPriceCents!
       : basePriceCents;
-  int get daysUntilExpiry => expiryAt.difference(DateTime.now()).inDays;
+  bool canSellAt(DateTime time) =>
+      status == 'active' && availableQuantity > 0 && expiryAt.isAfter(time);
+  int get daysUntilExpiry => daysUntilExpiryFrom(DateTime.now());
+
+  int daysUntilExpiryFrom(DateTime date) {
+    final expiry = expiryAt.toLocal();
+    final today = date.toLocal();
+    // Compare calendar dates so yesterday cannot round up to zero days.
+    return DateTime.utc(
+      expiry.year,
+      expiry.month,
+      expiry.day,
+    ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
+  }
 
   factory InventoryBatch.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
