@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   String? _error;
   bool _isLoading = false;
+  bool _passwordVisible = false;
 
   Future<void> _login(BuildContext context) async {
     final email = _emailController.text.trim();
@@ -105,7 +106,15 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 16),
+                  Image.asset(
+                    'assets/branding/app_icon.png',
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.contain,
+                    excludeFromSemantics: true,
+                  ),
+                  const SizedBox(height: 8),
                   const Text(
                     'StockWise',
                     style: TextStyle(
@@ -114,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 55),
+                  const SizedBox(height: 32),
                   const Text(
                     'Welcome Back!',
                     style: TextStyle(
@@ -132,7 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 28),
                   if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -176,9 +185,23 @@ class _LoginScreenState extends State<LoginScreen> {
       height: 56,
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        obscureText: isPassword && !_passwordVisible,
+        autocorrect: !isPassword,
+        enableSuggestions: !isPassword,
         decoration: InputDecoration(
           hintText: hint,
+          suffixIcon: isPassword
+              ? IconButton(
+                  tooltip: _passwordVisible ? 'Hide password' : 'Show password',
+                  onPressed: () =>
+                      setState(() => _passwordVisible = !_passwordVisible),
+                  icon: Icon(
+                    _passwordVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                )
+              : null,
           hintStyle: const TextStyle(
             color: Color(0xFFB5B5B5),
             fontWeight: FontWeight.bold,

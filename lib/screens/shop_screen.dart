@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/expiry_date_filter.dart';
 import '../widgets/stockwise_ui.dart';
+import '../widgets/product_price.dart';
 import 'cart_screen.dart';
 import 'item_detail_screen.dart';
 import 'orders_screen.dart';
@@ -248,11 +249,14 @@ class _ShopScreenState extends State<ShopScreen> {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: .68,
+            mainAxisExtent:
+                280 +
+                (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 28) *
+                    6,
           ),
           itemCount: items.length,
           itemBuilder: (context, index) => _productCard(items[index]),
@@ -287,8 +291,34 @@ class _ShopScreenState extends State<ShopScreen> {
               children: [
                 SizedBox(
                   width: double.infinity,
-                  child: ProductArtwork(size: 100, imagePath: item.imagePath),
+                  child: ProductArtwork(size: 160, imagePath: item.imagePath),
                 ),
+                if (item.promotionEnabled)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(13),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppColors.danger.withValues(alpha: .2),
+                              Colors.transparent,
+                              Colors.transparent,
+                            ],
+                            stops: const [0, .55, 1],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (item.promotionEnabled)
+                  const Positioned(
+                    left: 7,
+                    top: 0,
+                    child: IgnorePointer(child: _PromotionRibbon()),
+                  ),
                 Positioned(
                   right: 0,
                   top: 0,
@@ -304,7 +334,7 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
               ],
             ),
-            const Spacer(),
+            const SizedBox(height: 8),
             Text(
               item.productName,
               maxLines: 1,
@@ -312,13 +342,7 @@ class _ShopScreenState extends State<ShopScreen> {
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
-            Text(
-              'RM ${(item.sellingPriceCents / 100).toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: AppColors.primaryDark,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            ProductPrice(item: item),
             const SizedBox(height: 4),
             Text(
               'Exp: ${DateFormat('dd/MM/yyyy').format(item.expiryAt)}',
@@ -388,4 +412,60 @@ class _ShopScreenState extends State<ShopScreen> {
       ),
     ],
   );
+}
+
+class _PromotionRibbon extends StatelessWidget {
+  const _PromotionRibbon();
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: 'Promotion',
+    child: ExcludeSemantics(
+      child: ClipPath(
+        clipper: const _PromotionRibbonClipper(),
+        child: const SizedBox(
+          width: 28,
+          height: 92,
+          child: ColoredBox(
+            color: AppColors.danger,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: RotatedBox(
+                    quarterTurns: 1,
+                    child: Text(
+                      'PROMO',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _PromotionRibbonClipper extends CustomClipper<Path> {
+  const _PromotionRibbonClipper();
+
+  @override
+  Path getClip(Size size) => Path()
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width, size.height)
+    ..lineTo(size.width / 2, size.height - 10)
+    ..lineTo(0, size.height)
+    ..close();
+
+  @override
+  bool shouldReclip(_PromotionRibbonClipper oldClipper) => false;
 }

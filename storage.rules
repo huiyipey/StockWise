@@ -24,6 +24,45 @@ service firebase.storage {
           == request.auth.uid;
     }
 
+    function chatAdmin(storeId) {
+      return member(storeId)
+        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+
+    function canSendChat(storeId, customerId) {
+      // At most two Firestore documents per Storage evaluation: store/member and message.
+      // Conversation creation and message publication are enforced by Firestore rules.
+      return signedIn() && ((request.auth.uid == customerId
+          && firestore.exists(/databases/(default)/documents/stores/$(storeId)))
+        || chatAdmin(storeId));
+    }
+
+    match /stores/{storeId}/chat-attachments/{customerId}/{senderId}/{messageId}/file {
+      function messagePath() {
+        return /databases/(default)/documents/stores/$(storeId)/conversations/$(customerId)/messages/$(messageId);
+      }
+      function published() {
+        return firestore.exists(messagePath());
+      }
+      allow read: if signedIn() && (
+        (request.auth.uid == senderId && (request.auth.uid == customerId || chatAdmin(storeId)))
+        || ((request.auth.uid == customerId || chatAdmin(storeId)) && published()
+          && firestore.get(messagePath()).data.senderId == senderId
+          && firestore.get(messagePath()).data.attachment.storagePath
+            == 'stores/' + storeId + '/chat-attachments/' + customerId + '/' + senderId + '/' + messageId + '/file'));
+      allow create: if request.auth.uid == senderId && canSendChat(storeId, customerId)
+        && !published()
+        && request.resource.size > 0 && request.resource.size <= 20 * 1024 * 1024
+        && request.resource.contentType.size() <= 120
+        && request.resource.contentType.matches('[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+')
+        && request.resource.metadata.senderId == senderId
+        && request.resource.metadata.customerId == customerId
+        && request.resource.metadata.messageId == messageId;
+      allow update: if false;
+      allow delete: if signedIn() && request.auth.uid == senderId
+        && (request.auth.uid == customerId || chatAdmin(storeId)) && !published();
+    }
+
     match /stores/{storeId}/product-images/{productId}/{fileName} {
       allow read: if signedIn();
       allow write: if member(storeId) && imageUpload();

@@ -60,16 +60,33 @@ service cloud.firestore {
       return owns(customerId) || managesStore(storeId);
     }
 
-    function validChatMessage(storeId, customerId, data) {
+    function validChatAttachment(storeId, customerId, messageId, data) {
+      return data is map
+        && data.keys().hasOnly(['storagePath', 'fileName', 'contentType', 'size'])
+        && data.storagePath == 'stores/' + storeId + '/chat-attachments/' + customerId + '/' + request.auth.uid + '/' + messageId + '/file'
+        && data.fileName is string && data.fileName.size() > 0 && data.fileName.size() <= 180
+        && data.contentType is string && data.contentType.size() <= 120
+        && data.contentType.matches('[A-Za-z0-9.+_-]+/[A-Za-z0-9.+_-]+')
+        && data.size is int && data.size > 0 && data.size <= 20 * 1024 * 1024;
+    }
+
+    function chatPreviewText(message) {
+      return message.text.size() > 0 ? message.text
+        : (message.attachment.contentType.matches('image/.*') ? 'Photo: ' : 'File: ') + message.attachment.fileName;
+    }
+
+    function validChatMessage(storeId, customerId, messageId, data) {
       return signedIn()
-        && data.keys().hasOnly(['senderId', 'senderName', 'senderRole', 'text', 'sentAt'])
+        && data.keys().hasOnly(['senderId', 'senderName', 'senderRole', 'text', 'sentAt', 'attachment'])
         && data.senderId == request.auth.uid
         && ((managesStore(storeId) && data.senderRole == 'admin')
           || (!managesStore(storeId) && owns(customerId) && data.senderRole == 'customer'))
         && data.senderName is string
         && data.senderName.size() > 0 && data.senderName.size() <= 80
         && data.senderName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
-        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.text is string && data.text.size() <= 2000
+        && (data.text.matches('(?s).*\\S.*') || data.keys().hasAny(['attachment']))
+        && (!data.keys().hasAny(['attachment']) || validChatAttachment(storeId, customerId, messageId, data.attachment))
         && data.sentAt == request.time;
     }
 
@@ -79,11 +96,11 @@ service cloud.firestore {
       let message = getAfter(path).data;
       return data.lastMessageId is string
         && !exists(path)
-        && data.lastMessage == message.text
+        && data.lastMessage == chatPreviewText(message)
         && data.lastMessageAt == message.sentAt
         && data.lastSenderId == message.senderId
         && data.lastSenderRole == message.senderRole
-        && validChatMessage(storeId, customerId, message);
+        && validChatMessage(storeId, customerId, data.lastMessageId, message);
     }
 
     function validChatRead(field) {
@@ -92,6 +109,15 @@ service cloud.firestore {
         && data[field] is timestamp && data[field] <= request.time
         && data[field] <= resource.data.lastMessageAt
         && (resource.data[field] == null || data[field] >= resource.data[field]);
+    }
+
+    function validShopAddress(data) {
+      return data.shopAddress is string && data.shopAddress.size() <= 500
+        && data.shopAddress.matches('(?s).*\\S.*');
+    }
+
+    match /storeNames/{nameKey} {
+      allow read, write: if false;
     }
 
     match /users/{uid} {
@@ -127,10 +153,12 @@ service cloud.firestore {
     }
     match /stores/{storeId} {
       allow read: if signedIn() && (resource.data.status == 'active' || isActiveMember(storeId));
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.status == 'active';
-      allow update: if managesStore(storeId);
+      // Creation is server-only to require an address and reserve a unique name atomically.
+      allow create: if false;
+      allow update: if managesStore(storeId)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['name', 'nameLowercase', 'nameKey', 'shopAddress', 'ownerUid'])
+        && ((!resource.data.keys().hasAny(['shopAddress']) && !request.resource.data.keys().hasAny(['shopAddress']))
+          || validShopAddress(request.resource.data));
       allow delete: if hasStoreRole(storeId, ['owner']);
 
       match /members/{uid} {
@@ -339,7 +367,7 @@ service cloud.firestore {
 
         match /messages/{messageId} {
           allow read: if chatReadable(storeId, customerId);
-          allow create: if validChatMessage(storeId, customerId, request.resource.data)
+          allow create: if validChatMessage(storeId, customerId, messageId, request.resource.data)
             && getAfter(/databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)).data.lastMessageId == messageId
             && getAfter(/databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)).data.lastSenderId == request.auth.uid;
           allow update, delete: if false;

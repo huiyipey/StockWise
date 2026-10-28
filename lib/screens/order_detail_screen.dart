@@ -6,15 +6,21 @@ import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
+import 'item_detail_screen.dart';
+import 'admin_item_detail_screen.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final StoreOrder order;
   final bool isAdmin;
+  final Stream<List<OrderLine>>? orderLinesStream;
+  final Future<InventoryBatch?> Function(OrderLine)? productLookup;
 
   const OrderDetailScreen({
     super.key,
     required this.order,
     this.isAdmin = true,
+    this.orderLinesStream,
+    this.productLookup,
   });
 
   @override
@@ -26,6 +32,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   bool saving = false;
   bool uploadingReceipt = false;
   late String? receiptPath = widget.order.receiptPath;
+  String? openingLineId;
+  late final orderLines =
+      widget.orderLinesStream ??
+      FirestoreService.instance.watchOrderLines(widget.order.id);
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -69,9 +79,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 Text('Items', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 8),
                 StreamBuilder<List<OrderLine>>(
-                  stream: FirestoreService.instance.watchOrderLines(
-                    widget.order.id,
-                  ),
+                  stream: orderLines,
                   builder: (context, snapshot) {
                     if (snapshot.hasError) return Text('${snapshot.error}');
                     if (!snapshot.hasData) {
@@ -82,6 +90,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           .map(
                             (line) => Card(
                               child: ListTile(
+                                onTap: openingLineId != null
+                                    ? null
+                                    : () => _openProduct(line),
                                 leading: ProductArtwork(
                                   size: 50,
                                   imagePath: line.imagePath,
@@ -95,11 +106,28 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 subtitle: Text(
                                   '${line.quantity} ${line.unitLabel}  •  Exp ${DateFormat('dd/MM/yyyy').format(line.expiryAt)}',
                                 ),
-                                trailing: Text(
-                                  'RM ${(line.lineTotalCents / 100).toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
-                                  ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'RM ${(line.lineTotalCents / 100).toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    openingLineId == line.id
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.chevron_right_rounded,
+                                          ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -159,7 +187,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     child: Column(
                       children: [
                         if (receiptPath != null) ...[
-                          ProductArtwork(size: 160, imagePath: receiptPath),
+                          ProductArtwork(
+                            size: 160,
+                            imagePath: receiptPath,
+                            enlargeOnTap: widget.isAdmin,
+                            imageLabel:
+                                'Payment receipt #${widget.order.orderNumber}',
+                          ),
                           const SizedBox(height: 10),
                           const StatusPill(
                             'Receipt uploaded',
@@ -227,13 +261,77 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     ),
   );
 
+  Future<void> _openProduct(OrderLine line) async {
+    if (openingLineId != null) return;
+    setState(() => openingLineId = line.id);
+    try {
+      final item =
+          await (widget.productLookup ??
+              (widget.isAdmin
+                  ? FirestoreService.instance.findSavedOrderItem
+                  : FirestoreService.instance.findSellingOrderProduct))(line);
+      if (!mounted) return;
+      setState(() => openingLineId = null);
+      if (item == null ||
+          (!widget.isAdmin && !item.canSellAt(DateTime.now()))) {
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Oops...'),
+            content: Text(
+              widget.isAdmin
+                  ? 'This item no longer exists in the inventory.'
+                  : 'This product no longer exists or is no longer available for sale.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => widget.isAdmin
+                ? AdminItemDetailScreen(item: item)
+                : ItemDetailScreen(item: item),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not load the product. Please check your connection and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => openingLineId = null);
+    }
+  }
+
   Widget _row(String label, String value) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        Text(label, style: const TextStyle(color: AppColors.muted)),
-        const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+        Expanded(
+          child: Text(label, style: const TextStyle(color: AppColors.muted)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          flex: 2,
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
       ],
     ),
   );

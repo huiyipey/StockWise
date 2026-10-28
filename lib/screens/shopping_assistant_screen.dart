@@ -6,6 +6,7 @@ import '../services/store_session.dart';
 import '../services/shopping_assistant_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
+import '../widgets/product_price.dart';
 import 'item_detail_screen.dart';
 
 class ShoppingAssistantScreen extends StatefulWidget {
@@ -204,8 +205,12 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                               imagePath: product.imagePath,
                             ),
                             title: Text(product.productName),
-                            subtitle: Text(
-                              '${pick['reason']}\nRM ${(product.sellingPriceCents / 100).toStringAsFixed(2)}',
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${pick['reason']}'),
+                                ProductPrice(item: product, fontSize: 14),
+                              ],
                             ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.push(
@@ -235,8 +240,13 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                                   (p) => CheckboxListTile(
                                     value: selected.contains(p.id),
                                     title: Text(p.productName),
-                                    subtitle: Text(
-                                      'RM ${(p.sellingPriceCents / 100).toStringAsFixed(2)} • ${p.unitLabel}',
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        ProductPrice(item: p, fontSize: 14),
+                                        Text(p.unitLabel),
+                                      ],
                                     ),
                                     onChanged:
                                         busy ||

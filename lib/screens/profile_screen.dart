@@ -12,6 +12,9 @@ import '../widgets/profile_avatar.dart';
 import '../widgets/store_chat_button.dart';
 import '../services/store_chat_service.dart';
 import '../services/password_change_service.dart';
+import '../services/store_fields.dart';
+import '../models/app_models.dart';
+import 'create_store_dialog.dart';
 import 'cart_screen.dart';
 import 'address_book_screen.dart';
 import 'edit_profile_screen.dart';
@@ -33,6 +36,8 @@ class ProfileScreen extends StatefulWidget {
   final AddressBookRepository? addressRepository;
   final StoreChatRepository? chatRepository;
   final PasswordChanger? onChangePassword;
+  final Stream<StoreInfo?>? shopStream;
+  final StoreUpdater? onSaveShop;
 
   const ProfileScreen({
     super.key,
@@ -43,6 +48,8 @@ class ProfileScreen extends StatefulWidget {
     this.addressRepository,
     this.chatRepository,
     this.onChangePassword,
+    this.shopStream,
+    this.onSaveShop,
   });
 
   @override
@@ -53,6 +60,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final scroll = ScrollController();
   late final profile =
       widget.profileStream ?? FirestoreService.instance.watchUserProfile();
+  late final shop =
+      widget.shopStream ?? FirestoreService.instance.watchSelectedStore();
 
   @override
   void dispose() {
@@ -133,6 +142,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 22),
+                      if (session.isOwner) ...[
+                        _shopDetails(),
+                        const SizedBox(height: 14),
+                      ],
                       Card(
                         child: Column(
                           children: [
@@ -280,6 +293,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  Widget _shopDetails() => StreamBuilder<StoreInfo?>(
+    stream: shop,
+    initialData: StoreSession.instance.store,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'Could not load your shop details. Please reopen this page.',
+            ),
+          ),
+        );
+      }
+      final store = snapshot.data;
+      if (store == null) {
+        return const Card(
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('This shop no longer exists.'),
+          ),
+        );
+      }
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Shop details',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              const Text('Shop name', style: TextStyle(color: AppColors.muted)),
+              Text(
+                store.name,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Shop address',
+                style: TextStyle(color: AppColors.muted),
+              ),
+              Text(
+                store.shopAddress.isEmpty
+                    ? 'No shop address saved yet.'
+                    : store.shopAddress,
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _editShop(store),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Edit shop'),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  Future<void> _editShop(StoreInfo store) async {
+    final updated = await showDialog<StoreInfo>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CreateStoreDialog(
+        initialStore: store,
+        onCreate: ({required name, required shopAddress}) =>
+            (widget.onSaveShop ?? FirestoreService.instance.updateStore)(
+              storeId: store.id,
+              name: name,
+              shopAddress: shopAddress,
+            ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    final session = StoreSession.instance;
+    if (session.storeId != store.id || !session.isOwner) return;
+    session.select(updated, role: session.role);
+    setState(() {});
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Shop details updated')));
   }
 
   Future<void> _editProfile(

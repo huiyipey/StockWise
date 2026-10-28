@@ -43,6 +43,7 @@ class StoreInfo {
   final String? logoPath;
   final String status;
   final String currency;
+  final String shopAddress;
 
   const StoreInfo({
     required this.id,
@@ -51,6 +52,7 @@ class StoreInfo {
     this.logoPath,
     this.status = 'active',
     this.currency = 'MYR',
+    this.shopAddress = '',
   });
 
   factory StoreInfo.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -64,6 +66,7 @@ class StoreInfo {
       logoPath: data['logoPath'] as String?,
       status: data['status'] as String? ?? 'active',
       currency: data['currency'] as String? ?? 'MYR',
+      shopAddress: data['shopAddress'] as String? ?? '',
     );
   }
 }
@@ -263,6 +266,8 @@ class StoreOrder {
 
 class OrderLine {
   final String id;
+  final String productId;
+  final String batchId;
   final String productName;
   final String? imagePath;
   final DateTime expiryAt;
@@ -273,6 +278,8 @@ class OrderLine {
 
   const OrderLine({
     required this.id,
+    this.productId = '',
+    this.batchId = '',
     required this.productName,
     this.imagePath,
     required this.expiryAt,
@@ -283,9 +290,14 @@ class OrderLine {
   });
 
   factory OrderLine.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? const <String, dynamic>{};
+    return OrderLine.fromData(doc.id, doc.data() ?? const <String, dynamic>{});
+  }
+
+  factory OrderLine.fromData(String id, Map<String, dynamic> data) {
     return OrderLine(
-      id: doc.id,
+      id: id,
+      productId: data['productId'] as String? ?? '',
+      batchId: data['batchId'] as String? ?? '',
       productName: data['productName'] as String? ?? 'Product',
       imagePath: data['imagePath'] as String?,
       expiryAt: _date(data['expiryAt']),

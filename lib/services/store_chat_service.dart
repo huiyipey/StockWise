@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
+import '../models/chat_attachment.dart';
 
 import '../models/store_chat.dart';
 import 'store_session.dart';
@@ -11,7 +14,12 @@ abstract class StoreChatRepository {
   Stream<List<StoreConversation>> watchConversations();
   Stream<StoreConversation?> watchConversation(String customerId);
   Stream<List<StoreChatMessage>> watchMessages(String customerId);
-  Future<void> sendMessage(String customerId, String text);
+  Future<void> sendMessage(
+    String customerId,
+    String text, {
+    ChatAttachmentDraft? attachment,
+  });
+  Future<Uint8List> loadAttachment(String customerId, StoreChatMessage message);
   Future<void> markRead(String customerId, DateTime through);
 }
 
@@ -92,50 +100,159 @@ class StoreChatService implements StoreChatRepository {
           );
 
   @override
-  Future<void> sendMessage(String customerId, String text) async {
-    final error = chatMessageError(text);
+  Future<void> sendMessage(
+    String customerId,
+    String text, {
+    ChatAttachmentDraft? attachment,
+  }) async {
+    final error = chatMessageError(text, hasAttachment: attachment != null);
     if (error != null) throw ArgumentError(error);
     if (!isAdmin && customerId != currentUserId) {
       throw StateError('You can only send messages in your own conversation.');
     }
     final conversation = _conversations.doc(customerId);
-    final message = conversation.collection('messages').doc();
-    await _db.runTransaction((transaction) async {
-      final existing = await transaction.get(conversation);
-      final profile = await transaction.get(
-        _db.collection('users').doc(currentUserId),
+    final message = conversation
+        .collection('messages')
+        .doc(attachment?.messageId);
+    Reference? upload;
+    ChatAttachment? stored;
+    if (attachment != null) {
+      final validation = chatAttachmentError(
+        attachment.fileName,
+        attachment.size,
       );
-      final name = profile.data()?['displayName'] as String? ?? '';
-      if (name.trim().isEmpty || name.length > 80) {
-        throw StateError('Please add a valid name in Edit profile first.');
+      if (validation != null) throw ArgumentError(validation);
+      final path = chatAttachmentPath(
+        storeId,
+        customerId,
+        currentUserId,
+        message.id,
+      );
+      stored = attachment.storedAt(path);
+      upload = FirebaseStorage.instance.ref(path);
+      final existingMessage = await message.get(
+        const GetOptions(source: Source.server),
+      );
+      if (existingMessage.exists) {
+        final previous = StoreChatMessage.fromData(
+          message.id,
+          existingMessage.data()!,
+        );
+        if (previous.senderId == currentUserId &&
+            previous.attachment?.storagePath == path) {
+          return;
+        }
+        throw StateError('Please choose the attachment again.');
       }
-      if (isAdmin && !existing.exists) {
-        throw StateError('This customer has not started a conversation yet.');
+    }
+    try {
+      if (upload != null && attachment != null) {
+        var exists = false;
+        try {
+          final metadata = await upload.getMetadata();
+          if (metadata.size != attachment.size ||
+              metadata.contentType != attachment.contentType) {
+            throw StateError('Please choose the attachment again.');
+          }
+          exists = true;
+        } on FirebaseException catch (failure) {
+          if (failure.code != 'object-not-found') rethrow;
+        }
+        if (!exists) {
+          final bytes = await attachment.file.readAsBytes();
+          if (bytes.length != attachment.size) {
+            throw StateError('This file changed. Please choose it again.');
+          }
+          await upload.putData(
+            bytes,
+            SettableMetadata(
+              contentType: attachment.contentType,
+              customMetadata: {
+                'senderId': currentUserId,
+                'customerId': customerId,
+                'messageId': message.id,
+              },
+            ),
+          );
+        }
       }
-      final timestamp = FieldValue.serverTimestamp();
-      final role = isAdmin ? 'admin' : 'customer';
-      transaction.set(message, {
-        'senderId': currentUserId,
-        'senderName': name,
-        'senderRole': role,
-        'text': text.trim(),
-        'sentAt': timestamp,
+      await _db.runTransaction((transaction) async {
+        if (attachment != null) {
+          final previous = await transaction.get(message);
+          if (previous.exists) return;
+        }
+        final existing = await transaction.get(conversation);
+        final profile = await transaction.get(
+          _db.collection('users').doc(currentUserId),
+        );
+        final name = profile.data()?['displayName'] as String? ?? '';
+        if (name.trim().isEmpty || name.length > 80) {
+          throw StateError('Please add a valid name in Edit profile first.');
+        }
+        if (isAdmin && !existing.exists) {
+          throw StateError('This customer has not started a conversation yet.');
+        }
+        final timestamp = FieldValue.serverTimestamp();
+        final role = isAdmin ? 'admin' : 'customer';
+        transaction.set(message, {
+          'senderId': currentUserId,
+          'senderName': name,
+          'senderRole': role,
+          'text': text.trim(),
+          'sentAt': timestamp,
+          if (stored != null) 'attachment': stored.toData(),
+        });
+        transaction.set(conversation, {
+          if (!existing.exists) ...{
+            'storeId': storeId,
+            'customerId': customerId,
+            'adminReadAt': null,
+          },
+          if (!isAdmin) 'customerName': name,
+          'lastMessageId': message.id,
+          'lastMessage': chatMessagePreview(text, stored),
+          'lastMessageAt': timestamp,
+          'lastSenderId': currentUserId,
+          'lastSenderRole': role,
+          isAdmin ? 'adminReadAt' : 'customerReadAt': timestamp,
+        }, SetOptions(merge: true));
       });
-      transaction.set(conversation, {
-        if (!existing.exists) ...{
-          'storeId': storeId,
-          'customerId': customerId,
-          'adminReadAt': null,
-        },
-        if (!isAdmin) 'customerName': name,
-        'lastMessageId': message.id,
-        'lastMessage': text.trim(),
-        'lastMessageAt': timestamp,
-        'lastSenderId': currentUserId,
-        'lastSenderRole': role,
-        isAdmin ? 'adminReadAt' : 'customerReadAt': timestamp,
-      }, SetOptions(merge: true));
-    });
+    } catch (_) {
+      if (upload != null) {
+        try {
+          await upload.delete();
+        } catch (_) {
+          /* Published attachments remain immutable. */
+        }
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<Uint8List> loadAttachment(
+    String customerId,
+    StoreChatMessage message,
+  ) async {
+    final attachment = message.attachment;
+    if ((!isAdmin && customerId != currentUserId) ||
+        attachment == null ||
+        attachment.storagePath !=
+            chatAttachmentPath(
+              storeId,
+              customerId,
+              message.senderId,
+              message.id,
+            )) {
+      throw StateError('This attachment is unavailable.');
+    }
+    final bytes = await FirebaseStorage.instance
+        .ref(attachment.storagePath)
+        .getData(chatAttachmentMaxBytes);
+    if (bytes == null || bytes.length != attachment.size) {
+      throw StateError('This attachment is unavailable.');
+    }
+    return bytes;
   }
 
   @override

@@ -5,6 +5,7 @@ import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
+import '../widgets/product_price.dart';
 
 class ItemDetailScreen extends StatelessWidget {
   final InventoryBatch item;
@@ -39,15 +40,7 @@ class ItemDetailScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'RM ${(item.sellingPriceCents / 100).toStringAsFixed(2)}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 23,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
+                ProductPrice(item: item, fontSize: 23, centered: true),
                 const SizedBox(height: 18),
                 Card(
                   child: Padding(

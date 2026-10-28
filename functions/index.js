@@ -11,12 +11,19 @@ const nodemailer = require('nodemailer');
 const {createHash} = require('node:crypto');
 const {range, report, csv, duePeriods, recommendations} = require('./reporting');
 const {createAdminInviteHandler} = require('./admin_invites');
+const {createStoreHandler, updateStoreHandler} = require('./store_creation');
 const {normalizeAssistantRequest, assistantReply} = require('./shopping_assistant');
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 initializeApp();
 setGlobalOptions({region: 'asia-southeast1', maxInstances: 5});
 const db = getFirestore();
+exports.createStore = onCall({timeoutSeconds: 60, maxInstances: 3}, createStoreHandler({
+  db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
+}));
+exports.updateStore = onCall({timeoutSeconds: 60, maxInstances: 3}, updateStoreHandler({
+  db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
+}));
 exports.createAdminInvite = onCall({timeoutSeconds: 30}, createAdminInviteHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));

@@ -1,0 +1,10 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/app_icon.png
+  # The artwork remains inside Android's central 66 dp safe area.
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/branding/app_icon.png
+  adaptive_icon_foreground_inset: 12
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"

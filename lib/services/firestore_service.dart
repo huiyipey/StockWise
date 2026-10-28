@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import '../models/app_models.dart';
 import '../models/barcode_product.dart';
 import 'profile_fields.dart';
+import 'store_fields.dart';
+import 'order_product.dart';
 import 'store_session.dart';
 
 class FirestoreService {
@@ -129,6 +131,42 @@ class FirestoreService {
         return stores;
       });
 
+  Stream<StoreInfo?> watchSelectedStore() => _storeRef.snapshots().map(
+    (snapshot) => snapshot.exists ? StoreInfo.fromDoc(snapshot) : null,
+  );
+
+  Future<StoreInfo> updateStore({
+    required String storeId,
+    required String name,
+    required String shopAddress,
+  }) async {
+    final validation = storeNameError(name) ?? shopAddressError(shopAddress);
+    if (validation != null) throw ArgumentError(validation);
+    final response =
+        await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+            .httpsCallable(
+              'updateStore',
+              options: HttpsCallableOptions(
+                timeout: const Duration(seconds: 60),
+              ),
+            )
+            .call({
+              'storeId': storeId,
+              'name': name,
+              'shopAddress': shopAddress,
+            });
+    final data = Map<String, dynamic>.from(response.data as Map);
+    return StoreInfo(
+      id: data['id'] as String,
+      name: data['name'] as String,
+      code: data['code'] as String,
+      shopAddress: data['shopAddress'] as String,
+      logoPath: data['logoPath'] as String?,
+      status: data['status'] as String? ?? 'active',
+      currency: data['currency'] as String? ?? 'MYR',
+    );
+  }
+
   Stream<List<StoreMembership>> watchMyMemberships() => _db
       .collectionGroup('members')
       .where('userId', isEqualTo: _user.uid)
@@ -140,80 +178,27 @@ class FirestoreService {
             .toList(),
       );
 
-  Future<StoreInfo> createStore({required String name}) async {
-    final trimmed = name.trim();
-    if (trimmed.length < 2) throw ArgumentError('Enter a valid store name.');
-    final user = _user;
-    final storeRef = _db.collection('stores').doc();
-    final batch = _db.batch();
-    final code = trimmed
-        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
-        .toUpperCase()
-        .padRight(4, 'X')
-        .substring(0, 4);
-
-    batch.set(storeRef, {
-      'name': trimmed,
-      'nameLowercase': trimmed.toLowerCase(),
-      'code': '$code-${storeRef.id.substring(0, 4).toUpperCase()}',
-      'ownerUid': user.uid,
-      'email': user.email,
-      'timezone': 'Asia/Kuala_Lumpur',
-      'currency': 'MYR',
-      'status': 'active',
-      'createdAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    batch.set(storeRef.collection('members').doc(user.uid), {
-      'storeId': storeRef.id,
-      'userId': user.uid,
-      'email': user.email,
-      'role': 'owner',
-      'isActive': true,
-      'joinedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    for (final category in const [
-      'Dairy',
-      'Bakery',
-      'Vegetables',
-      'Fruits',
-      'Meat',
-      'Household',
-      'Others',
-    ]) {
-      final id = category.toLowerCase();
-      batch.set(storeRef.collection('categories').doc(id), {
-        'storeId': storeRef.id,
-        'name': category,
-        'slug': id,
-        'sortOrder': 0,
-        'isActive': true,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    }
-    batch.set(storeRef.collection('settings').doc('inventory'), {
-      'storeId': storeRef.id,
-      'expiryWarningDays': [2, 3, 7],
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    batch.set(storeRef.collection('settings').doc('commerce'), {
-      'storeId': storeRef.id,
-      'currency': 'MYR',
-      'deliveryFeeCents': 500,
-      'minimumOrderCents': 0,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    batch.set(_db.collection('users').doc(user.uid), {
-      'activeStoreId': storeRef.id,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-    await batch.commit();
+  Future<StoreInfo> createStore({
+    required String name,
+    required String shopAddress,
+  }) async {
+    final validation = storeNameError(name) ?? shopAddressError(shopAddress);
+    if (validation != null) throw ArgumentError(validation);
+    final response =
+        await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+            .httpsCallable(
+              'createStore',
+              options: HttpsCallableOptions(
+                timeout: const Duration(seconds: 60),
+              ),
+            )
+            .call({'name': name, 'shopAddress': shopAddress});
+    final data = Map<String, dynamic>.from(response.data as Map);
     return StoreInfo(
-      id: storeRef.id,
-      name: trimmed,
-      code: '$code-${storeRef.id.substring(0, 4).toUpperCase()}',
+      id: data['id'] as String,
+      name: data['name'] as String,
+      code: data['code'] as String,
+      shopAddress: data['shopAddress'] as String,
     );
   }
 
@@ -785,6 +770,39 @@ class FirestoreService {
       .collection('items')
       .snapshots()
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
+
+  Future<InventoryBatch?> findSellingOrderProduct(OrderLine line) async {
+    final batches = _storeRef.collection('inventoryBatches');
+    final List<InventoryBatch> inventory;
+    if (line.productId.isNotEmpty) {
+      final snapshot = await batches
+          .where('productId', isEqualTo: line.productId)
+          .get(const GetOptions(source: Source.server));
+      inventory = snapshot.docs.map(InventoryBatch.fromDoc).toList();
+    } else if (line.batchId.isNotEmpty) {
+      final snapshot = await batches
+          .doc(line.batchId)
+          .get(const GetOptions(source: Source.server));
+      inventory = snapshot.exists ? [InventoryBatch.fromDoc(snapshot)] : [];
+    } else {
+      return null;
+    }
+    return sellingOrderProduct(line, inventory, DateTime.now());
+  }
+
+  Future<InventoryBatch?> findSavedOrderItem(OrderLine line) async {
+    if (line.batchId.isEmpty) return null;
+    final snapshot = await _storeRef
+        .collection('inventoryBatches')
+        .doc(line.batchId)
+        .get(const GetOptions(source: Source.server));
+    if (!snapshot.exists) return null;
+    final item = InventoryBatch.fromDoc(snapshot);
+    if (line.productId.isNotEmpty && item.productId != line.productId) {
+      return null;
+    }
+    return item;
+  }
 
   Future<String> uploadOrderReceipt(XFile file, String orderId) async {
     final bytes = await file.readAsBytes();

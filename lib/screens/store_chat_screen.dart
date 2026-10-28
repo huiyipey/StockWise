@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -6,17 +7,25 @@ import 'package:intl/intl.dart';
 import '../models/store_chat.dart';
 import '../services/store_chat_service.dart';
 import '../theme/app_theme.dart';
+import '../models/chat_attachment.dart';
+import '../services/chat_attachment_files.dart';
+import '../widgets/chat_attachment_bubble.dart';
 
 class StoreChatScreen extends StatefulWidget {
   final StoreChatRepository repository;
   final String customerId;
   final String? customerName;
+  final Future<ChatAttachmentDraft?> Function(ChatAttachmentSource)?
+  pickAttachment;
+  final ChatAttachmentOpener? openAttachment;
 
   const StoreChatScreen({
     super.key,
     required this.repository,
     required this.customerId,
     this.customerName,
+    this.pickAttachment,
+    this.openAttachment,
   });
 
   @override
@@ -35,6 +44,9 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
   bool messagesLoaded = false;
   DateTime? loadedThrough;
   String? error;
+  ChatAttachmentDraft? attachment;
+  Future<Uint8List>? attachmentPreview;
+  bool picking = false;
 
   @override
   void initState() {
@@ -90,8 +102,13 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
   }
 
   Future<void> _send() async {
+    if (sending || picking) return;
     final original = draft.text;
-    final validation = chatMessageError(original);
+    final selected = attachment;
+    final validation = chatMessageError(
+      original,
+      hasAttachment: selected != null,
+    );
     if (validation != null) {
       setState(() => error = validation);
       return;
@@ -101,9 +118,19 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
       error = null;
     });
     try {
-      await widget.repository.sendMessage(widget.customerId, original);
+      await widget.repository.sendMessage(
+        widget.customerId,
+        original,
+        attachment: selected,
+      );
       if (!mounted) return;
       if (draft.text == original) draft.clear();
+      if (identical(attachment, selected)) {
+        setState(() {
+          attachment = null;
+          attachmentPreview = null;
+        });
+      }
       if (scroll.hasClients) {
         scroll.animateTo(
           0,
@@ -114,12 +141,67 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
     } catch (failure) {
       if (!mounted) return;
       setState(
-        () => error = failure is StateError
+        () => error = failure is ArgumentError
+            ? '${failure.message}'
+            : failure is StateError
             ? failure.message.toString()
             : 'Message could not be sent. Please try again.',
       );
     } finally {
       if (mounted) setState(() => sending = false);
+    }
+  }
+
+  Future<void> _pickAttachment() async {
+    if (sending || picking) return;
+    FocusScope.of(context).unfocus();
+    final source = await showModalBottomSheet<ChatAttachmentSource>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo'),
+              onTap: () => Navigator.pop(context, ChatAttachmentSource.photo),
+            ),
+            ListTile(
+              leading: const Icon(Icons.insert_drive_file_outlined),
+              title: const Text('File'),
+              onTap: () => Navigator.pop(context, ChatAttachmentSource.file),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    setState(() {
+      picking = true;
+      error = null;
+    });
+    try {
+      final selected =
+          await (widget.pickAttachment ?? ChatAttachmentFiles.pick)(source);
+      if (selected == null || !mounted) return;
+      final validation = chatAttachmentError(selected.fileName, selected.size);
+      if (validation != null) throw ArgumentError(validation);
+      setState(() {
+        attachment = selected;
+        attachmentPreview = selected.isImage
+            ? selected.file.readAsBytes()
+            : null;
+      });
+    } catch (failure) {
+      if (mounted) {
+        setState(
+          () => error = failure is ArgumentError
+              ? '${failure.message}'
+              : 'Could not attach this file. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => picking = false);
     }
   }
 
@@ -223,7 +305,16 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                             ),
                           ),
                           const SizedBox(height: 5),
-                          SelectableText(message.text),
+                          if (message.attachment != null)
+                            ChatAttachmentBubble(
+                              key: ValueKey('attachment-${message.id}'),
+                              message: message,
+                              customerId: widget.customerId,
+                              repository: widget.repository,
+                              openFile: widget.openAttachment,
+                            ),
+                          if (message.text.isNotEmpty)
+                            SelectableText(message.text),
                           const SizedBox(height: 5),
                           Text(
                             message.sentAt == null
@@ -253,6 +344,50 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           ),
+        if (attachment != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                if (attachmentPreview != null)
+                  FutureBuilder<Uint8List>(
+                    future: attachmentPreview,
+                    builder: (context, snapshot) => snapshot.hasData
+                        ? Image.memory(
+                            snapshot.data!,
+                            width: 54,
+                            height: 54,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                const Icon(Icons.image_outlined),
+                          )
+                        : const SizedBox(
+                            width: 54,
+                            height: 54,
+                            child: Center(child: Icon(Icons.image_outlined)),
+                          ),
+                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    attachment!.fileName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Remove attachment',
+                  onPressed: sending
+                      ? null
+                      : () => setState(() {
+                          attachment = null;
+                          attachmentPreview = null;
+                        }),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
         SafeArea(
           top: false,
           child: Padding(
@@ -260,6 +395,17 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
+                IconButton(
+                  tooltip: 'Attach file or photo',
+                  onPressed: sending || picking ? null : _pickAttachment,
+                  icon: picking
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.attach_file_rounded),
+                ),
                 Expanded(
                   child: TextField(
                     controller: draft,
@@ -268,7 +414,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                     maxLength: 2000,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: const InputDecoration(
-                      hintText: 'Type a message',
+                      hintText: 'Type a message or caption',
                       counterText: '',
                     ),
                   ),
@@ -276,7 +422,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                 const SizedBox(width: 6),
                 IconButton.filled(
                   tooltip: 'Send message',
-                  onPressed: sending ? null : _send,
+                  onPressed: sending || picking ? null : _send,
                   icon: sending
                       ? const SizedBox(
                           width: 22,

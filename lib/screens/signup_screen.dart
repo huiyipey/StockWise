@@ -14,6 +14,8 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   String? _error;
   bool _isLoading = false;
+  bool _passwordVisible = false;
+  bool _confirmPasswordVisible = false;
 
   Future<void> _register() async {
     final email = _emailController.text.trim();
@@ -64,7 +66,15 @@ class _SignupScreenState extends State<SignupScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                const SizedBox(height: 100),
+                const SizedBox(height: 24),
+                Image.asset(
+                  'assets/branding/app_icon.png',
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.contain,
+                  excludeFromSemantics: true,
+                ),
+                const SizedBox(height: 8),
                 const Text(
                   'StockWise',
                   style: TextStyle(
@@ -73,7 +83,7 @@ class _SignupScreenState extends State<SignupScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 50),
+                const SizedBox(height: 32),
                 const Text(
                   'Sign Up',
                   style: TextStyle(
@@ -100,14 +110,21 @@ class _SignupScreenState extends State<SignupScreen> {
                   _passwordController,
                   'Password',
                   isPassword: true,
+                  passwordVisible: _passwordVisible,
+                  onTogglePassword: () =>
+                      setState(() => _passwordVisible = !_passwordVisible),
                 ),
                 const SizedBox(height: 18),
                 _buildTextField(
                   _confirmPasswordController,
                   'Confirm Password',
                   isPassword: true,
+                  passwordVisible: _confirmPasswordVisible,
+                  onTogglePassword: () => setState(
+                    () => _confirmPasswordVisible = !_confirmPasswordVisible,
+                  ),
                 ),
-                const SizedBox(height: 55),
+                const SizedBox(height: 32),
                 _buildRegisterButton(),
                 const SizedBox(height: 16),
                 _buildLoginNowLink(context),
@@ -123,15 +140,32 @@ class _SignupScreenState extends State<SignupScreen> {
     TextEditingController controller,
     String hint, {
     bool isPassword = false,
+    bool passwordVisible = false,
+    VoidCallback? onTogglePassword,
   }) {
     return SizedBox(
       width: double.infinity,
       height: 62,
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        obscureText: isPassword && !passwordVisible,
+        autocorrect: !isPassword,
+        enableSuggestions: !isPassword,
         decoration: InputDecoration(
           hintText: hint,
+          suffixIcon: isPassword
+              ? IconButton(
+                  tooltip: passwordVisible
+                      ? 'Hide ${hint.toLowerCase()}'
+                      : 'Show ${hint.toLowerCase()}',
+                  onPressed: onTogglePassword,
+                  icon: Icon(
+                    passwordVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                )
+              : null,
           hintStyle: const TextStyle(
             color: Color(0xFFAAAAAA),
             fontWeight: FontWeight.bold,

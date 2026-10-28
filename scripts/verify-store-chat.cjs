@@ -8,6 +8,8 @@ const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
 initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const users = [];
+const attachmentObjects = [];
+const bucket = `${project}.firebasestorage.app`;
 const storeIds = [`chat_test_${randomUUID()}`, `chat_test_${randomUUID()}`];
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const prefix = `projects/${project}/databases/(default)/documents`;
@@ -68,16 +70,57 @@ async function deleteTestStore(store) {
   }
   await adminDelete(`stores/${store}`, access);
 }
-function sendWrites(store, customer, sender, text, {first = false, role = sender === customer ? 'customer' : 'admin', senderId = sender.localId, senderName = sender.name} = {}) {
+function sendWrites(store, customer, sender, text, {first = false, role = sender === customer ? 'customer' : 'admin', senderId = sender.localId, senderName = sender.name, messageId = randomUUID(), attachment} = {}) {
   const path = conversationPath(store, customer);
-  const messageId = randomUUID();
-  const metadata = strings({lastMessageId: messageId, lastMessage: text, lastSenderId: senderId, lastSenderRole: role});
+  const preview = text || (attachment ? `${attachment.contentType.startsWith('image/') ? 'Photo' : 'File'}: ${attachment.fileName}` : '');
+  const metadata = strings({lastMessageId: messageId, lastMessage: preview, lastSenderId: senderId, lastSenderRole: role});
   if (role === 'customer') metadata.customerName = {stringValue: senderName};
   if (first) Object.assign(metadata, strings({storeId: store, customerId: customer.localId}), {adminReadAt: {nullValue: null}});
+  const message = strings({senderId, senderName, senderRole: role, text});
+  if (attachment) message.attachment = {mapValue: {fields: {
+    ...strings({storagePath: attachment.storagePath, fileName: attachment.fileName, contentType: attachment.contentType}),
+    size: {integerValue: String(attachment.size)},
+  }}};
   return [
-    patch(`${path}/messages/${messageId}`, strings({senderId, senderName, senderRole: role, text}), ['sentAt']),
+    patch(`${path}/messages/${messageId}`, message, ['sentAt']),
     patch(path, metadata, ['lastMessageAt', role === 'admin' ? 'adminReadAt' : 'customerReadAt']),
   ];
+}
+
+function attachmentFixture(store, customer, sender, {type = 'image/png', name = 'photo.png', data} = {}) {
+  const bytes = data || Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==', 'base64');
+  const id = randomUUID();
+  const path = `stores/${store}/chat-attachments/${customer.localId}/${sender.localId}/${id}/file`;
+  attachmentObjects.push(path);
+  return {id, bytes, path, attachment: {storagePath: path, fileName: name, contentType: type, size: bytes.length},
+    metadata: {senderId: sender.localId, customerId: customer.localId, messageId: id}};
+}
+async function uploadAttachment(fixture, user, metadata = fixture.metadata) {
+  const start = await fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o?name=${encodeURIComponent(fixture.path)}`, {
+    method: 'POST', headers: {
+      ...(user ? {Authorization: `Firebase ${user.idToken}`} : {}), 'Content-Type': 'application/json',
+      'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(fixture.bytes.length),
+      'X-Goog-Upload-Header-Content-Type': fixture.attachment.contentType,
+    }, body: JSON.stringify({name: fixture.path, contentType: fixture.attachment.contentType, metadata}),
+  });
+  if (!start.ok) return start.status;
+  const url = start.headers.get('x-goog-upload-url');
+  assert.ok(url, 'Storage upload session was not returned');
+  const finished = await fetch(url, {method: 'POST', headers: {
+    'Content-Type': 'application/octet-stream', 'X-Goog-Upload-Command': 'upload, finalize', 'X-Goog-Upload-Offset': '0',
+  }, body: fixture.bytes});
+  return finished.status;
+}
+async function attachmentRead(fixture, user) {
+  return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fixture.path)}?alt=media`, {
+    headers: user ? {Authorization: `Firebase ${user.idToken}`} : {},
+  });
+}
+async function attachmentDelete(fixture, user) {
+  return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fixture.path)}`, {
+    method: 'DELETE', headers: {Authorization: `Firebase ${user.idToken}`},
+  });
 }
 async function expectSend(user, writes, expected = 200) {
   const result = await commit(user, writes);
@@ -149,11 +192,62 @@ async function query(user, store, customer) {
     await expectSend(customer, sendWrites(otherStore, customer, customer, 'Separate store conversation', {first: true}));
     assert.equal((await read(admin, conversationPath(otherStore, customer))).status, 403, 'Admin cannot read another store');
     await expectSend(customer, sendWrites(store, customer, customer, 'Another question'));
+
+    const firstPhoto = attachmentFixture(store, other, other);
+    const unsolicited = attachmentFixture(store, other, admin);
+    assert.equal(await uploadAttachment(unsolicited, admin), 200, 'Admin can prepare a private draft');
+    await expectSend(admin, sendWrites(store, other, admin, '', {first: true, messageId: unsolicited.id, attachment: unsolicited.attachment}), 403);
+    assert.ok([200, 204].includes((await attachmentDelete(unsolicited, admin)).status), 'Unpublished admin draft can be cleaned up');
+    assert.equal(await uploadAttachment(firstPhoto, other), 200, 'Customer can upload a private first photo');
+    assert.equal((await attachmentRead(firstPhoto, other)).status, 200, 'Sender can retry an unpublished upload');
+    assert.equal((await attachmentRead(firstPhoto, admin)).status, 403, 'Other participants cannot read unpublished uploads');
+    await expectSend(other, sendWrites(store, other, other, '', {first: true, messageId: firstPhoto.id, attachment: firstPhoto.attachment}));
+    assert.equal((await read(admin, conversationPath(store, other))).data.fields.lastMessage.stringValue, 'Photo: photo.png');
+    const receivedPhoto = await attachmentRead(firstPhoto, admin);
+    assert.equal(receivedPhoto.status, 200, 'Active admin can read the published photo');
+    assert.deepEqual(Buffer.from(await receivedPhoto.arrayBuffer()), firstPhoto.bytes);
+    assert.equal((await attachmentRead(firstPhoto, customer)).status, 403, 'Another customer cannot read a photo');
+    assert.equal((await attachmentRead(firstPhoto, staff)).status, 403, 'Staff cannot read private attachments');
+    assert.equal((await attachmentRead(firstPhoto)).status, 403, 'Anonymous attachment reads are denied');
+    assert.equal(await uploadAttachment(firstPhoto, other), 403, 'Published attachment cannot be overwritten');
+    assert.equal((await attachmentDelete(firstPhoto, other)).status, 403, 'Published attachment cannot be deleted');
+
+    const document = attachmentFixture(store, customer, admin, {type: 'application/pdf', name: 'invoice.pdf', data: Buffer.from('%PDF-1.4 temporary test')});
+    assert.equal(await uploadAttachment(document, admin), 200, 'Admin can upload a document in an existing chat');
+    await expectSend(admin, sendWrites(store, customer, admin, 'Test invoice attached', {messageId: document.id, attachment: document.attachment}));
+    const receivedFile = await attachmentRead(document, customer);
+    assert.equal(receivedFile.status, 200, 'Customer can read an admin document');
+    assert.deepEqual(Buffer.from(await receivedFile.arrayBuffer()), document.bytes);
+    assert.equal((await attachmentRead(document, other)).status, 403, 'Another-store owner cannot read the document');
+    await expectSend(admin, [patch(`${path}/messages/${document.id}`, {attachment: {mapValue: {fields: {storagePath: {stringValue: 'changed'}}}}})], 403);
+    const wrongScope = {...document.attachment, storagePath: firstPhoto.path};
+    await expectSend(customer, sendWrites(store, customer, customer, '', {attachment: wrongScope}), 403);
+    await expectSend(customer, sendWrites(store, customer, customer, '', {attachment: {...document.attachment, size: 20 * 1024 * 1024 + 1}}), 403);
+    const forbidden = attachmentFixture(store, customer, other);
+    assert.equal(await uploadAttachment(forbidden, other), 403, 'Customer cannot upload into another conversation');
+    const wrongMetadata = attachmentFixture(store, customer, customer);
+    assert.equal(await uploadAttachment(wrongMetadata, customer, {...wrongMetadata.metadata, senderId: admin.localId}), 403);
+    const oversized = attachmentFixture(store, customer, customer, {type: 'application/octet-stream', name: 'oversized.bin', data: Buffer.alloc(20 * 1024 * 1024 + 1)});
+    assert.equal(await uploadAttachment(oversized, customer), 403, 'Storage enforces the 20 MB limit');
+    const abandoned = attachmentFixture(store, customer, customer, {type: 'text/plain', name: 'draft.txt', data: Buffer.from('Unpublished test attachment')});
+    assert.equal(await uploadAttachment(abandoned, customer), 200);
+    assert.ok([200, 204].includes((await attachmentDelete(abandoned, customer)).status), 'Sender can clean up a failed message upload');
+    console.log('PASS: first-message photos, admin documents/captions, exact received bytes, private storage, immutable attachments, rejected spoofed paths/metadata and size limits.');
     await adminSet(`stores/${store}/members/${admin.localId}`, {userId: admin.localId, role: 'admin', isActive: false});
     await expectSend(admin, sendWrites(store, customer, admin, 'Revoked admin'), 403);
     assert.equal((await read(admin, path)).status, 403);
+    assert.equal((await attachmentRead(document, admin)).status, 403, 'Revoked admin cannot read their own published attachment');
+    assert.equal((await attachmentRead(firstPhoto, admin)).status, 403, 'Revoked admin cannot read customer photos');
     console.log('PASS: live private customer/admin chat, inbox/history queries, persistent replies/read markers, roles and spoof/edit protections.');
   } finally {
+    const access = await token();
+    for (const object of attachmentObjects) {
+      assert.ok(storeIds.some(store => object.startsWith(`stores/${store}/chat-attachments/`)));
+      const response = await fetch(`https://storage.googleapis.com/storage/v1/b/${bucket}/o/${encodeURIComponent(object)}`, {
+        method: 'DELETE', headers: {Authorization: `Bearer ${access}`},
+      });
+      assert.ok([200, 204, 404].includes(response.status), 'Temporary attachment cleanup failed');
+    }
     for (const store of storeIds) {
       assert.ok(store.startsWith('chat_test_'));
       await deleteTestStore(store);

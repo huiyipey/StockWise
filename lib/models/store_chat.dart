@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'chat_attachment.dart';
 
 DateTime? _date(dynamic value) => value is Timestamp ? value.toDate() : null;
 
@@ -49,6 +50,7 @@ class StoreChatMessage {
   final String senderRole;
   final String text;
   final DateTime? sentAt;
+  final ChatAttachment? attachment;
 
   const StoreChatMessage({
     required this.id,
@@ -57,6 +59,7 @@ class StoreChatMessage {
     required this.senderRole,
     required this.text,
     this.sentAt,
+    this.attachment,
   });
 
   factory StoreChatMessage.fromData(String id, Map<String, dynamic> data) =>
@@ -67,11 +70,16 @@ class StoreChatMessage {
         senderRole: data['senderRole'] as String,
         text: data['text'] as String,
         sentAt: _date(data['sentAt']),
+        attachment: data['attachment'] is Map
+            ? ChatAttachment.fromData(
+                Map<String, dynamic>.from(data['attachment'] as Map),
+              )
+            : null,
       );
 }
 
-String? chatMessageError(String text) {
-  if (text.trim().isEmpty) return 'Please enter a message.';
+String? chatMessageError(String text, {bool hasAttachment = false}) {
+  if (text.trim().isEmpty && !hasAttachment) return 'Please enter a message.';
   if (text.trim().length > 2000) return 'Use 2,000 characters or fewer.';
   return null;
 }

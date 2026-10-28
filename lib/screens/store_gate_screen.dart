@@ -7,6 +7,7 @@ import '../services/store_session.dart';
 import '../theme/app_theme.dart';
 import 'home_screen.dart';
 import 'shop_screen.dart';
+import 'create_store_dialog.dart';
 
 class StoreGateScreen extends StatefulWidget {
   const StoreGateScreen({super.key});
@@ -222,34 +223,15 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
   }
 
   Future<void> _createStore() async {
-    var storeName = '';
-    final name = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create store'),
-        content: TextField(
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Store name'),
-          onChanged: (value) => storeName = value,
-          onSubmitted: (value) => Navigator.pop(context, value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, storeName),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    if (name == null || name.trim().isEmpty) return;
+    if (creating) return;
     setState(() => creating = true);
     try {
-      final store = await FirestoreService.instance.createStore(name: name);
+      final store = await showDialog<StoreInfo>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const CreateStoreDialog(),
+      );
+      if (store == null || !mounted) return;
       StoreSession.instance.select(store, role: 'owner');
       if (mounted) setState(() {});
     } catch (error) {
