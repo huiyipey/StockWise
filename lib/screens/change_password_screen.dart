@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/password_change_service.dart';
+import '../services/password_policy.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
 
@@ -135,7 +136,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     const Padding(
                       padding: EdgeInsets.only(top: 6),
                       child: Text(
-                        'Use at least 6 characters.',
+                        passwordRequirements,
                         style: TextStyle(color: AppColors.muted),
                       ),
                     ),

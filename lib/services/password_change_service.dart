@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'password_policy.dart';
 
 typedef PasswordChanger =
     Future<void> Function({
@@ -11,9 +12,8 @@ String? currentPasswordError(String? value) =>
 
 String? newPasswordError(String? value, String currentPassword) {
   if (value == null || value.isEmpty) return 'Enter a new password';
-  if (value.length < 6) return 'Use at least 6 characters';
   if (value == currentPassword) return 'Choose a different password';
-  return null;
+  return passwordPolicyError(value);
 }
 
 String? confirmPasswordError(String? value, String newPassword) {

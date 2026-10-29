@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>StockWise - Email verification</title>
+  <link rel="stylesheet" href="verification.css">
+  <script defer src="config.js"></script>
+  <script defer src="verification.js"></script>
+</head>
+<body>
+  <main>
+    <div class="brand"><img src="auth_logo.png" alt="" width="47" height="47"><span>StockWise</span></div>
+    <section class="card" aria-live="polite" aria-busy="true">
+      <div id="symbol" class="symbol loading" aria-hidden="true"></div>
+      <h1 id="title">Checking your email</h1>
+      <p id="message">StockWise is confirming your email address.</p>
+      <div id="hint" class="hint" hidden></div>
+      <button id="retry" hidden>Try again</button>
+    </section>
+  </main>
+</body>
+</html>

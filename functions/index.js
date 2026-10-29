@@ -11,6 +11,8 @@ const nodemailer = require('nodemailer');
 const {createHash} = require('node:crypto');
 const {range, report, csv, duePeriods, recommendations} = require('./reporting');
 const {createAdminInviteHandler} = require('./admin_invites');
+const {createEmailRegistrationHandler} = require('./auth_registration');
+const {createVerificationHandler, identityEmailSender, withVerifiedAccount} = require('./email_verification');
 const {createStoreHandler, updateStoreHandler} = require('./store_creation');
 const {normalizeAssistantRequest, assistantReply} = require('./shopping_assistant');
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
@@ -18,13 +20,19 @@ const geminiApiKey = defineSecret('GEMINI_API_KEY');
 initializeApp();
 setGlobalOptions({region: 'asia-southeast1', maxInstances: 5});
 const db = getFirestore();
-exports.createStore = onCall({timeoutSeconds: 60, maxInstances: 3}, createStoreHandler({
+const verifiedCall = (options, handler) => onCall(options, withVerifiedAccount(getAuth(), handler));
+exports.manageEmailVerification = onCall({timeoutSeconds: 45, maxInstances: 3},
+  createVerificationHandler({db, auth: getAuth(),
+    sendEmail: identityEmailSender(require('./auth_web_config.json'))}));
+exports.checkRegisteredEmail = onCall({timeoutSeconds: 15, maxInstances: 3},
+  createEmailRegistrationHandler({db, auth: getAuth()}));
+exports.createStore = verifiedCall({timeoutSeconds: 60, maxInstances: 3}, createStoreHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
-exports.updateStore = onCall({timeoutSeconds: 60, maxInstances: 3}, updateStoreHandler({
+exports.updateStore = verifiedCall({timeoutSeconds: 60, maxInstances: 3}, updateStoreHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
-exports.createAdminInvite = onCall({timeoutSeconds: 30}, createAdminInviteHandler({
+exports.createAdminInvite = verifiedCall({timeoutSeconds: 30}, createAdminInviteHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
 const roles = ['owner', 'admin', 'manager', 'staff'];
@@ -51,7 +59,7 @@ async function buildReport(store, kind, start, end) {
   return report(kind, records.docs.map(d => ({id: d.id, ...d.data()})), start, end,
     Object.fromEntries(categories.docs.map(d => [d.id, d.data().name])));
 }
-exports.getStoreReport = onCall({timeoutSeconds: 120, memory: '512MiB'}, async request => {
+exports.getStoreReport = verifiedCall({timeoutSeconds: 120, memory: '512MiB'}, async request => {
   const store = storeFor(request);
   await requireMember(store, request.auth.uid);
   const data = await buildReport(store, request.data.kind, request.data.start, request.data.end);
@@ -157,7 +165,7 @@ async function assistantContext(store, uid) {
   }
   return {catalog, history: lines};
 }
-exports.shoppingAssistant = onCall({timeoutSeconds: 120, memory: '512MiB', maxInstances: 3, secrets: [geminiApiKey]}, async request => {
+exports.shoppingAssistant = verifiedCall({timeoutSeconds: 120, memory: '512MiB', maxInstances: 3, secrets: [geminiApiKey]}, async request => {
   const store = storeFor(request);
   if ((await store.get()).data()?.status !== 'active') throw new HttpsError('not-found', 'This store is unavailable.');
   const input = normalizeAssistantRequest(request.data);

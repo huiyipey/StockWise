@@ -1,310 +1,321 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
-import 'signup_screen.dart';
-import 'store_gate_screen.dart';
+import 'package:flutter/services.dart';
+import '../services/account_registration_service.dart';
+import '../services/email_verification_service.dart';
 import '../services/store_session.dart';
+import '../widgets/auth_ui.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
+  const LoginScreen({
+    super.key,
+    this.onSignIn,
+    this.onResetPassword,
+    this.onSignedIn,
+    this.onEmailRegistered,
+    this.initialEmail,
+    this.verificationNotice = false,
+  });
+  final Future<void> Function(String email, String password)? onSignIn;
+  final Future<void> Function(String email)? onResetPassword;
+  final VoidCallback? onSignedIn;
+  final RegisteredEmailChecker? onEmailRegistered;
+  final String? initialEmail;
+  final bool verificationNotice;
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  late final _email = TextEditingController(text: widget.initialEmail);
+  final _password = TextEditingController();
   String? _error;
-  bool _isLoading = false;
+  bool _emailInvalid = false, _passwordInvalid = false;
+  bool _signingIn = false, _sendingReset = false, _resetSent = false;
   bool _passwordVisible = false;
+  bool get _busy => _signingIn || _sendingReset;
 
-  Future<void> _login(BuildContext context) async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
+  void _clearFeedback(String _) => setState(() {
+    _error = null;
+    _emailInvalid = _passwordInvalid = _resetSent = false;
+  });
 
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Enter your email and password');
-      return;
-    }
+  void _showError(
+    String message, {
+    bool email = false,
+    bool password = false,
+  }) => setState(() {
+    _error = message;
+    _emailInvalid = email;
+    _passwordInvalid = password;
+    _resetSent = false;
+  });
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
+  bool _validEmail(String value) =>
+      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
 
+  Future<bool> _checkRegisteredEmail(String email) async {
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      if (!context.mounted) return;
-      StoreSession.instance.clear();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const StoreGateScreen()),
-        (_) => false,
-      );
-    } on FirebaseAuthException catch (error) {
-      if (mounted) setState(() => _error = _messageFor(error));
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      final registered =
+          await (widget.onEmailRegistered ??
+              AccountRegistrationService.instance.isRegistered)(email);
+      if (!mounted) return false;
+      if (!registered) {
+        _showError(
+          'This email is not registered. Please create an account.',
+          email: true,
+        );
+      }
+      return registered;
+    } on EmailLookupFailure catch (failure) {
+      if (mounted) _showError(failure.message);
+    } catch (_) {
+      if (mounted) {
+        _showError('Unable to check this email. Please try again.');
+      }
+    }
+    return false;
+  }
+
+  void _authError(FirebaseAuthException failure, {bool reset = false}) {
+    switch (failure.code) {
+      case 'invalid-email':
+        _showError('Enter a valid email address.', email: true);
+      case 'user-disabled':
+        _showError('This account has been disabled.');
+      case 'too-many-requests':
+        _showError('Too many attempts. Please try again later.');
+      case 'invalid-credential':
+      case 'invalid-login-credentials':
+      case 'wrong-password':
+        _showError(
+          reset
+              ? 'Unable to send reset email. Please try again.'
+              : 'Invalid email or password.',
+          email: !reset,
+          password: !reset,
+        );
+      case 'user-not-found':
+        _showError(
+          'This email is not registered. Please create an account.',
+          email: true,
+        );
+      default:
+        _showError(
+          reset
+              ? 'Unable to send reset email. Please try again.'
+              : 'Unable to sign in. Please try again.',
+        );
     }
   }
 
-  String _messageFor(FirebaseAuthException error) {
-    switch (error.code) {
-      case 'invalid-email':
-        return 'Enter a valid email address';
-      case 'user-disabled':
-        return 'This account has been disabled';
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later';
-      case 'invalid-credential':
-      case 'user-not-found':
-      case 'wrong-password':
-        return 'Invalid email or password';
-      default:
-        return error.message ?? 'Unable to sign in';
+  Future<void> _login() async {
+    if (_busy) return;
+    final email = _email.text.trim(), password = _password.text;
+    if (email.isEmpty || password.isEmpty) {
+      _showError(
+        'Enter your email and password.',
+        email: email.isEmpty,
+        password: password.isEmpty,
+      );
+      return;
+    }
+    if (!_validEmail(email)) {
+      _showError('Enter a valid email address.', email: true);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _signingIn = true;
+      _error = null;
+      _emailInvalid = _passwordInvalid = _resetSent = false;
+    });
+    try {
+      if (!await _checkRegisteredEmail(email)) return;
+      if (widget.onSignIn != null) {
+        await widget.onSignIn!(email, password);
+      } else {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      }
+      StoreSession.instance.clear();
+      verificationSignInEmail.value = null;
+      TextInput.finishAutofillContext();
+      if (!mounted) return;
+      if (widget.onSignedIn != null) {
+        widget.onSignedIn!();
+      } else {
+        Navigator.popUntil(context, (route) => route.isFirst);
+      }
+    } on FirebaseAuthException catch (failure) {
+      if (mounted) _authError(failure);
+    } catch (_) {
+      if (mounted) _showError('Unable to sign in. Please try again.');
+    } finally {
+      if (mounted) setState(() => _signingIn = false);
     }
   }
 
   Future<void> _resetPassword() async {
-    final email = _emailController.text.trim();
+    if (_busy) return;
+    final email = _email.text.trim();
     if (email.isEmpty) {
-      setState(() => _error = 'Enter your email first');
+      _showError('Enter your email first.', email: true);
       return;
     }
-
+    if (!_validEmail(email)) {
+      _showError('Enter a valid email address.', email: true);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _sendingReset = true;
+      _error = null;
+      _emailInvalid = _passwordInvalid = _resetSent = false;
+    });
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password reset email sent')),
-      );
-    } on FirebaseAuthException catch (error) {
-      if (mounted) setState(() => _error = _messageFor(error));
+      if (!await _checkRegisteredEmail(email)) return;
+      if (widget.onResetPassword != null) {
+        await widget.onResetPassword!(email);
+      } else {
+        await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      }
+      if (mounted) setState(() => _resetSent = true);
+    } on FirebaseAuthException catch (failure) {
+      if (mounted) _authError(failure, reset: true);
+    } catch (_) {
+      if (mounted) _showError('Unable to send reset email. Please try again.');
+    } finally {
+      if (mounted) setState(() => _sendingReset = false);
     }
   }
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _email.dispose();
+    _password.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Column(
+  Widget build(BuildContext context) => AuthPage(
+    footer: AuthAccountLink(
+      prompt: 'New to StockWise?',
+      label: 'Create an account',
+      onPressed: _busy
+          ? null
+          : () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SignupScreen()),
+            ),
+    ),
+    child: AutofillGroup(
+      child: AuthCard(
+        title: 'Welcome back',
+        subtitle: 'Sign in to continue to your store.',
+        children: [
+          AuthField(
+            key: const ValueKey('login-email'),
+            controller: _email,
+            label: 'Email',
+            hint: 'you@example.com',
+            invalid: _emailInvalid,
+            enabled: !_busy,
+            autofillHints: const [AutofillHints.username],
+            onChanged: _clearFeedback,
+          ),
+          const SizedBox(height: 20),
+          AuthField(
+            key: const ValueKey('login-password'),
+            controller: _password,
+            label: 'Password',
+            hint: 'Enter your password',
+            password: true,
+            visible: _passwordVisible,
+            invalid: _passwordInvalid,
+            enabled: !_busy,
+            autofillHints: const [AutofillHints.password],
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _login(),
+            onChanged: _clearFeedback,
+            onToggleVisibility: () =>
+                setState(() => _passwordVisible = !_passwordVisible),
+          ),
+          const SizedBox(height: 12),
+          if (_resetSent)
+            const AuthResetConfirmation()
+          else if (_error == null && widget.verificationNotice)
+            Semantics(
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AuthColors.soft,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: const Text(
+                  'Please sign in again to continue with this email address.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: AuthColors.green,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          else
+            AuthError(_error),
+          if (_resetSent) const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: _busy ? null : _resetPassword,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                minimumSize: const Size(48, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: AuthColors.green,
+                textStyle: const TextStyle(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox(height: 16),
-                  Image.asset(
-                    'assets/branding/app_icon.png',
-                    width: 120,
-                    height: 120,
-                    fit: BoxFit.contain,
-                    excludeFromSemantics: true,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'StockWise',
-                    style: TextStyle(
-                      color: Color(0xFF76A873),
-                      fontSize: 34,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  const Text(
-                    'Welcome Back!',
-                    style: TextStyle(
-                      color: Color(0xFF5F8F5F),
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Manage stock, reduce waste',
-                    style: TextStyle(
-                      color: Color(0xFF6F6F6F),
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  if (_error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _error!,
-                        style: const TextStyle(
-                          color: Color(0xFFD32F2F),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  if (_sendingReset) ...[
+                    const SizedBox.square(
+                      dimension: 13,
+                      child: CircularProgressIndicator(
+                        color: AuthColors.green,
+                        strokeWidth: 1.5,
                       ),
                     ),
-                  _buildTextField(_emailController, 'Email'),
-                  const SizedBox(height: 18),
-                  _buildTextField(
-                    _passwordController,
-                    'Password',
-                    isPassword: true,
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    _sendingReset
+                        ? 'Sending reset email...'
+                        : 'Forgot password?',
                   ),
-                  const SizedBox(height: 24),
-                  _buildLoginButton(context),
-                  const SizedBox(height: 18),
-                  _buildLinks(context),
-                  const SizedBox(height: 20),
                 ],
               ),
             ),
           ),
-        ),
+          const SizedBox(height: 16),
+          AuthButton(
+            label: 'Sign in',
+            busyLabel: 'Signing in...',
+            busy: _signingIn,
+            onPressed: _busy ? null : _login,
+          ),
+        ],
       ),
-    );
-  }
-
-  Widget _buildTextField(
-    TextEditingController controller,
-    String hint, {
-    bool isPassword = false,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: TextField(
-        controller: controller,
-        obscureText: isPassword && !_passwordVisible,
-        autocorrect: !isPassword,
-        enableSuggestions: !isPassword,
-        decoration: InputDecoration(
-          hintText: hint,
-          suffixIcon: isPassword
-              ? IconButton(
-                  tooltip: _passwordVisible ? 'Hide password' : 'Show password',
-                  onPressed: () =>
-                      setState(() => _passwordVisible = !_passwordVisible),
-                  icon: Icon(
-                    _passwordVisible
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                  ),
-                )
-              : null,
-          hintStyle: const TextStyle(
-            color: Color(0xFFB5B5B5),
-            fontWeight: FontWeight.bold,
-            fontSize: 17,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 2.5),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFDDDDDD), width: 2.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF75A972), width: 2.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-        ),
-        style: const TextStyle(
-          color: Color(0xFF555555),
-          fontSize: 17,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLoginButton(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : () => _login(context),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF75A972),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          elevation: 4,
-          shadowColor: Colors.black26,
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white,
-                ),
-              )
-            : const Text(
-                'LOGIN',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-      ),
-    );
-  }
-
-  Widget _buildLinks(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        GestureDetector(
-          onTap: _resetPassword,
-          child: const Text(
-            'Forgot Password',
-            style: TextStyle(
-              color: Color(0xFF555555),
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const Text(
-          ' | ',
-          style: TextStyle(
-            color: Color(0xFF555555),
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SignupScreen()),
-            );
-          },
-          child: const Text(
-            'Sign Up',
-            style: TextStyle(
-              color: Color(0xFF555555),
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+    ),
+  );
 }

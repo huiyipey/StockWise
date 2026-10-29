@@ -21,7 +21,7 @@ import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
 import 'home_screen.dart';
 import 'items_screen.dart';
-import 'login_screen.dart';
+import 'auth_gate.dart';
 import 'orders_screen.dart';
 import 'shop_screen.dart';
 import 'store_gate_screen.dart';
@@ -438,7 +438,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!context.mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      MaterialPageRoute(builder: (_) => const AuthGate()),
       (_) => false,
     );
   }
