@@ -363,11 +363,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       barrierDismissible: false,
       builder: (_) => CreateStoreDialog(
         initialStore: store,
-        onCreate: ({required name, required shopAddress}) =>
+        onCreate: ({required name, required address}) =>
             (widget.onSaveShop ?? FirestoreService.instance.updateStore)(
               storeId: store.id,
               name: name,
-              shopAddress: shopAddress,
+              address: address,
             ),
       ),
     );

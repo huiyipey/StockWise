@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'store_address.dart';
+
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
   if (value is DateTime) return value;
@@ -44,6 +46,7 @@ class StoreInfo {
   final String status;
   final String currency;
   final String shopAddress;
+  final StoreAddress? address;
 
   const StoreInfo({
     required this.id,
@@ -53,6 +56,7 @@ class StoreInfo {
     this.status = 'active',
     this.currency = 'MYR',
     this.shopAddress = '',
+    this.address,
   });
 
   factory StoreInfo.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -67,6 +71,7 @@ class StoreInfo {
       status: data['status'] as String? ?? 'active',
       currency: data['currency'] as String? ?? 'MYR',
       shopAddress: data['shopAddress'] as String? ?? '',
+      address: StoreAddress.fromMap(data['address']),
     );
   }
 }

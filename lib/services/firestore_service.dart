@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/app_models.dart';
+import '../models/store_address.dart';
 import '../models/barcode_product.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
@@ -138,9 +139,10 @@ class FirestoreService {
   Future<StoreInfo> updateStore({
     required String storeId,
     required String name,
-    required String shopAddress,
+    required StoreAddress address,
   }) async {
-    final validation = storeNameError(name) ?? shopAddressError(shopAddress);
+    final validation =
+        storeNameError(name) ?? shopAddressError(address.formatted);
     if (validation != null) throw ArgumentError(validation);
     final response =
         await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
@@ -153,7 +155,7 @@ class FirestoreService {
             .call({
               'storeId': storeId,
               'name': name,
-              'shopAddress': shopAddress,
+              'address': address.toMap(),
             });
     final data = Map<String, dynamic>.from(response.data as Map);
     return StoreInfo(
@@ -161,6 +163,7 @@ class FirestoreService {
       name: data['name'] as String,
       code: data['code'] as String,
       shopAddress: data['shopAddress'] as String,
+      address: StoreAddress.fromMap(data['address']),
       logoPath: data['logoPath'] as String?,
       status: data['status'] as String? ?? 'active',
       currency: data['currency'] as String? ?? 'MYR',
@@ -180,9 +183,10 @@ class FirestoreService {
 
   Future<StoreInfo> createStore({
     required String name,
-    required String shopAddress,
+    required StoreAddress address,
   }) async {
-    final validation = storeNameError(name) ?? shopAddressError(shopAddress);
+    final validation =
+        storeNameError(name) ?? shopAddressError(address.formatted);
     if (validation != null) throw ArgumentError(validation);
     final response =
         await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
@@ -192,13 +196,14 @@ class FirestoreService {
                 timeout: const Duration(seconds: 60),
               ),
             )
-            .call({'name': name, 'shopAddress': shopAddress});
+            .call({'name': name, 'address': address.toMap()});
     final data = Map<String, dynamic>.from(response.data as Map);
     return StoreInfo(
       id: data['id'] as String,
       name: data['name'] as String,
       code: data['code'] as String,
       shopAddress: data['shopAddress'] as String,
+      address: StoreAddress.fromMap(data['address']),
     );
   }
 

@@ -1,43 +1,81 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
+import '../services/store_fields.dart';
 import '../services/store_session.dart';
-import '../theme/app_theme.dart';
+import '../widgets/auth_ui.dart';
+import '../widgets/store_ui.dart';
+import 'create_store_dialog.dart';
 import 'home_screen.dart';
 import 'shop_screen.dart';
-import 'create_store_dialog.dart';
 
 class StoreGateScreen extends StatefulWidget {
-  const StoreGateScreen({super.key});
+  const StoreGateScreen({
+    super.key,
+    this.storesStream,
+    this.membershipsStream,
+    this.accountEmail,
+    this.onRefresh,
+    this.onCreate,
+    this.onSelect,
+  });
+  final Stream<List<StoreInfo>>? storesStream;
+  final Stream<List<StoreMembership>>? membershipsStream;
+  final String? accountEmail;
+  final Future<void> Function()? onRefresh;
+  final StoreCreator? onCreate;
+  final void Function(StoreInfo store, String role)? onSelect;
 
   @override
   State<StoreGateScreen> createState() => _StoreGateScreenState();
 }
 
 class _StoreGateScreenState extends State<StoreGateScreen> {
-  bool creating = false;
-  bool checkingInvites = false;
+  bool creating = false, checkingInvites = false, selecting = false;
+  late Stream<List<StoreInfo>> stores;
+  late Stream<List<StoreMembership>> memberships;
 
-  Future<void> _checkInvites({bool sendVerification = false}) async {
+  @override
+  void initState() {
+    super.initState();
+    _streams();
+  }
+
+  @override
+  void didUpdateWidget(covariant StoreGateScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.storesStream != oldWidget.storesStream ||
+        widget.membershipsStream != oldWidget.membershipsStream) {
+      _streams();
+    }
+  }
+
+  void _streams() {
+    stores = widget.storesStream ?? FirestoreService.instance.watchStores();
+    memberships =
+        widget.membershipsStream ??
+        FirestoreService.instance.watchMyMemberships();
+  }
+
+  Future<void> _checkInvites() async {
+    if (checkingInvites) return;
     setState(() => checkingInvites = true);
     try {
-      if (sendVerification) {
-        await FirebaseAuth.instance.currentUser!.sendEmailVerification();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Verification email sent. Open the link, then tap Refresh staff access.',
-              ),
-            ),
-          );
-        }
+      if (widget.onRefresh != null) {
+        await widget.onRefresh!();
       } else {
         await FirebaseAuth.instance.currentUser!.reload();
         await FirebaseAuth.instance.currentUser!.getIdToken(true);
         await FirestoreService.instance.ensureUserProfile();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Staff access refreshed')));
       }
     } catch (_) {
       if (mounted) {
@@ -58,187 +96,365 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     if (session.store != null) {
       return session.canManage ? const HomeScreen() : const ShopScreen();
     }
-
     return Scaffold(
+      backgroundColor: AuthColors.background,
       body: SafeArea(
         child: StreamBuilder<List<StoreInfo>>(
-          stream: FirestoreService.instance.watchStores(),
-          builder: (context, storeSnapshot) {
-            if (storeSnapshot.hasError) {
-              return _ErrorState(error: storeSnapshot.error);
-            }
-            if (!storeSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            return StreamBuilder<List<StoreMembership>>(
-              stream: FirestoreService.instance.watchMyMemberships(),
-              builder: (context, membershipSnapshot) {
-                if (membershipSnapshot.hasError) {
-                  return _ErrorState(error: membershipSnapshot.error);
-                }
-                if (!membershipSnapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final memberships =
-                    membershipSnapshot.data ?? const <StoreMembership>[];
-                final roleByStore = {
-                  for (final item in memberships) item.storeId: item.role,
-                };
-                return _content(storeSnapshot.data!, roleByStore);
-              },
-            );
-          },
+          stream: stores,
+          builder: (context, storeSnapshot) =>
+              StreamBuilder<List<StoreMembership>>(
+                stream: memberships,
+                builder: (context, memberSnapshot) => _content(
+                  storeSnapshot.data ?? const [],
+                  {
+                    for (final member
+                        in memberSnapshot.data ?? <StoreMembership>[])
+                      member.storeId: member.role,
+                  },
+                  failed: storeSnapshot.hasError || memberSnapshot.hasError,
+                  loading: !storeSnapshot.hasData || !memberSnapshot.hasData,
+                ),
+              ),
         ),
       ),
     );
   }
 
-  Widget _content(List<StoreInfo> stores, Map<String, String> roleByStore) {
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
-          color: AppColors.primary,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'STOCKWISE',
-                style: TextStyle(
-                  color: Colors.white70,
-                  letterSpacing: 2.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'Choose a store',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 29,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 4),
-              Text(
-                'Stock, carts, orders, and reports stay isolated per store.',
-                style: TextStyle(color: Colors.white70),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: stores.isEmpty
-              ? _emptyState()
-              : ListView.builder(
-                  padding: const EdgeInsets.all(18),
-                  itemCount: stores.length,
-                  itemBuilder: (context, index) {
-                    final store = stores[index];
-                    final role = roleByStore[store.id] ?? 'customer';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Card(
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(15),
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.primarySoft,
-                            child: Text(
-                              store.name.substring(0, 1).toUpperCase(),
-                              style: const TextStyle(
-                                color: AppColors.primaryDark,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            store.name,
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                          subtitle: Text(
-                            '${store.code}  •  ${_roleLabel(role)}',
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => _selectStore(store, role),
+  Widget _content(
+    List<StoreInfo> stores,
+    Map<String, String> roles, {
+    required bool failed,
+    required bool loading,
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final cardHeight = math.max(420.0 * scale, constraints.maxHeight - 260);
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 46, 20, 16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const AuthBrand(),
+                const SizedBox(height: 48),
+                Container(
+                  height: cardHeight,
+                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Choose a store',
+                        style: TextStyle(
+                          color: AuthColors.ink,
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
                         ),
                       ),
-                    );
-                  },
+                      const SizedBox(height: 10),
+                      Text(
+                        !failed && !loading && stores.isEmpty
+                            ? 'Start with your first store.'
+                            : 'Select a store to continue.',
+                        style: const TextStyle(
+                          color: AuthColors.muted,
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: failed
+                            ? _errorState()
+                            : loading
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                  color: AuthColors.green,
+                                ),
+                              )
+                            : stores.isEmpty
+                            ? _emptyState()
+                            : Column(
+                                children: [
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'AVAILABLE STORES',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: AuthColors.muted,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Expanded(
+                                    child: ListView.separated(
+                                      padding: EdgeInsets.zero,
+                                      itemCount: stores.length,
+                                      separatorBuilder: (_, index) =>
+                                          const SizedBox(height: 12),
+                                      itemBuilder: (_, index) => _storeTile(
+                                        stores[index],
+                                        roles[stores[index].id] ?? 'customer',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                      const SizedBox(height: 24),
+                      StorePrimaryButton(
+                        label: 'Create a store',
+                        busy: creating,
+                        onPressed: failed || loading || selecting
+                            ? null
+                            : _createStore,
+                      ),
+                    ],
+                  ),
                 ),
-        ),
-        if (FirebaseAuth.instance.currentUser?.emailVerified != true)
-          TextButton(
-            onPressed: checkingInvites
-                ? null
-                : () => _checkInvites(sendVerification: true),
-            child: const Text('Verify email to accept staff invitations'),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: checkingInvites || selecting
+                      ? null
+                      : _checkInvites,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AuthColors.green,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (checkingInvites) ...[
+                        const SizedBox.square(
+                          dimension: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Flexible(
+                        child: Text(
+                          checkingInvites
+                              ? 'Refreshing staff access…'
+                              : 'Refresh staff access',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Signed in as ${widget.accountEmail ?? FirebaseAuth.instance.currentUser?.email ?? ''}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AuthColors.muted,
+                  ),
+                ),
+              ],
+            ),
           ),
-        TextButton(
-          onPressed: checkingInvites ? null : _checkInvites,
-          child: Text(checkingInvites ? 'Checking…' : 'Refresh staff access'),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(18, 8, 18, 22),
-          child: OutlinedButton.icon(
-            onPressed: creating ? null : _createStore,
-            icon: const Icon(Icons.add_business_rounded),
-            label: const Text('CREATE A STORE'),
-          ),
-        ),
-      ],
-    );
-  }
+      );
+    },
+  );
 
-  Widget _emptyState() => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.storefront_outlined,
-            size: 68,
-            color: AppColors.muted,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No stores yet',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Create the first store to start managing inventory.',
-            textAlign: TextAlign.center,
-          ),
-        ],
+  Widget _storeTile(StoreInfo store, String role) => Material(
+    color: AuthColors.background,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: const BorderSide(color: AuthColors.border),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: selecting || creating ? null : () => _selectStore(store, role),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 21,
+              backgroundColor: AuthColors.soft,
+              child: Text(
+                store.name.isEmpty
+                    ? 'S'
+                    : store.name.characters.first.toUpperCase(),
+                style: const TextStyle(
+                  color: AuthColors.green,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    store.name,
+                    style: const TextStyle(
+                      color: AuthColors.ink,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AuthColors.soft,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _roleLabel(role),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: AuthColors.green,
+                      ),
+                    ),
+                  ),
+                  if (store.address != null) ...[
+                    const SizedBox(height: 7),
+                    Text(
+                      '${store.address!.city}, ${store.address!.state}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AuthColors.muted,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.only(top: 21),
+              child: Icon(
+                Icons.chevron_right_rounded,
+                color: AuthColors.muted,
+                size: 20,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
 
+  Widget _emptyState() => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const CircleAvatar(
+        radius: 39,
+        backgroundColor: AuthColors.soft,
+        child: Icon(
+          Icons.storefront_outlined,
+          color: AuthColors.green,
+          size: 38,
+        ),
+      ),
+      const SizedBox(height: 26),
+      const Text(
+        'No stores yet',
+        style: TextStyle(
+          color: AuthColors.ink,
+          fontSize: 23,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 16),
+      const Text(
+        'Create a store to start managing your inventory.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AuthColors.muted, fontSize: 12, height: 1.5),
+      ),
+      const SizedBox(height: 38),
+      const Text(
+        "You'll be the store owner.",
+        style: TextStyle(color: AuthColors.muted, fontSize: 11),
+      ),
+    ],
+  );
+
+  Widget _errorState() => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      const Icon(Icons.cloud_off_rounded, size: 42, color: AuthColors.muted),
+      const SizedBox(height: 16),
+      const Text(
+        'Could not load stores',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: AuthColors.ink,
+          fontSize: 20,
+        ),
+      ),
+      const SizedBox(height: 10),
+      const Text(
+        'Check your connection and try again.',
+        style: TextStyle(color: AuthColors.muted, fontSize: 12),
+      ),
+      TextButton(
+        onPressed: () => setState(_streams),
+        child: const Text('Retry'),
+      ),
+    ],
+  );
+
   Future<void> _selectStore(StoreInfo store, String role) async {
-    StoreSession.instance.select(store, role: role);
-    if (mounted) setState(() {});
-    await FirestoreService.instance.saveActiveStore(store.id);
+    if (selecting) return;
+    if (widget.onSelect != null) {
+      widget.onSelect!(store, role);
+      return;
+    }
+    setState(() => selecting = true);
+    try {
+      await FirestoreService.instance.saveActiveStore(store.id);
+      if (mounted) {
+        setState(() => StoreSession.instance.select(store, role: role));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open this store. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => selecting = false);
+    }
   }
 
   Future<void> _createStore() async {
     if (creating) return;
     setState(() => creating = true);
     try {
-      final store = await showDialog<StoreInfo>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const CreateStoreDialog(),
+      final store = await Navigator.push<StoreInfo>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CreateStoreDialog(onCreate: widget.onCreate),
+        ),
       );
-      if (store == null || !mounted) return;
-      StoreSession.instance.select(store, role: 'owner');
-      if (mounted) setState(() {});
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+      if (store != null && mounted) {
+        setState(() => StoreSession.instance.select(store, role: 'owner'));
       }
     } finally {
       if (mounted) setState(() => creating = false);
@@ -252,34 +468,4 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     'staff' => 'Staff',
     _ => 'Customer',
   };
-}
-
-class _ErrorState extends StatelessWidget {
-  final Object? error;
-
-  const _ErrorState({this.error});
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.cloud_off_rounded,
-            size: 54,
-            color: AppColors.danger,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Could not load stores',
-            style: TextStyle(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 6),
-          Text('$error', textAlign: TextAlign.center),
-        ],
-      ),
-    ),
-  );
 }

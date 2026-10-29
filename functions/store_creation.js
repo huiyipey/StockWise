@@ -1,5 +1,6 @@
 const {createHash} = require('node:crypto');
 const {HttpsError} = require('firebase-functions/v2/https');
+const postcodes = require('./data/malaysia_postcodes.json');
 
 function displayStoreName(value) {
   return typeof value === 'string' ? value.trim().replace(/\s+/gu, ' ') : '';
@@ -13,20 +14,40 @@ function storeNameKey(value) {
 
 function storeDetails(data) {
   const name = displayStoreName(data?.name);
-  const shopAddress = typeof data?.shopAddress === 'string' ? data.shopAddress.trim() : '';
+  let shopAddress = typeof data?.shopAddress === 'string' ? data.shopAddress.trim() : '';
+  let address = null;
   if (name.length < 2 || name.length > 80) {
     throw new HttpsError('invalid-argument', 'Enter a store name of 2–80 characters.');
+  }
+  if (data?.address !== undefined) {
+    const input = data.address;
+    const text = key => typeof input?.[key] === 'string' ? input[key].trim() : '';
+    const line1 = text('line1');
+    const line2 = text('line2');
+    const postcode = text('postcode');
+    const city = text('city');
+    if (!line1 || line1.length > 200 || line2.length > 200) {
+      throw new HttpsError('invalid-argument', 'Enter Address 1; use up to 200 characters per address line.');
+    }
+    const location = /^\d{5}$/.test(postcode) ? postcodes[postcode] : null;
+    if (!location) throw new HttpsError('invalid-argument', 'Postcode not found. Check the number.');
+    if (!city || city.length > 80 || /[\r\n]/.test(city)) {
+      throw new HttpsError('invalid-argument', 'Enter a city of 1–80 characters.');
+    }
+    // State is authoritative on the server, even when a caller supplies another value.
+    address = {line1, line2, postcode, city, state: location[1]};
+    shopAddress = [line1, ...(line2 ? [line2] : []), `${postcode} ${city}, ${address.state}`].join('\n');
   }
   if (!shopAddress || shopAddress.length > 500) {
     throw new HttpsError('invalid-argument', 'Enter a shop address of 1–500 characters.');
   }
-  return {name, shopAddress};
+  return {name, shopAddress, address};
 }
 
 function createStoreHandler({db, auth, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
-    const {name, shopAddress} = storeDetails(request.data);
+    const {name, shopAddress, address} = storeDetails(request.data);
     const owner = await auth.getUser(request.auth.uid);
     if (owner.disabled) throw new HttpsError('permission-denied', 'This account is unavailable.');
     const stores = db.collection('stores');
@@ -51,6 +72,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
       tx.set(reservation, {storeId: store.id, normalizedName: normalized, createdAt: timestamp});
       tx.set(store, {
         name, nameLowercase: normalized, nameKey, code, shopAddress,
+        ...(address ? {address} : {}),
         ownerUid: owner.uid, email: owner.email ?? null,
         timezone: 'Asia/Kuala_Lumpur', currency: 'MYR', status: 'active',
         createdAt: timestamp, updatedAt: timestamp,
@@ -74,7 +96,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
       });
       tx.set(db.collection('users').doc(owner.uid), {activeStoreId: store.id, updatedAt: timestamp}, {merge: true});
     });
-    return {id: store.id, name, code, shopAddress, status: 'active', currency: 'MYR'};
+    return {id: store.id, name, code, shopAddress, address, status: 'active', currency: 'MYR'};
   };
 }
 
@@ -85,7 +107,7 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
     if (typeof storeId !== 'string' || !/^[\w-]{1,128}$/.test(storeId)) {
       throw new HttpsError('invalid-argument', 'Select a store.');
     }
-    const {name, shopAddress} = storeDetails(request.data);
+    const {name, shopAddress, address} = storeDetails(request.data);
     const owner = await auth.getUser(request.auth.uid);
     if (owner.disabled) throw new HttpsError('permission-denied', 'This account is unavailable.');
     const stores = db.collection('stores');
@@ -128,9 +150,11 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
         });
       }
       if (oldReservation?.exists && oldReservation.data().storeId === storeId) tx.delete(oldRef);
-      tx.update(store, {name, shopAddress, nameLowercase: normalized, nameKey, updatedAt: timestamp});
+      // Older app releases still send a single address. Never leave stale structured fields.
+      const savedAddress = address ?? (shopAddress === data.shopAddress ? data.address ?? null : null);
+      tx.update(store, {name, shopAddress, address: savedAddress, nameLowercase: normalized, nameKey, updatedAt: timestamp});
       return {
-        id: storeId, name, shopAddress, code: data.code ?? storeId.slice(0, 6).toUpperCase(),
+        id: storeId, name, shopAddress, address: savedAddress, code: data.code ?? storeId.slice(0, 6).toUpperCase(),
         status: data.status ?? 'active', currency: data.currency ?? 'MYR', logoPath: data.logoPath ?? null,
       };
     });
