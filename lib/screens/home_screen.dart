@@ -1,25 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
-import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
-import '../widgets/expiry_date_filter.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/inventory_expiry_range.dart';
+import '../widgets/store_chat_button.dart';
 import 'add_item_screen.dart';
 import 'admin_item_detail_screen.dart';
 import 'items_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
-import '../widgets/category_filter.dart';
-import '../widgets/store_chat_button.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
+  const HomeScreen({super.key, this.inventoryStream, this.categoryStream});
+  final Stream<List<InventoryBatch>>? inventoryStream;
+  final Stream<List<StoreCategory>>? categoryStream;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -28,235 +25,296 @@ class _HomeScreenState extends State<HomeScreen> {
   String category = 'all';
   DateTimeRange? expiryRange;
   bool expiryAscending = true;
+  late final inventory =
+      widget.inventoryStream ?? FirestoreService.instance.watchInventory();
+  late final categories =
+      widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          StockWiseHeader(
-            title: StoreSession.instance.store?.name ?? 'StockWise',
-            trailing: StoreSession.instance.canManageMembers
-                ? const StoreChatButton()
-                : null,
-          ),
-          Expanded(
-            child: StreamBuilder<List<InventoryBatch>>(
-              stream: FirestoreService.instance.watchInventory(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Could not load inventory: ${snapshot.error}'),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final active = snapshot.data!
-                    .where(
-                      (item) =>
-                          item.status == 'active' && item.quantityOnHand > 0,
-                    )
-                    .toList();
-                final categories =
-                    active.map((item) => item.categoryId).toSet().toList()
-                      ..sort();
-                final now = DateTime.now();
-                final expiring =
-                    active.where((item) {
-                      final days = item.daysUntilExpiryFrom(now);
-                      if (days < 0 || days > 7) return false;
-                      if (category != 'all' && item.categoryId != category) {
-                        return false;
-                      }
-                      return _inRange(item.expiryAt);
-                    }).toList()..sort(
-                      (a, b) => expiryAscending
-                          ? a.expiryAt.compareTo(b.expiryAt)
-                          : b.expiryAt.compareTo(a.expiryAt),
-                    );
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-                  children: [
-                    Text(
-                      'Inventory overview',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _stat(
-                            'Active batches',
-                            '${active.length}',
-                            AppColors.primaryDark,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _stat(
-                            'Expiring in 7 days',
-                            '${expiring.length}',
-                            AppColors.warning,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    Row(
-                      children: [
-                        const Expanded(
-                          child: Text(
-                            'Expiring stock',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const ItemsScreen(),
-                            ),
-                          ),
-                          child: const Text('View all'),
-                        ),
-                      ],
-                    ),
-                    _filters(categories),
-                    const SizedBox(height: 10),
-                    if (expiring.isEmpty)
-                      const Card(
-                        child: Padding(
-                          padding: EdgeInsets.all(20),
-                          child: Text('No stock expires in the next 7 days.'),
-                        ),
-                      ),
-                    ...expiring
-                        .take(5)
-                        .map((item) => _batchCard(context, item)),
-                  ],
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
-            child: ElevatedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddItemScreen()),
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              InventoryHeader(
+                title: 'Overview',
+                storeName: StoreSession.instance.store?.name ?? 'StockWise',
+                trailing: StoreSession.instance.canManageMembers
+                    ? const StoreChatButton()
+                    : null,
               ),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('ADD INVENTORY'),
-            ),
+              Expanded(
+                child: StreamBuilder<List<StoreCategory>>(
+                  stream: categories,
+                  builder: (context, records) =>
+                      StreamBuilder<List<InventoryBatch>>(
+                        stream: inventory,
+                        builder: (context, snapshot) {
+                          if (snapshot.hasError) {
+                            return const InventoryEmpty(
+                              title: 'Could not load inventory',
+                              body:
+                                  'Check your connection and reopen this page.',
+                            );
+                          }
+                          if (!snapshot.hasData) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final active = snapshot.data!
+                              .where(
+                                (item) =>
+                                    item.status == 'active' &&
+                                    item.quantityOnHand > 0,
+                              )
+                              .toList();
+                          final ids =
+                              active
+                                  .map((item) => item.categoryId)
+                                  .toSet()
+                                  .toList()
+                                ..sort();
+                          final now = DateTime.now();
+                          final expiring =
+                              active.where((item) {
+                                final days = item.daysUntilExpiryFrom(now);
+                                return days >= 0 &&
+                                    days <= 7 &&
+                                    (category == 'all' ||
+                                        item.categoryId == category) &&
+                                    _inRange(item.expiryAt);
+                              }).toList()..sort(
+                                (a, b) => expiryAscending
+                                    ? a.expiryAt.compareTo(b.expiryAt)
+                                    : b.expiryAt.compareTo(a.expiryAt),
+                              );
+                          return ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                            children: [
+                              _stats(active.length, expiring.length),
+                              const SizedBox(height: 18),
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      'Expiring stock',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const ItemsScreen(),
+                                      ),
+                                    ),
+                                    child: const Text(
+                                      'View all',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              InventoryFilters(
+                                compact: true,
+                                ids: ids,
+                                records: records.data ?? [],
+                                category: category,
+                                onCategory: (value) =>
+                                    setState(() => category = value),
+                                range: expiryRange,
+                                onDate: () => _pickExpiryRange(context),
+                                onClearDate: () =>
+                                    setState(() => expiryRange = null),
+                                ascending: expiryAscending,
+                                onSort: () => setState(
+                                  () => expiryAscending = !expiryAscending,
+                                ),
+                              ),
+                              const SizedBox(height: 18),
+                              if (expiring.isEmpty)
+                                const Card(
+                                  child: InventoryEmpty(
+                                    title: 'All clear for the next 7 days',
+                                    body:
+                                        'No stock expires in the next 7 days.',
+                                    icon: Icons.check_rounded,
+                                  ),
+                                )
+                              else
+                                for (final item in expiring.take(5))
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: InventoryBatchTile(
+                                      item: item,
+                                      categoryName: inventoryCategoryName(
+                                        item.categoryId,
+                                        records.data ?? [],
+                                      ),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => AdminItemDetailScreen(
+                                            item: item,
+                                            categoryName: inventoryCategoryName(
+                                              item.categoryId,
+                                              records.data ?? [],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                            ],
+                          );
+                        },
+                      ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+                child: InventoryButton(
+                  label: 'Add inventory',
+                  centered: false,
+                  icon: Icons.add,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddItemScreen()),
+                  ),
+                ),
+              ),
+              _bottomNav(context),
+            ],
           ),
-          _bottomNav(context),
-        ],
+        ),
       ),
     ),
   );
 
-  Widget _stat(String label, String value, Color color) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+  Widget _stats(int active, int expiring) => LayoutBuilder(
+    builder: (context, constraints) {
+      final activeCard = Container(
+        height: 150,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: InventoryColors.ink,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'ACTIVE BATCHES',
+              style: TextStyle(
+                color: Color(0xFFC9DBCA),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '$active',
+                  style: const TextStyle(
+                    fontSize: 52,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Text(
+              'Across ${StoreSession.instance.store?.name ?? 'your store'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFFC9DBCA), fontSize: 11),
+            ),
+          ],
+        ),
+      );
+      final expiringCard = Container(
+        height: 150,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: InventoryColors.soft,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Icon(
+              Icons.access_time_rounded,
+              size: 24,
+              color: InventoryColors.green,
+            ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '$expiring',
+                  style: const TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const Text(
+              'Expiring in\n7 days',
+              style: TextStyle(fontSize: 10.5, color: InventoryColors.muted),
+            ),
+          ],
+        ),
+      );
+      if (constraints.maxWidth < 300 ||
+          MediaQuery.textScalerOf(context).scale(11) > 14) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [activeCard, const SizedBox(height: 13), expiringCard],
+        );
+      }
+      return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 27,
-              fontWeight: FontWeight.w900,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.muted,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Expanded(flex: 2, child: activeCard),
+          const SizedBox(width: 13),
+          Expanded(child: expiringCard),
         ],
-      ),
-    ),
-  );
-
-  Widget _filters(List<String> categories) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          CategoryFilter(
-            categoryIds: categories,
-            selected: category,
-            onChanged: (value) => setState(() => category = value),
-          ),
-          const SizedBox(height: 10),
-          ExpiryDateFilter(
-            range: expiryRange,
-            ascending: expiryAscending,
-            onPickRange: _pickExpiryRange,
-            onClearRange: () => setState(() => expiryRange = null),
-            onToggleSort: () =>
-                setState(() => expiryAscending = !expiryAscending),
-          ),
-        ],
-      ),
-    ),
+      );
+    },
   );
 
   bool _inRange(DateTime date) {
     final range = expiryRange;
     if (range == null) return true;
-    final day = DateTime(date.year, date.month, date.day);
-    final start = DateTime(
-      range.start.year,
-      range.start.month,
-      range.start.day,
-    );
-    final end = DateTime(range.end.year, range.end.month, range.end.day);
-    return !day.isBefore(start) && !day.isAfter(end);
+    final day = DateUtils.dateOnly(date);
+    return !day.isBefore(DateUtils.dateOnly(range.start)) &&
+        !day.isAfter(DateUtils.dateOnly(range.end));
   }
 
-  Future<void> _pickExpiryRange() async {
+  Future<void> _pickExpiryRange(BuildContext context) async {
     final now = DateTime.now();
-    final selected = await showDateRangePicker(
+    final selected = await showInventoryExpiryRange(
       context: context,
       firstDate: DateTime(now.year - 5),
       lastDate: DateTime(now.year + 10),
       initialDateRange: expiryRange,
     );
-    if (selected != null) setState(() => expiryRange = selected);
+    if (selected != null && mounted) setState(() => expiryRange = selected);
   }
 
-  Widget _batchCard(BuildContext context, InventoryBatch item) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.all(12),
-      leading: ProductArtwork(size: 52, imagePath: item.imagePath),
-      title: Text(
-        item.productName,
-        style: const TextStyle(fontWeight: FontWeight.w900),
-      ),
-      subtitle: Text(
-        'Exp: ${DateFormat('dd/MM/yyyy').format(item.expiryAt)}  •  Qty: ${item.quantityOnHand}',
-      ),
-      trailing: StatusPill(
-        item.daysUntilExpiry < 0 ? 'Expired' : '${item.daysUntilExpiry} days',
-        color: item.daysUntilExpiry <= 2 ? AppColors.danger : AppColors.warning,
-      ),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => AdminItemDetailScreen(item: item)),
-      ),
-    ),
-  );
-
-  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+  Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     currentIndex: 0,
     items: [
       const NavItem(

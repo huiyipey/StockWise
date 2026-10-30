@@ -7,6 +7,7 @@ import '../services/store_session.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/expiry_date_filter.dart';
+import '../widgets/inventory_expiry_range.dart';
 import '../widgets/stockwise_ui.dart';
 import '../widgets/product_price.dart';
 import 'cart_screen.dart';
@@ -266,7 +267,7 @@ class _ShopScreenState extends State<ShopScreen> {
 
   Future<void> _pickExpiryRange() async {
     final now = DateTime.now();
-    final selected = await showDateRangePicker(
+    final selected = await showInventoryExpiryRange(
       context: context,
       firstDate: DateTime(now.year),
       lastDate: DateTime(now.year + 10),

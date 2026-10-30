@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,7 +22,89 @@ class _SignupScreenState extends State<SignupScreen> {
   final _invalid = <String>{};
   bool _creating = false,
       _passwordVisible = false,
-      _confirmationVisible = false;
+      _confirmationVisible = false,
+      _confirmingLeave = false,
+      _allowExit = false;
+
+  bool get _hasUnsavedInformation =>
+      _email.text.isNotEmpty ||
+      _password.text.isNotEmpty ||
+      _confirmation.text.isNotEmpty;
+
+  Future<void> _requestLeave() async {
+    if (_creating || _confirmingLeave || _allowExit) return;
+    if (!_hasUnsavedInformation) {
+      Navigator.pop(context);
+      return;
+    }
+    _confirmingLeave = true;
+    FocusScope.of(context).unfocus();
+    try {
+      final discard = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(26),
+          ),
+          title: const Text(
+            'Discard signup information?',
+            style: TextStyle(
+              color: AuthColors.ink,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          content: const Text(
+            "You haven't created an account yet. If you leave now, the information you've entered will be discarded.",
+            style: TextStyle(
+              color: AuthColors.muted,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+          actions: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AuthColors.green,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text('Keep editing'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AuthColors.error,
+                  ),
+                  child: const Text('Discard and leave'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      if (discard != true || !mounted) return;
+      setState(() => _allowExit = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.pop(context);
+      }
+    } finally {
+      _confirmingLeave = false;
+    }
+  }
 
   void _clearFeedback(String _) => setState(() {
     _error = null;
@@ -56,7 +140,7 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _register() async {
-    if (_creating) return;
+    if (_creating || _confirmingLeave || _allowExit) return;
     final email = _email.text.trim(), password = _password.text;
     if (email.isEmpty || password.isEmpty) {
       _showError('Enter your email and password.', {
@@ -99,6 +183,12 @@ class _SignupScreenState extends State<SignupScreen> {
       }
       TextInput.finishAutofillContext();
       if (!mounted) return;
+      setState(() {
+        _allowExit = true;
+        _creating = false;
+      });
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
       if (widget.onAccountCreated != null) {
         widget.onAccountCreated!();
       } else {
@@ -125,14 +215,18 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !_creating,
+    canPop: !_creating && (_allowExit || !_hasUnsavedInformation),
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) unawaited(_requestLeave());
+    },
     child: AuthPage(
       footer: AuthAccountLink(
         prompt: 'Already have an account?',
         label: 'Sign in',
-        onPressed: _creating ? null : () => Navigator.pop(context),
+        onPressed: _creating ? null : _requestLeave,
       ),
       child: AutofillGroup(
+        onDisposeAction: AutofillContextAction.cancel,
         child: AuthCard(
           title: 'Create account',
           subtitle: 'Start with your email and password.',

@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ProductImageScreen extends StatefulWidget {
   final ImageProvider image;
   final String title;
+  final bool inventoryStyle;
 
   const ProductImageScreen({
     super.key,
     required this.image,
     required this.title,
+    this.inventoryStyle = false,
   });
 
   @override
@@ -64,16 +67,38 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: widget.inventoryStyle
+        ? const Color(0xFF1B2D24)
+        : Colors.black,
     appBar: AppBar(
-      backgroundColor: Colors.black,
+      backgroundColor: widget.inventoryStyle
+          ? const Color(0xFF1B2D24)
+          : Colors.black,
       foregroundColor: Colors.white,
-      leading: IconButton(
-        tooltip: 'Close image',
-        onPressed: () => Navigator.pop(context),
-        icon: const Icon(Icons.close_rounded),
+      systemOverlayStyle: SystemUiOverlayStyle.light,
+      leadingWidth: widget.inventoryStyle ? 70 : null,
+      titleSpacing: widget.inventoryStyle ? 0 : null,
+      leading: Padding(
+        padding: widget.inventoryStyle
+            ? const EdgeInsets.fromLTRB(20, 8, 8, 8)
+            : EdgeInsets.zero,
+        child: IconButton(
+          tooltip: 'Close image',
+          style: widget.inventoryStyle
+              ? IconButton.styleFrom(backgroundColor: const Color(0xFF334A3C))
+              : null,
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close_rounded),
+        ),
       ),
-      title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(
+        widget.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: widget.inventoryStyle
+            ? const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)
+            : null,
+      ),
     ),
     body: SafeArea(
       top: false,
@@ -100,11 +125,21 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
                       child: Image(
                         key: ValueKey(reload),
                         image: widget.image,
+                        width: widget.inventoryStyle
+                            ? viewport.width - 40
+                            : null,
                         fit: BoxFit.contain,
                         semanticLabel: widget.title,
                         frameBuilder: (context, child, frame, synchronous) =>
                             frame != null || synchronous
-                            ? child
+                            ? widget.inventoryStyle
+                                  ? Center(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: child,
+                                      ),
+                                    )
+                                  : child
                             : const Center(
                                 child: CircularProgressIndicator(
                                   color: Colors.white,
@@ -138,44 +173,58 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
               },
             ),
           ),
-          ValueListenableBuilder<Matrix4>(
-            valueListenable: transformation,
-            builder: (context, matrix, _) {
-              final scale = matrix.getMaxScaleOnAxis();
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    tooltip: 'Zoom out',
-                    color: Colors.white,
-                    disabledColor: Colors.white38,
-                    onPressed: scale > 1 ? () => _stepZoom(1 / 1.5) : null,
-                    icon: const Icon(Icons.zoom_out_rounded),
-                  ),
-                  TextButton(
-                    onPressed: () => transformation.value = Matrix4.identity(),
-                    child: const Text(
-                      'Reset',
-                      style: TextStyle(color: Colors.white),
+          if (!widget.inventoryStyle)
+            ValueListenableBuilder<Matrix4>(
+              valueListenable: transformation,
+              builder: (context, matrix, _) {
+                final scale = matrix.getMaxScaleOnAxis();
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: 'Zoom out',
+                      color: Colors.white,
+                      disabledColor: Colors.white38,
+                      onPressed: scale > 1 ? () => _stepZoom(1 / 1.5) : null,
+                      icon: const Icon(Icons.zoom_out_rounded),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Zoom in',
-                    color: Colors.white,
-                    disabledColor: Colors.white38,
-                    onPressed: scale < maxScale ? () => _stepZoom(1.5) : null,
-                    icon: const Icon(Icons.zoom_in_rounded),
-                  ),
-                ],
-              );
-            },
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    TextButton(
+                      onPressed: () =>
+                          transformation.value = Matrix4.identity(),
+                      child: const Text(
+                        'Reset',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Zoom in',
+                      color: Colors.white,
+                      disabledColor: Colors.white38,
+                      onPressed: scale < maxScale ? () => _stepZoom(1.5) : null,
+                      icon: const Icon(Icons.zoom_in_rounded),
+                    ),
+                  ],
+                );
+              },
+            ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              0,
+              16,
+              widget.inventoryStyle ? 38 : 12,
+            ),
             child: Text(
-              'Pinch to zoom • Double-tap to enlarge or reset',
+              widget.inventoryStyle
+                  ? 'Pinch to zoom. Drag to move.'
+                  : 'Pinch to zoom • Double-tap to enlarge or reset',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: widget.inventoryStyle
+                    ? const Color(0xFFCAD9CB)
+                    : Colors.white70,
+                fontSize: widget.inventoryStyle ? 12 : null,
+              ),
             ),
           ),
         ],

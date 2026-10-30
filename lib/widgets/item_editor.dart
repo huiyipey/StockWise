@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../models/barcode_product.dart';
 import '../services/firestore_service.dart';
-import '../theme/app_theme.dart';
+import 'inventory_ui.dart';
 import '../screens/barcode_scanner_screen.dart';
 import 'stockwise_ui.dart';
 
@@ -94,295 +94,427 @@ class _ItemEditorState extends State<ItemEditor> {
   }
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !saving,
-    child: Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            StockWiseHeader(
-              title: widget.editing ? 'Edit Item' : 'Add New Item',
-              leading: saving ? null : const BackCircleButton(),
-            ),
-            Expanded(
-              child: StreamBuilder<List<StoreCategory>>(
-                stream: categoriesStream,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return const Center(
-                      child: Text(
-                        'Could not load categories. Please reopen this page.',
-                      ),
-                    );
-                  }
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final categories = snapshot.data!
-                      .where((c) => c.active || c.id == widget.item?.categoryId)
-                      .toList();
-                  availableCategories = categories;
-                  return Form(
-                    key: formKey,
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 34),
-                      children: [
-                        _photoPicker(),
-                        const SizedBox(height: 16),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => PopScope(
+        canPop: !saving,
+        child: Scaffold(
+          body: SafeArea(
+            child: Column(
+              children: [
+                InventoryHeader(
+                  title: widget.editing ? 'Edit item' : 'Add item',
+                  back: true,
+                  onBack: saving ? null : () => Navigator.maybePop(context),
+                ),
+                Expanded(
+                  child: StreamBuilder<List<StoreCategory>>(
+                    stream: categoriesStream,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const Center(
+                          child: Text(
+                            'Could not load categories. Please reopen this page.',
+                          ),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final categories = snapshot.data!
+                          .where(
+                            (c) => c.active || c.id == widget.item?.categoryId,
+                          )
+                          .toList();
+                      availableCategories = categories;
+                      return Form(
+                        key: formKey,
+                        child: ListView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                if (!widget.editing) ...[
-                                  const Text(
-                                    'Scan or enter a saved barcode to auto-fill, or fill in the details manually.',
+                                Card(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
                                   ),
-                                  const SizedBox(height: 12),
-                                  _barcodeField(),
-                                  const SizedBox(height: 8),
-                                  OutlinedButton.icon(
-                                    onPressed: busy ? null : _lookupBarcode,
-                                    icon: lookingUp
-                                        ? const SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        _photoPicker(),
+                                        const SizedBox(height: 22),
+                                        if (!widget.editing) ...[
+                                          const Text(
+                                            'Scan or enter a saved barcode to fill product details, or enter them manually.',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: InventoryColors.muted,
+                                              height: 1.5,
                                             ),
-                                          )
-                                        : const Icon(Icons.search_rounded),
-                                    label: Text(
-                                      lookingUp
-                                          ? 'LOOKING UP...'
-                                          : 'FIND SAVED PRODUCT',
-                                    ),
-                                  ),
-                                  if (lookupMessage != null)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                      ),
-                                      child: Text(
-                                        lookupMessage!,
-                                        style: TextStyle(
-                                          color: lookupFailed
-                                              ? AppColors.danger
-                                              : AppColors.primaryDark,
+                                          ),
+                                          const SizedBox(height: 16),
+                                        ],
+                                        _barcodeField(),
+                                        if (!widget.editing) ...[
+                                          const SizedBox(height: 12),
+                                          InventoryButton(
+                                            label: lookingUp
+                                                ? 'Looking up...'
+                                                : 'Find saved product',
+                                            icon: Icons.search_rounded,
+                                            busy: lookingUp,
+                                            soft: true,
+                                            onPressed: busy
+                                                ? null
+                                                : _lookupBarcode,
+                                          ),
+                                          if (lookupMessage != null)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 14,
+                                              ),
+                                              child: Semantics(
+                                                liveRegion: true,
+                                                child: Text(
+                                                  lookupMessage!,
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    height: 1.5,
+                                                    color: lookupFailed
+                                                        ? InventoryColors.error
+                                                        : InventoryColors.green,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                        const SizedBox(height: 18),
+                                        TextFormField(
+                                          key: const ValueKey('item-name'),
+                                          controller: name,
+                                          enabled: !busy,
+                                          textCapitalization:
+                                              TextCapitalization.words,
+                                          style: const TextStyle(fontSize: 13),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Name',
+                                            hintText: 'e.g. Fresh milk',
+                                          ),
+                                          validator: _required,
                                         ),
-                                      ),
-                                    ),
-                                  const SizedBox(height: 12),
-                                ],
-                                TextFormField(
-                                  key: const ValueKey('item-name'),
-                                  controller: name,
-                                  enabled: !busy,
-                                  textCapitalization: TextCapitalization.words,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Name',
-                                  ),
-                                  validator: _required,
-                                ),
-                                const SizedBox(height: 12),
-                                FormField<DateTime>(
-                                  key: expiryField,
-                                  initialValue: expiryAt,
-                                  validator: (value) => value == null
-                                      ? 'Choose an expiry date'
-                                      : null,
-                                  builder: (field) => InkWell(
-                                    key: const ValueKey('item-expiry'),
-                                    onTap: busy ? null : _pickDate,
-                                    child: InputDecorator(
-                                      decoration: InputDecoration(
-                                        labelText: 'Expiry Date',
-                                        errorText: field.errorText,
-                                        prefixIcon: const Icon(
-                                          Icons.calendar_month_outlined,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        field.value == null
-                                            ? 'Select expiry date'
-                                            : DateFormat(
-                                                'dd/MM/yyyy',
-                                              ).format(field.value!),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                _quantityRow(),
-                                const SizedBox(height: 12),
-                                DropdownButtonFormField<String>(
-                                  key: ValueKey('item-category-$category'),
-                                  initialValue:
-                                      categories.any((c) => c.id == category)
-                                      ? category
-                                      : null,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Category',
-                                  ),
-                                  items: categories
-                                      .map(
-                                        (value) => DropdownMenuItem(
-                                          value: value.id,
-                                          child: Text(
-                                            '${value.name}${value.active ? '' : ' (archived)'}',
+                                        const SizedBox(height: 18),
+                                        FormField<DateTime>(
+                                          key: expiryField,
+                                          initialValue: expiryAt,
+                                          validator: (value) => value == null
+                                              ? 'Choose an expiry date'
+                                              : null,
+                                          builder: (field) => InkWell(
+                                            key: const ValueKey('item-expiry'),
+                                            onTap: busy
+                                                ? null
+                                                : () => _pickDate(context),
+                                            child: InputDecorator(
+                                              decoration: InputDecoration(
+                                                labelText: 'Expiry date',
+                                                errorText: field.errorText,
+                                                suffixIcon: const Icon(
+                                                  Icons.calendar_today_outlined,
+                                                  size: 18,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                field.value == null
+                                                    ? 'Select expiry date'
+                                                    : DateFormat(
+                                                        'dd MMM yyyy',
+                                                      ).format(field.value!),
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: field.value == null
+                                                      ? InventoryColors.muted
+                                                      : InventoryColors.ink,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      )
-                                      .toList(),
-                                  onChanged: busy
-                                      ? null
-                                      : (value) =>
-                                            setState(() => category = value),
-                                  validator: (value) => value == null
-                                      ? 'Choose a category'
-                                      : null,
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  key: const ValueKey('item-unit'),
-                                  controller: unit,
-                                  enabled: !busy,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Unit',
-                                    hintText: 'unit, bottle, loaf...',
-                                  ),
-                                  validator: _required,
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  key: const ValueKey('item-price'),
-                                  controller: basePrice,
-                                  enabled: !busy,
-                                  keyboardType:
-                                      const TextInputType.numberWithOptions(
-                                        decimal: true,
-                                      ),
-                                  decoration: const InputDecoration(
-                                    labelText: 'Regular Price',
-                                    prefixText: 'RM  ',
-                                  ),
-                                  validator: _priceValidator,
-                                ),
-                                const SizedBox(height: 12),
-                                if (widget.editing) _barcodeField(),
-                                SwitchListTile.adaptive(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text(
-                                    'Promotion',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  value: promotion,
-                                  onChanged: busy
-                                      ? null
-                                      : (value) =>
-                                            setState(() => promotion = value),
-                                ),
-                                if (promotion)
-                                  TextFormField(
-                                    controller: promotionPrice,
-                                    enabled: !busy,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
+                                        const SizedBox(height: 18),
+                                        _quantityRow(),
+                                        const SizedBox(height: 18),
+                                        DropdownButtonFormField<String>(
+                                          key: ValueKey(
+                                            'item-category-$category',
+                                          ),
+                                          initialValue:
+                                              categories.any(
+                                                (c) => c.id == category,
+                                              )
+                                              ? category
+                                              : null,
+                                          isExpanded: true,
+                                          style: TextStyle(
+                                            fontFamily: Theme.of(
+                                              context,
+                                            ).textTheme.bodyMedium?.fontFamily,
+                                            color: InventoryColors.ink,
+                                            fontSize: 13,
+                                          ),
+                                          decoration: const InputDecoration(
+                                            labelText: 'Category',
+                                            hintText: 'Select category',
+                                          ),
+                                          items: categories
+                                              .map(
+                                                (value) => DropdownMenuItem(
+                                                  value: value.id,
+                                                  child: Text(
+                                                    '${value.name}${value.active ? '' : ' (archived)'}',
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              )
+                                              .toList(),
+                                          onChanged: busy
+                                              ? null
+                                              : (value) => setState(
+                                                  () => category = value,
+                                                ),
+                                          validator: (value) => value == null
+                                              ? 'Choose a category'
+                                              : null,
                                         ),
-                                    decoration: const InputDecoration(
-                                      labelText: 'Promotion Price',
-                                      prefixText: 'RM  ',
-                                    ),
-                                    validator: _priceValidator,
-                                  ),
-                                SwitchListTile.adaptive(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text(
-                                    'Receive Notifications',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  value: notifications,
-                                  onChanged: busy
-                                      ? null
-                                      : (value) => setState(
-                                          () => notifications = value,
+                                        const SizedBox(height: 18),
+                                        LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final fields = [
+                                              TextFormField(
+                                                key: const ValueKey(
+                                                  'item-unit',
+                                                ),
+                                                controller: unit,
+                                                enabled: !busy,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                ),
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText: 'Unit',
+                                                      hintText: 'e.g. bottle',
+                                                    ),
+                                                validator: _required,
+                                              ),
+                                              TextFormField(
+                                                key: const ValueKey(
+                                                  'item-price',
+                                                ),
+                                                controller: basePrice,
+                                                enabled: !busy,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                ),
+                                                keyboardType:
+                                                    const TextInputType.numberWithOptions(
+                                                      decimal: true,
+                                                    ),
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText:
+                                                          'Regular price',
+                                                      prefixText: 'RM ',
+                                                      hintText: '0.00',
+                                                    ),
+                                                validator: _priceValidator,
+                                              ),
+                                            ];
+                                            if (constraints.maxWidth < 275 ||
+                                                MediaQuery.textScalerOf(
+                                                      context,
+                                                    ).scale(13) >
+                                                    18) {
+                                              return Column(
+                                                children: [
+                                                  fields[0],
+                                                  const SizedBox(height: 18),
+                                                  fields[1],
+                                                ],
+                                              );
+                                            }
+                                            return Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Expanded(child: fields[0]),
+                                                const SizedBox(width: 16),
+                                                Expanded(child: fields[1]),
+                                              ],
+                                            );
+                                          },
                                         ),
+                                        const SizedBox(height: 14),
+                                        SwitchListTile.adaptive(
+                                          contentPadding: EdgeInsets.zero,
+                                          title: const Text(
+                                            'Promotion',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          value: promotion,
+                                          onChanged: busy
+                                              ? null
+                                              : (value) => setState(
+                                                  () => promotion = value,
+                                                ),
+                                        ),
+                                        if (promotion) ...[
+                                          const SizedBox(height: 6),
+                                          TextFormField(
+                                            key: const ValueKey(
+                                              'item-promotion-price',
+                                            ),
+                                            controller: promotionPrice,
+                                            enabled: !busy,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                            keyboardType:
+                                                const TextInputType.numberWithOptions(
+                                                  decimal: true,
+                                                ),
+                                            decoration: const InputDecoration(
+                                              labelText: 'Promotion price',
+                                              prefixText: 'RM ',
+                                              hintText: '0.00',
+                                            ),
+                                            validator: _priceValidator,
+                                          ),
+                                          const SizedBox(height: 14),
+                                        ],
+                                        SwitchListTile.adaptive(
+                                          contentPadding: EdgeInsets.zero,
+                                          title: const Text(
+                                            'Receive notifications',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          subtitle: const Text(
+                                            'Expiry notifications for this batch',
+                                            style: TextStyle(
+                                              fontSize: 10.5,
+                                              color: InventoryColors.muted,
+                                            ),
+                                          ),
+                                          value: notifications,
+                                          onChanged: busy
+                                              ? null
+                                              : (value) => setState(
+                                                  () => notifications = value,
+                                                ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(height: 12),
-                                ElevatedButton(
+                                const SizedBox(height: 24),
+                                InventoryButton(
+                                  key: const ValueKey('save-inventory'),
+                                  label: saving
+                                      ? 'Saving...'
+                                      : widget.editing
+                                      ? 'Save changes'
+                                      : 'Save item',
+                                  busy: saving,
                                   onPressed: busy ? null : _save,
-                                  child: Text(
-                                    saving
-                                        ? 'SAVING...'
-                                        : widget.editing
-                                        ? 'SAVE CHANGES'
-                                        : 'SAVE ITEM',
-                                  ),
                                 ),
                               ],
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ),
   );
 
-  Widget _photoPicker() => Card(
+  Widget _photoPicker() => Material(
+    color: InventoryColors.background,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: const BorderSide(color: InventoryColors.line),
+    ),
+    clipBehavior: Clip.antiAlias,
     child: InkWell(
-      borderRadius: BorderRadius.circular(18),
+      key: const ValueKey('item-photo'),
       onTap: busy ? null : _pickImage,
-      child: Container(
-        height: 150,
-        alignment: Alignment.center,
-        margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF0F2EF),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: image == null
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ProductArtwork(size: 72, imagePath: imagePath),
-                  const SizedBox(height: 8),
-                  Text(
-                    imagePath == null
-                        ? 'Choose Photo (optional)'
-                        : 'Replace Photo',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (image != null)
+              FutureBuilder<Uint8List>(
+                future: image!.readAsBytes(),
+                builder: (_, snapshot) => snapshot.hasData
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.memory(
+                          snapshot.data!,
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.photo_outlined,
+                        size: 44,
+                        color: InventoryColors.green,
+                      ),
               )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.primaryDark,
-                    size: 42,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    image!.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+            else if (imagePath != null && imagePath!.isNotEmpty)
+              ProductArtwork(size: 72, imagePath: imagePath)
+            else
+              const Icon(
+                Icons.photo_outlined,
+                size: 44,
+                color: InventoryColors.green,
               ),
+            const SizedBox(height: 12),
+            Text(
+              image != null || (imagePath?.isNotEmpty ?? false)
+                  ? 'Replace photo'
+                  : 'Choose photo',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: InventoryColors.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Optional / Photo library',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10.5, color: InventoryColors.muted),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -394,7 +526,7 @@ class _ItemEditorState extends State<ItemEditor> {
     keyboardType: TextInputType.number,
     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
     textAlign: TextAlign.center,
-    style: const TextStyle(fontWeight: FontWeight.w900),
+    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
     onChanged: (_) => setState(() {}),
     validator: (value) {
       final number = int.tryParse(value ?? '');
@@ -407,12 +539,18 @@ class _ItemEditorState extends State<ItemEditor> {
         onPressed: !busy && (int.tryParse(quantity.text) ?? 0) > 0
             ? () => _changeQuantity(-1)
             : null,
-        icon: const Icon(Icons.remove_circle_outline_rounded),
+        icon: const Icon(
+          Icons.remove_circle_outline_rounded,
+          color: InventoryColors.green,
+        ),
       ),
       suffixIcon: IconButton(
         tooltip: 'Increase quantity',
         onPressed: busy ? null : () => _changeQuantity(1),
-        icon: const Icon(Icons.add_circle_outline_rounded),
+        icon: const Icon(
+          Icons.add_circle_outline_rounded,
+          color: InventoryColors.green,
+        ),
       ),
     ),
   );
@@ -427,12 +565,12 @@ class _ItemEditorState extends State<ItemEditor> {
     });
   }
 
-  Future<void> _pickDate() async {
+  Future<void> _pickDate(BuildContext pickerContext) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final selected = expiryAt;
     final picked = await showDatePicker(
-      context: context,
+      context: pickerContext,
       initialDate: selected == null || selected.isBefore(today)
           ? today
           : selected,
@@ -452,7 +590,7 @@ class _ItemEditorState extends State<ItemEditor> {
       imageQuality: 82,
       maxWidth: 1600,
     );
-    if (picked != null) setState(() => image = picked);
+    if (picked != null && mounted) setState(() => image = picked);
   }
 
   Future<void> _scanBarcode() async {
@@ -493,11 +631,11 @@ class _ItemEditorState extends State<ItemEditor> {
     onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
     decoration: InputDecoration(
       labelText: 'Barcode',
-      prefixIcon: const Icon(Icons.qr_code_scanner_rounded),
+      hintText: 'Scan or enter barcode',
       suffixIcon: IconButton(
         tooltip: 'Scan barcode',
         onPressed: busy ? null : _scanBarcode,
-        icon: const Icon(Icons.document_scanner_outlined),
+        icon: const Icon(Icons.qr_code_scanner_rounded, size: 20),
       ),
     ),
   );
