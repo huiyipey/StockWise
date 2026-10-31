@@ -53,15 +53,15 @@ class _StoreChatButtonState extends State<StoreChatButton> {
           onPressed: () => openStoreChat(context, repository: repository),
           style: widget.inventoryStyle
               ? IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: InventoryColors.green,
+                  backgroundColor: InventoryColors.green,
+                  foregroundColor: Colors.white,
                   shape: const CircleBorder(),
                   minimumSize: const Size.square(40),
                 )
               : null,
           icon: Icon(
             Icons.chat_bubble_outline_rounded,
-            color: widget.inventoryStyle ? InventoryColors.green : Colors.white,
+            color: Colors.white,
             size: widget.inventoryStyle ? 20 : null,
           ),
         ),

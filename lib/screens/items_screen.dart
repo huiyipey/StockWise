@@ -119,8 +119,15 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                 borderRadius: BorderRadius.circular(12),
                                 child: TextField(
                                   controller: searchController,
+                                  textAlignVertical: TextAlignVertical.center,
                                   style: const TextStyle(fontSize: 13),
                                   decoration: InputDecoration(
+                                    floatingLabelBehavior:
+                                        FloatingLabelBehavior.never,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
                                     constraints: const BoxConstraints(
                                       minHeight: 46,
                                     ),
@@ -213,6 +220,11 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                               item.categoryId,
                                               records.data ?? [],
                                             ),
+                                            onDiscarded: (message) =>
+                                                showInventoryOverlayFeedback(
+                                                  context,
+                                                  message,
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -239,7 +251,12 @@ class _ItemsScreenState extends State<ItemsScreen> {
           shape: const CircleBorder(),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const AddItemScreen()),
+            MaterialPageRoute(
+              builder: (_) => AddItemScreen(
+                onSaved: (message) =>
+                    showInventoryOverlayFeedback(context, message),
+              ),
+            ),
           ),
           child: const Icon(Icons.add_rounded),
         ),

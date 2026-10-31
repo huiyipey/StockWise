@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'store_address.dart';
+import 'product_name.dart';
 
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
@@ -161,7 +162,9 @@ class InventoryBatch {
     return InventoryBatch(
       id: doc.id,
       productId: data['productId'] as String? ?? '',
-      productName: data['productName'] as String? ?? 'Unnamed product',
+      productName: capitalizeProductName(
+        data['productName'] as String? ?? 'Unnamed product',
+      ),
       categoryId: data['categoryId'] as String? ?? 'others',
       barcode: data['barcode'] as String?,
       imagePath: data['imagePath'] as String?,
@@ -209,7 +212,9 @@ class CartLine {
       id: doc.id,
       batchId: data['batchId'] as String? ?? doc.id,
       productId: data['productId'] as String? ?? '',
-      productName: data['productName'] as String? ?? 'Product',
+      productName: capitalizeProductName(
+        data['productName'] as String? ?? 'Product',
+      ),
       imagePath: data['imagePath'] as String?,
       expiryAt: _date(data['expiryAt']),
       quantity: _int(data['quantity']),
@@ -303,7 +308,9 @@ class OrderLine {
       id: id,
       productId: data['productId'] as String? ?? '',
       batchId: data['batchId'] as String? ?? '',
-      productName: data['productName'] as String? ?? 'Product',
+      productName: capitalizeProductName(
+        data['productName'] as String? ?? 'Product',
+      ),
       imagePath: data['imagePath'] as String?,
       expiryAt: _date(data['expiryAt']),
       unitLabel: data['unitLabel'] as String? ?? 'unit',
@@ -365,7 +372,9 @@ class InventoryEvent {
     final data = doc.data() ?? const <String, dynamic>{};
     return InventoryEvent(
       id: doc.id,
-      productName: data['productName'] as String? ?? 'Product',
+      productName: capitalizeProductName(
+        data['productName'] as String? ?? 'Product',
+      ),
       categoryId: data['categoryId'] as String? ?? 'others',
       eventType: data['eventType'] as String? ?? 'adjusted',
       quantity: _int(data['quantity']),

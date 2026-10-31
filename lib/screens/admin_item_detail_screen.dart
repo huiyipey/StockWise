@@ -13,6 +13,7 @@ class AdminItemDetailScreen extends StatelessWidget {
     required this.item,
     this.categoryName,
     this.onDiscard,
+    this.onDiscarded,
     this.onEdit,
     this.imageProvider,
   });
@@ -20,6 +21,7 @@ class AdminItemDetailScreen extends StatelessWidget {
   final InventoryBatch item;
   final String? categoryName;
   final Future<void> Function()? onDiscard;
+  final ValueChanged<String>? onDiscarded;
   final VoidCallback? onEdit;
   final ImageProvider? imageProvider;
 
@@ -242,7 +244,7 @@ class AdminItemDetailScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: const Icon(
-            Icons.calendar_today_outlined,
+            Icons.access_time_rounded,
             size: 20,
             color: InventoryColors.green,
           ),
@@ -470,7 +472,12 @@ class AdminItemDetailScreen extends StatelessWidget {
     if (discarded == true && context.mounted) {
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      messenger.showSnackBar(inventoryFeedback('$quantity recorded as waste.'));
+      final message = '$quantity recorded as waste.';
+      if (onDiscarded != null) {
+        onDiscarded!(message);
+      } else {
+        messenger.showSnackBar(inventoryFeedback(message));
+      }
     }
   }
 }
@@ -547,7 +554,8 @@ class _ItemPhotoState extends State<_ItemPhoto> {
     child: ColoredBox(
       color: InventoryColors.background,
       child: SizedBox(
-        height: 142,
+        key: const ValueKey('item-details-photo'),
+        height: 166,
         width: double.infinity,
         child: FutureBuilder<ImageProvider?>(
           future: image,

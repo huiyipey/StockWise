@@ -102,7 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   const Expanded(
                                     child: Text(
-                                      'Expiring stock',
+                                      'Expiring Stock',
                                       style: TextStyle(
                                         fontSize: 21,
                                         fontWeight: FontWeight.w700,
@@ -169,6 +169,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                               item.categoryId,
                                               records.data ?? [],
                                             ),
+                                            onDiscarded: (message) =>
+                                                showInventoryOverlayFeedback(
+                                                  context,
+                                                  message,
+                                                  navigationFontSize: 10.5,
+                                                ),
                                           ),
                                         ),
                                       ),
@@ -189,13 +195,21 @@ class _HomeScreenState extends State<HomeScreen> {
           width: MediaQuery.sizeOf(context).width - 40,
           child: InventoryButton(
             key: const ValueKey('home-add-inventory'),
-            label: 'Add inventory',
+            label: 'Add Inventory',
             height: 44,
             fontSize: 14,
             icon: Icons.add,
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AddItemScreen()),
+              MaterialPageRoute(
+                builder: (_) => AddItemScreen(
+                  onSaved: (message) => showInventoryOverlayFeedback(
+                    context,
+                    message,
+                    navigationFontSize: 10.5,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

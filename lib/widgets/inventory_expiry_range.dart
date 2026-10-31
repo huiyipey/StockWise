@@ -7,7 +7,6 @@ Future<DateTimeRange?> showInventoryExpiryRange({
   required DateTime firstDate,
   required DateTime lastDate,
   DateTimeRange? initialDateRange,
-  bool showHeaderCalendar = true,
 }) => showDialog<DateTimeRange>(
   context: context,
   builder: (_) => InventoryTheme(
@@ -15,7 +14,6 @@ Future<DateTimeRange?> showInventoryExpiryRange({
       first: DateUtils.dateOnly(firstDate),
       last: DateUtils.dateOnly(lastDate),
       initial: initialDateRange,
-      showHeaderCalendar: showHeaderCalendar,
     ),
   ),
 );
@@ -25,11 +23,9 @@ class _ExpiryRangeDialog extends StatefulWidget {
     required this.first,
     required this.last,
     this.initial,
-    required this.showHeaderCalendar,
   });
   final DateTime first, last;
   final DateTimeRange? initial;
-  final bool showHeaderCalendar;
   @override
   State<_ExpiryRangeDialog> createState() => _ExpiryRangeDialogState();
 }
@@ -108,106 +104,124 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
   @override
   Widget build(BuildContext context) {
     final help = MaterialLocalizations.of(context).dateHelpText.toUpperCase();
-    return AlertDialog(
+    return Dialog(
+      alignment: const Alignment(0, .35),
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      title: Row(
-        children: [
-          const Expanded(
-            child: Text(
-              'Enter expiry range',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (widget.showHeaderCalendar)
-            IconButton(
-              onPressed: calendar,
-              tooltip: 'Choose range on calendar',
-              icon: const Icon(Icons.calendar_today_outlined, size: 21),
-            ),
-        ],
-      ),
-      content: SizedBox(
+      child: SizedBox(
+        key: const ValueKey('expiry-range-surface'),
         width: 350,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Select the first and last expiry dates.',
-                style: TextStyle(fontSize: 12, color: InventoryColors.muted),
-              ),
-              const SizedBox(height: 22),
-              TextField(
-                key: const ValueKey('expiry-range-start'),
-                controller: start,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: InventoryColors.ink,
-                ),
-                keyboardType: TextInputType.datetime,
-                textInputAction: TextInputAction.next,
-                onChanged: (_) => setState(() => startError = null),
-                decoration: InputDecoration(
-                  labelText: 'Start date / $help',
-                  hintText: help,
-                  errorText: startError,
-                  suffixIcon: IconButton(
-                    onPressed: calendar,
-                    tooltip: 'Choose start on calendar',
-                    icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              TextField(
-                key: const ValueKey('expiry-range-end'),
-                controller: end,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: InventoryColors.ink,
-                ),
-                keyboardType: TextInputType.datetime,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => apply(),
-                onChanged: (_) => setState(() => endError = null),
-                decoration: InputDecoration(
-                  labelText: 'End date / $help',
-                  hintText: help,
-                  errorText: endError,
-                  suffixIcon: IconButton(
-                    onPressed: calendar,
-                    tooltip: 'Choose end on calendar',
-                    icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(22, 8, 22, 18),
-      actions: [
-        Row(
+        height: 480,
+        child: Column(
           children: [
             Expanded(
-              child: InventoryButton(
-                label: 'Cancel',
-                soft: true,
-                onPressed: () => Navigator.pop(context),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Enter expiry range',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: InventoryColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Select the first and last expiry dates.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: InventoryColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    TextField(
+                      key: const ValueKey('expiry-range-start'),
+                      controller: start,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: InventoryColors.ink,
+                      ),
+                      keyboardType: TextInputType.datetime,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) => setState(() => startError = null),
+                      decoration: InputDecoration(
+                        labelText: 'Start date / $help',
+                        hintText: help,
+                        errorText: startError,
+                        suffixIcon: IconButton(
+                          onPressed: calendar,
+                          tooltip: 'Choose start on calendar',
+                          icon: const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      key: const ValueKey('expiry-range-end'),
+                      controller: end,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: InventoryColors.ink,
+                      ),
+                      keyboardType: TextInputType.datetime,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => apply(),
+                      onChanged: (_) => setState(() => endError = null),
+                      decoration: InputDecoration(
+                        labelText: 'End date / $help',
+                        hintText: help,
+                        errorText: endError,
+                        suffixIcon: IconButton(
+                          onPressed: calendar,
+                          tooltip: 'Choose end on calendar',
+                          icon: const Icon(
+                            Icons.calendar_today_outlined,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: InventoryButton(
-                label: 'Apply',
-                height: 46,
-                onPressed: apply,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Row(
+                  key: const ValueKey('expiry-range-actions'),
+                  children: [
+                    Expanded(
+                      child: InventoryButton(
+                        label: 'Cancel',
+                        height: 46,
+                        soft: true,
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    const SizedBox(width: 15),
+                    Expanded(
+                      child: InventoryButton(
+                        label: 'OK',
+                        height: 46,
+                        onPressed: apply,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 }

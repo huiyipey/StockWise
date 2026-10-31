@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/report_service.dart';
+import '../models/product_name.dart';
 import '../theme/app_theme.dart';
 
 class ReportDashboard extends StatefulWidget {
@@ -393,6 +394,8 @@ class _ReportDashboardState extends State<ReportDashboard> {
                             Text(
                               kind == 'sales' && e.key >= 2
                                   ? (e.value as num).toStringAsFixed(2)
+                                  : kind == 'waste' && e.key == 1
+                                  ? capitalizeProductName('${e.value}')
                                   : '${e.value}',
                             ),
                           ),

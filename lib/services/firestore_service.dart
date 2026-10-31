@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/app_models.dart';
 import '../models/store_address.dart';
 import '../models/barcode_product.dart';
+import '../models/product_name.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -406,6 +407,7 @@ class FirestoreService {
     XFile? image,
   }) async {
     if (name.trim().isEmpty) throw ArgumentError('Product name is required.');
+    final productName = capitalizeProductName(name.trim());
     if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
     if (basePriceCents < 0) throw ArgumentError('Price cannot be negative.');
     if (promotionEnabled &&
@@ -432,8 +434,8 @@ class FirestoreService {
     final write = _db.batch();
     final productData = <String, dynamic>{
       'storeId': _storeId,
-      'name': name.trim(),
-      'nameLowercase': name.trim().toLowerCase(),
+      'name': productName,
+      'nameLowercase': productName.toLowerCase(),
       'categoryId': categoryId,
       'barcode': barcode?.trim().isEmpty == true ? null : barcode?.trim(),
       'imagePath': imagePath,
@@ -447,8 +449,8 @@ class FirestoreService {
     final inventoryData = <String, dynamic>{
       'storeId': _storeId,
       'productId': productRef.id,
-      'productName': name.trim(),
-      'productNameLowercase': name.trim().toLowerCase(),
+      'productName': productName,
+      'productNameLowercase': productName.toLowerCase(),
       'categoryId': categoryId,
       'barcode': barcode?.trim().isEmpty == true ? null : barcode?.trim(),
       'imagePath': imagePath,
@@ -477,7 +479,7 @@ class FirestoreService {
         'storeId': _storeId,
         'batchId': batchRef.id,
         'productId': productRef.id,
-        'productName': name.trim(),
+        'productName': productName,
         'categoryId': categoryId,
         'eventType': 'received',
         'quantity': quantity,
@@ -490,7 +492,7 @@ class FirestoreService {
         'storeId': _storeId,
         'batchId': batchRef.id,
         'productId': productRef.id,
-        'productName': name.trim(),
+        'productName': productName,
         'categoryId': categoryId,
         'eventType': 'adjusted',
         'quantity': (quantity - existing.quantityOnHand).abs(),

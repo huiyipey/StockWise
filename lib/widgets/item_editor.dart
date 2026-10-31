@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
 import '../models/barcode_product.dart';
+import '../models/product_name.dart';
 import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
+import 'product_name_formatter.dart';
 import '../screens/barcode_scanner_screen.dart';
 import 'stockwise_ui.dart';
 
@@ -16,6 +18,7 @@ class ItemEditor extends StatefulWidget {
   final BarcodeProductLookup? barcodeLookup;
   final Future<String?> Function()? scanBarcode;
   final InventoryItemSaver? onSave;
+  final ValueChanged<String>? onSaved;
 
   const ItemEditor({
     super.key,
@@ -24,6 +27,7 @@ class ItemEditor extends StatefulWidget {
     this.barcodeLookup,
     this.scanBarcode,
     this.onSave,
+    this.onSaved,
   });
 
   bool get editing => item != null;
@@ -45,6 +49,7 @@ class _ItemEditorState extends State<ItemEditor> {
   DateTime? expiryAt;
   final expiryField = GlobalKey<FormFieldState<DateTime>>();
   final quantityField = GlobalKey<FormFieldState<String>>();
+  final barcodeAnchor = GlobalKey();
   bool quantityFocused = false;
   BarcodeProduct? reusedProduct;
   List<StoreCategory> availableCategories = [];
@@ -65,7 +70,9 @@ class _ItemEditorState extends State<ItemEditor> {
   void initState() {
     super.initState();
     final item = widget.item;
-    name = TextEditingController(text: item?.productName ?? '');
+    name = TextEditingController(
+      text: capitalizeProductName(item?.productName ?? ''),
+    );
     barcode = TextEditingController(text: item?.barcode ?? '');
     unit = TextEditingController(text: item?.unitLabel ?? 'unit');
     basePrice = TextEditingController(
@@ -155,7 +162,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                         const SizedBox(height: 22),
                                         if (!widget.editing) ...[
                                           const Text(
-                                            'Scan or enter a saved barcode to fill product details, or enter them manually.',
+                                            'Scan or enter a barcode before saving. Find a saved product or enter its details manually.',
                                             style: TextStyle(
                                               fontSize: 11.5,
                                               color: InventoryColors.muted,
@@ -164,7 +171,10 @@ class _ItemEditorState extends State<ItemEditor> {
                                           ),
                                           const SizedBox(height: 16),
                                         ],
-                                        _barcodeField(),
+                                        KeyedSubtree(
+                                          key: barcodeAnchor,
+                                          child: _barcodeField(),
+                                        ),
                                         if (!widget.editing) ...[
                                           const SizedBox(height: 12),
                                           InventoryButton(
@@ -223,10 +233,13 @@ class _ItemEditorState extends State<ItemEditor> {
                                           enabled: !busy,
                                           textCapitalization:
                                               TextCapitalization.words,
+                                          inputFormatters: const [
+                                            ProductNameFormatter(),
+                                          ],
                                           style: const TextStyle(fontSize: 13),
                                           decoration: const InputDecoration(
                                             labelText: 'Name',
-                                            hintText: 'e.g. Fresh milk',
+                                            hintText: 'e.g. Fresh Milk',
                                           ),
                                           validator: _required,
                                         ),
@@ -444,7 +457,7 @@ class _ItemEditorState extends State<ItemEditor> {
       key: const ValueKey('item-photo'),
       onTap: busy ? null : _pickImage,
       child: Container(
-        constraints: const BoxConstraints(minHeight: 126),
+        constraints: const BoxConstraints(minHeight: 150),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -708,7 +721,11 @@ class _ItemEditorState extends State<ItemEditor> {
     enabled: !busy,
     keyboardType: TextInputType.number,
     style: const TextStyle(fontSize: 13),
+    autovalidateMode: AutovalidateMode.onUserInteraction,
     onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
+    validator: (value) => !widget.editing && (value?.trim().isEmpty ?? true)
+        ? 'Scan or enter a barcode.'
+        : null,
     decoration: InputDecoration(
       labelText: 'Barcode',
       hintText: 'Scan or enter barcode',
@@ -771,7 +788,7 @@ class _ItemEditorState extends State<ItemEditor> {
           return;
         }
         reusedProduct = product;
-        name.text = product.name;
+        name.text = capitalizeProductName(product.name);
         unit.text = product.unitLabel;
         basePrice.text = (product.basePriceCents / 100).toStringAsFixed(2);
         category =
@@ -810,13 +827,24 @@ class _ItemEditorState extends State<ItemEditor> {
   int _cents(String value) => (double.parse(value.trim()) * 100).round();
 
   Future<void> _save() async {
-    if (busy || !(formKey.currentState?.validate() ?? false)) return;
+    if (busy) return;
+    if (!(formKey.currentState?.validate() ?? false)) {
+      if (!widget.editing && barcode.text.trim().isEmpty) {
+        FocusScope.of(context).unfocus();
+        await Scrollable.ensureVisible(
+          barcodeAnchor.currentContext!,
+          alignment: .2,
+          duration: const Duration(milliseconds: 200),
+        );
+      }
+      return;
+    }
     setState(() => saving = true);
     try {
       final input = InventoryItemInput(
         existing: widget.item,
         reusedProduct: reusedProduct,
-        name: name.text,
+        name: capitalizeProductName(name.text.trim()),
         category: category!,
         unitLabel: unit.text,
         barcode: barcode.text,
@@ -835,10 +863,15 @@ class _ItemEditorState extends State<ItemEditor> {
       setState(() => saving = false);
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        inventoryFeedback(widget.editing ? 'Item updated' : 'Item saved'),
-      );
+      final message = widget.editing ? 'Item updated' : 'Item saved';
+      final onSaved = widget.onSaved;
+      final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
+      if (onSaved != null) {
+        onSaved(message);
+      } else {
+        messenger.showSnackBar(inventoryFeedback(message));
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

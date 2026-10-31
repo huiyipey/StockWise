@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'app_models.dart';
+import 'product_name.dart';
 
 /// Reusable product details, without batch expiry, stock or promotions.
 class BarcodeProduct {
@@ -34,7 +35,7 @@ class BarcodeProduct {
   ) => BarcodeProduct(
     id: id,
     storeId: storeId,
-    name: data['name'] as String? ?? '',
+    name: capitalizeProductName(data['name'] as String? ?? ''),
     barcode: data['barcode'] as String? ?? '',
     categoryId: data['categoryId'] as String? ?? '',
     unitLabel: data['unitLabel'] as String? ?? 'unit',

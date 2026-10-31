@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat;
 
@@ -50,6 +52,97 @@ SnackBar inventoryFeedback(
     ],
   ),
 );
+
+/// Paints over the floating Add action without moving it above the message.
+void showInventoryOverlayFeedback(
+  BuildContext context,
+  String message, {
+  double navigationFontSize = 9.5,
+}) {
+  if (!context.mounted) return;
+  final overlay = Overlay.of(context, rootOverlay: true);
+  var dismissed = false;
+  late final OverlayEntry entry;
+  void dismiss() {
+    if (dismissed) return;
+    dismissed = true;
+    if (entry.mounted) entry.remove();
+    entry.dispose();
+  }
+
+  entry = OverlayEntry(
+    builder: (context) {
+      final media = MediaQuery.of(context);
+      return Positioned(
+        left: 20,
+        right: 20,
+        bottom:
+            media.viewPadding.bottom +
+            InventoryBottomNav.heightFor(media.textScaler, navigationFontSize) +
+            22,
+        child: _InventoryOverlayFeedback(message: message, onDismiss: dismiss),
+      );
+    },
+  );
+  overlay.insert(entry);
+}
+
+class _InventoryOverlayFeedback extends StatefulWidget {
+  const _InventoryOverlayFeedback({
+    required this.message,
+    required this.onDismiss,
+  });
+  final String message;
+  final VoidCallback onDismiss;
+  @override
+  State<_InventoryOverlayFeedback> createState() =>
+      _InventoryOverlayFeedbackState();
+}
+
+class _InventoryOverlayFeedbackState extends State<_InventoryOverlayFeedback> {
+  late final Timer timer;
+  @override
+  void initState() {
+    super.initState();
+    timer = Timer(const Duration(seconds: 4), widget.onDismiss);
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: Material(
+      key: const ValueKey('inventory-overlay-feedback'),
+      color: InventoryColors.ink,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        child: Row(
+          children: [
+            const Icon(Icons.check_rounded, size: 20, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                widget.message,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 /// Keeps the approved inventory design scoped to its own pages and dialogs.
 class InventoryTheme extends StatelessWidget {
@@ -398,12 +491,15 @@ class InventoryBottomNav extends StatelessWidget {
   final int currentIndex;
   final List<NavItem> items;
   final double fontSize;
+  static double heightFor(TextScaler textScaler, double fontSize) =>
+      (22 + 4 + textScaler.scale(fontSize) * 1.2 * 2 + 24).clamp(
+        76,
+        double.infinity,
+      );
   @override
   Widget build(BuildContext context) {
-    final labelHeight =
-        MediaQuery.textScalerOf(context).scale(fontSize) * 1.2 * 2;
     return Container(
-      height: (22 + 4 + labelHeight + 24).clamp(76, double.infinity),
+      height: heightFor(MediaQuery.textScalerOf(context), fontSize),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: InventoryColors.line)),
@@ -559,7 +655,10 @@ class InventoryBatchTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ProductArtwork(size: 52, imagePath: item.imagePath),
+              ProductArtwork(
+                size: enlarged ? 64 : 52,
+                imagePath: item.imagePath,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -568,8 +667,10 @@ class InventoryBatchTile extends StatelessWidget {
                     Text(
                       item.productName,
                       style: TextStyle(
-                        fontSize: enlarged ? 15 : 14,
-                        fontWeight: FontWeight.w700,
+                        fontSize: enlarged ? 16 : 14,
+                        fontWeight: enlarged
+                            ? FontWeight.w800
+                            : FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -833,7 +934,8 @@ class InventoryFilters extends StatelessWidget {
         onPressed: selectCategory,
         compact: true,
         bold: true,
-        fontSize: 12,
+        fontSize: 13,
+        fontWeight: FontWeight.w800,
       );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -940,6 +1042,7 @@ class _InventoryFilterPill extends StatelessWidget {
     this.white = false,
     this.trailing,
     this.fontSize = 11,
+    this.fontWeight,
     this.minWidth = 0,
   });
   final String label;
@@ -949,6 +1052,7 @@ class _InventoryFilterPill extends StatelessWidget {
   final bool white;
   final Widget? trailing;
   final double fontSize, minWidth;
+  final FontWeight? fontWeight;
 
   @override
   Widget build(BuildContext context) => TextButton(
@@ -983,7 +1087,8 @@ class _InventoryFilterPill extends StatelessWidget {
             style: TextStyle(
               fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
               fontSize: fontSize,
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+              fontWeight:
+                  fontWeight ?? (bold ? FontWeight.w700 : FontWeight.w500),
             ),
           ),
         ),
