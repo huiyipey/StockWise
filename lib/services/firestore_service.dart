@@ -10,6 +10,7 @@ import '../models/app_models.dart';
 import '../models/store_address.dart';
 import '../models/barcode_product.dart';
 import '../models/product_name.dart';
+import '../models/category_label.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -310,7 +311,7 @@ class FirestoreService {
       }
       tx.set(ref, {
         'storeId': _storeId,
-        'name': trimmed,
+        'name': categoryTitleCase(trimmed),
         'slug': categoryId,
         'isActive': active,
         'updatedAt': FieldValue.serverTimestamp(),

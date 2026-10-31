@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_models.dart';
+import '../models/category_label.dart';
+import '../widgets/product_name_formatter.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 
@@ -26,7 +28,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   late final categories =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
   Future<void> _edit([StoreCategory? category]) async {
-    var name = category?.name ?? '';
+    var name = categoryTitleCase(category?.name ?? '');
     final form = GlobalKey<FormState>();
     final value = await showDialog<String>(
       context: context,
@@ -47,6 +49,8 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
               child: TextFormField(
                 initialValue: name,
                 autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                inputFormatters: const [ProductNameFormatter()],
                 maxLength: 60,
                 decoration: const InputDecoration(labelText: 'Category name'),
                 style: const TextStyle(fontSize: 13),
@@ -81,7 +85,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                     height: 46,
                     onPressed: () {
                       if (form.currentState!.validate()) {
-                        Navigator.pop(context, name.trim());
+                        Navigator.pop(context, categoryTitleCase(name));
                       }
                     },
                   ),
@@ -99,8 +103,12 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   }
 
   Future<void> _saveCategory(String name, String? id, bool active) =>
-      widget.categorySaver?.call(name, id, active) ??
-      FirestoreService.instance.saveCategory(name, id: id, active: active);
+      widget.categorySaver?.call(categoryTitleCase(name), id, active) ??
+      FirestoreService.instance.saveCategory(
+        categoryTitleCase(name),
+        id: id,
+        active: active,
+      );
 
   Future<void> _save(
     Future<void> Function() operation, {
@@ -232,7 +240,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                               size: 22,
                             ),
                             title: Text(
-                              category.name,
+                              categoryTitleCase(category.name),
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,

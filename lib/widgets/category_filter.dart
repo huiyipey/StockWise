@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
+import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 
 class CategoryFilter extends StatefulWidget {
@@ -49,7 +50,7 @@ class _CategoryFilterState extends State<CategoryFilter> {
             (id) => DropdownMenuItem(
               value: id,
               child: Text(
-                names[id] ?? id.replaceAll('-', ' '),
+                categoryTitleCase(names[id] ?? id.replaceAll('-', ' ')),
                 overflow: TextOverflow.ellipsis,
               ),
             ),

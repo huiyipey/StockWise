@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../models/barcode_product.dart';
 import '../models/product_name.dart';
+import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'product_name_formatter.dart';
@@ -104,6 +105,7 @@ class _ItemEditorState extends State<ItemEditor> {
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
+    enlargedFields: true,
     child: Builder(
       builder: (context) => PopScope(
         canPop: !saving,
@@ -236,7 +238,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                           inputFormatters: const [
                                             ProductNameFormatter(),
                                           ],
-                                          style: const TextStyle(fontSize: 13),
+                                          style: const TextStyle(fontSize: 14),
                                           decoration: const InputDecoration(
                                             labelText: 'Name',
                                             hintText: 'e.g. Fresh Milk',
@@ -257,7 +259,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 : () => _pickDate(context),
                                             child: InputDecorator(
                                               decoration: InputDecoration(
-                                                labelText: 'Expiry date',
+                                                labelText: 'Expiry Date',
                                                 errorText: field.errorText,
                                                 suffixIcon: const Icon(
                                                   Icons.calendar_today_outlined,
@@ -271,7 +273,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                         'dd MMM yyyy',
                                                       ).format(field.value!),
                                                 style: TextStyle(
-                                                  fontSize: 13,
+                                                  fontSize: 14,
                                                   color: field.value == null
                                                       ? InventoryColors.muted
                                                       : InventoryColors.ink,
@@ -295,7 +297,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 controller: unit,
                                                 enabled: !busy,
                                                 style: const TextStyle(
-                                                  fontSize: 13,
+                                                  fontSize: 14,
                                                 ),
                                                 decoration:
                                                     const InputDecoration(
@@ -311,7 +313,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 controller: basePrice,
                                                 enabled: !busy,
                                                 style: const TextStyle(
-                                                  fontSize: 13,
+                                                  fontSize: 14,
                                                 ),
                                                 keyboardType:
                                                     const TextInputType.numberWithOptions(
@@ -320,7 +322,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 decoration:
                                                     const InputDecoration(
                                                       labelText:
-                                                          'Regular price',
+                                                          'Regular Price',
                                                       prefixText: 'RM ',
                                                       hintText: '0.00',
                                                     ),
@@ -357,7 +359,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                           title: const Text(
                                             'Promotion',
                                             style: TextStyle(
-                                              fontSize: 13,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
@@ -377,14 +379,14 @@ class _ItemEditorState extends State<ItemEditor> {
                                             controller: promotionPrice,
                                             enabled: !busy,
                                             style: const TextStyle(
-                                              fontSize: 13,
+                                              fontSize: 14,
                                             ),
                                             keyboardType:
                                                 const TextInputType.numberWithOptions(
                                                   decimal: true,
                                                 ),
                                             decoration: const InputDecoration(
-                                              labelText: 'Promotion price',
+                                              labelText: 'Promotion Price',
                                               prefixText: 'RM ',
                                               hintText: '0.00',
                                             ),
@@ -395,9 +397,9 @@ class _ItemEditorState extends State<ItemEditor> {
                                         SwitchListTile.adaptive(
                                           contentPadding: EdgeInsets.zero,
                                           title: const Text(
-                                            'Receive notifications',
+                                            'Receive Notifications',
                                             style: TextStyle(
-                                              fontSize: 13,
+                                              fontSize: 15,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
@@ -425,8 +427,8 @@ class _ItemEditorState extends State<ItemEditor> {
                                   label: saving
                                       ? 'Saving...'
                                       : widget.editing
-                                      ? 'Save changes'
-                                      : 'Save item',
+                                      ? 'Save Changes'
+                                      : 'Save Item',
                                   busy: saving,
                                   onPressed: busy ? null : _save,
                                 ),
@@ -492,8 +494,8 @@ class _ItemEditorState extends State<ItemEditor> {
             const SizedBox(height: 12),
             Text(
               image != null || (imagePath?.isNotEmpty ?? false)
-                  ? 'Replace photo'
-                  : 'Choose photo',
+                  ? 'Replace Photo'
+                  : 'Choose Photo',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 14,
@@ -594,7 +596,8 @@ class _ItemEditorState extends State<ItemEditor> {
   Widget _categoryField(List<StoreCategory> records) {
     final choices = {
       for (final record in records)
-        record.id: '${record.name}${record.active ? '' : ' (archived)'}',
+        record.id:
+            '${categoryTitleCase(record.name)}${record.active ? '' : ' (archived)'}',
     };
     return FormField<String>(
       key: ValueKey('item-category-$category'),
@@ -633,7 +636,7 @@ class _ItemEditorState extends State<ItemEditor> {
             child: Text(
               choices[field.value] ?? 'Select category',
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 14,
                 color: field.value == null
                     ? InventoryColors.muted
                     : InventoryColors.ink,
@@ -720,7 +723,7 @@ class _ItemEditorState extends State<ItemEditor> {
     controller: barcode,
     enabled: !busy,
     keyboardType: TextInputType.number,
-    style: const TextStyle(fontSize: 13),
+    style: const TextStyle(fontSize: 14),
     autovalidateMode: AutovalidateMode.onUserInteraction,
     onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
     validator: (value) => !widget.editing && (value?.trim().isEmpty ?? true)

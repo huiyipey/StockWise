@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/report_service.dart';
 import '../models/product_name.dart';
+import '../models/category_label.dart';
 import '../theme/app_theme.dart';
 
 class ReportDashboard extends StatefulWidget {
@@ -205,7 +206,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
                   data['categories'] as Map,
                 ).entries.map(
                   (e) => ListTile(
-                    title: Text(e.key),
+                    title: Text(categoryTitleCase(e.key)),
                     trailing: Text('${e.value} units'),
                   ),
                 ),
@@ -396,6 +397,8 @@ class _ReportDashboardState extends State<ReportDashboard> {
                                   ? (e.value as num).toStringAsFixed(2)
                                   : kind == 'waste' && e.key == 1
                                   ? capitalizeProductName('${e.value}')
+                                  : kind == 'waste' && e.key == 2
+                                  ? categoryTitleCase('${e.value}')
                                   : '${e.value}',
                             ),
                           ),

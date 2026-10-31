@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
+import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
@@ -55,7 +56,12 @@ class ItemDetailScreen extends StatelessWidget {
                           'Available',
                           '${item.availableQuantity} ${item.unitLabel}',
                         ),
-                        _row('Category', item.categoryId.replaceAll('-', ' ')),
+                        _row(
+                          'Category',
+                          categoryTitleCase(
+                            item.categoryId.replaceAll('-', ' '),
+                          ),
+                        ),
                         if (item.barcode?.isNotEmpty == true)
                           _row('Barcode', item.barcode!),
                       ],

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat;
 
 import '../models/app_models.dart';
+import '../models/category_label.dart';
 import 'stockwise_ui.dart';
 import 'auth_ui.dart' show AuthColors;
 import 'glass_bottom_nav.dart' show NavItem;
@@ -146,8 +147,13 @@ class _InventoryOverlayFeedbackState extends State<_InventoryOverlayFeedback> {
 
 /// Keeps the approved inventory design scoped to its own pages and dialogs.
 class InventoryTheme extends StatelessWidget {
-  const InventoryTheme({super.key, required this.child});
+  const InventoryTheme({
+    super.key,
+    required this.child,
+    this.enlargedFields = false,
+  });
   final Widget child;
+  final bool enlargedFields;
 
   @override
   Widget build(BuildContext context) {
@@ -172,24 +178,30 @@ class InventoryTheme extends StatelessWidget {
           filled: true,
           fillColor: Colors.white,
           isDense: true,
-          constraints: const BoxConstraints(minHeight: 58),
+          constraints: BoxConstraints(minHeight: enlargedFields ? 68 : 58),
           floatingLabelBehavior: FloatingLabelBehavior.always,
-          contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          labelStyle: const TextStyle(
-            color: InventoryColors.muted,
-            fontSize: 12,
+          contentPadding: enlargedFields
+              ? const EdgeInsets.fromLTRB(16, 15, 16, 14)
+              : const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          labelStyle: TextStyle(
+            color: enlargedFields ? InventoryColors.ink : InventoryColors.muted,
+            fontSize: enlargedFields ? 16 : 12,
+            fontWeight: enlargedFields ? FontWeight.w700 : FontWeight.w400,
           ),
           floatingLabelStyle: WidgetStateTextStyle.resolveWith(
             (states) => TextStyle(
               color: states.contains(WidgetState.error)
                   ? InventoryColors.error
+                  : enlargedFields
+                  ? InventoryColors.ink
                   : InventoryColors.muted,
-              fontSize: 12,
+              fontSize: enlargedFields ? 16 : 12,
+              fontWeight: enlargedFields ? FontWeight.w700 : FontWeight.w400,
             ),
           ),
-          hintStyle: const TextStyle(
+          hintStyle: TextStyle(
             color: InventoryColors.muted,
-            fontSize: 13,
+            fontSize: enlargedFields ? 14 : 13,
           ),
           border: border,
           enabledBorder: border,
@@ -622,12 +634,10 @@ class InventoryEmpty extends StatelessWidget {
 
 String inventoryCategoryName(String id, List<StoreCategory> records) {
   for (final record in records) {
-    if (record.id == id) return record.name;
+    if (record.id == id) return categoryTitleCase(record.name);
   }
   final name = id.replaceAll('-', ' ');
-  return name.isEmpty
-      ? 'Other'
-      : '${name[0].toUpperCase()}${name.substring(1)}';
+  return name.isEmpty ? 'Other' : categoryTitleCase(name);
 }
 
 class InventoryBatchTile extends StatelessWidget {
@@ -675,7 +685,7 @@ class InventoryBatchTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '$categoryName / ${item.quantityOnHand} ${item.unitLabel}',
+                      '${categoryTitleCase(categoryName)} / ${item.quantityOnHand} ${item.unitLabel}',
                       style: TextStyle(
                         color: InventoryColors.muted,
                         fontSize: enlarged ? 11.5 : 10.5,

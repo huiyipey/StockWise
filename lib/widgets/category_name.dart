@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../services/store_session.dart';
+import '../models/category_label.dart';
 
 class CategoryName extends StatelessWidget {
   final String id;
@@ -16,7 +17,10 @@ class CategoryName extends StatelessWidget {
             .doc(id)
             .snapshots(),
         builder: (context, snapshot) => Text(
-          snapshot.data?.data()?['name'] as String? ?? id.replaceAll('-', ' '),
+          categoryTitleCase(
+            snapshot.data?.data()?['name'] as String? ??
+                id.replaceAll('-', ' '),
+          ),
           style: style,
           overflow: TextOverflow.ellipsis,
         ),

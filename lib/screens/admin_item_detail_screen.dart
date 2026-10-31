@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat;
 
 import '../models/app_models.dart';
+import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import 'edit_item_screen.dart';
@@ -25,8 +26,9 @@ class AdminItemDetailScreen extends StatelessWidget {
   final VoidCallback? onEdit;
   final ImageProvider? imageProvider;
 
-  String get category =>
-      categoryName ?? inventoryCategoryName(item.categoryId, const []);
+  String get category => categoryTitleCase(
+    categoryName ?? inventoryCategoryName(item.categoryId, const []),
+  );
   String get quantity => '${item.quantityOnHand} ${item.unitLabel}';
   String get priceUnit =>
       const {
@@ -77,7 +79,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${category.toUpperCase()} / per $priceUnit',
+                                    '${categorySentenceCase(category)} / Per $priceUnit',
                                     key: const ValueKey('item-category-unit'),
                                     style: const TextStyle(
                                       fontSize: 9.5,
@@ -125,9 +127,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _stockBalance(),
-                    const SizedBox(height: 16),
-                    _expiry(context),
+                    _stockAndExpiry(),
                     const SizedBox(height: 16),
                     _pricing(),
                     const SizedBox(height: 16),
@@ -151,7 +151,7 @@ class AdminItemDetailScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               child: InventoryButton(
                 key: const ValueKey('item-details-edit'),
-                label: 'Edit item',
+                label: 'Edit Item',
                 icon: Icons.edit_outlined,
                 onPressed:
                     onEdit ??
@@ -169,48 +169,84 @@ class AdminItemDetailScreen extends StatelessWidget {
     ),
   );
 
+  Widget _stockAndExpiry() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      IntrinsicHeight(
+        child: Row(
+          key: const ValueKey('item-stock-expiry-summary'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _stockBalance()),
+            const SizedBox(width: 12),
+            Expanded(child: _expiry()),
+          ],
+        ),
+      ),
+      if (item.quantityReserved > 0) ...[
+        const SizedBox(height: 10),
+        Text(
+          '${item.quantityReserved} reserved for orders · ${item.availableQuantity} available',
+          style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
+        ),
+      ],
+    ],
+  );
+
+  Widget _summaryLine({required double minHeight, required Widget child}) =>
+      ConstrainedBox(
+        constraints: BoxConstraints(minHeight: minHeight),
+        child: Align(alignment: Alignment.centerLeft, child: child),
+      );
+
   Widget _stockBalance() => Container(
     key: const ValueKey('item-stock-summary'),
-    constraints: const BoxConstraints(minHeight: 122),
-    padding: const EdgeInsets.all(18),
+    padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: InventoryColors.ink,
       borderRadius: BorderRadius.circular(20),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Text(
-          'Quantity on hand',
-          style: TextStyle(
-            fontSize: 10.5,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFFC9DBCA),
+        _summaryLine(
+          minHeight: 40,
+          child: const Text(
+            'Quantity on hand',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          quantity,
-          key: const ValueKey('stock-on-hand'),
-          style: const TextStyle(
-            fontSize: 33,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+        _summaryLine(
+          minHeight: 40,
+          child: Text(
+            '${item.quantityOnHand}',
+            key: const ValueKey('stock-on-hand'),
+            style: const TextStyle(
+              fontSize: 33,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
         ),
-        if (item.quantityReserved > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            '${item.quantityReserved} reserved for orders · ${item.availableQuantity} available',
+        const SizedBox(height: 8),
+        _summaryLine(
+          minHeight: 26,
+          child: Text(
+            item.unitLabel,
+            key: const ValueKey('stock-unit'),
             style: const TextStyle(fontSize: 11, color: Color(0xFFC9DBCA)),
           ),
-        ],
+        ),
       ],
     ),
   );
 
-  Widget _expiry(BuildContext context) {
+  Widget _expiry() {
     final days = item.daysUntilExpiry;
     final status = days < 0
         ? 'Expired'
@@ -235,8 +271,19 @@ class AdminItemDetailScreen extends StatelessWidget {
         ),
       ),
     );
-    final date = Row(
+    final heading = Row(
       children: [
+        const Expanded(
+          child: Text(
+            'Expiry date',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: InventoryColors.ink,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -249,17 +296,20 @@ class AdminItemDetailScreen extends StatelessWidget {
             color: InventoryColors.green,
           ),
         ),
-        const SizedBox(width: 13),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Exp:',
-                style: TextStyle(fontSize: 10.5, color: InventoryColors.muted),
-              ),
-              const SizedBox(height: 6),
-              Text(
+      ],
+    );
+    return Card(
+      key: const ValueKey('item-expiry-card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _summaryLine(minHeight: 40, child: heading),
+            const SizedBox(height: 8),
+            _summaryLine(
+              minHeight: 40,
+              child: Text(
                 DateFormat('dd MMM yyyy').format(item.expiryAt),
                 key: const ValueKey('item-expiry-date'),
                 style: const TextStyle(
@@ -267,29 +317,10 @@ class AdminItemDetailScreen extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-    return Card(
-      key: const ValueKey('item-expiry-card'),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: LayoutBuilder(
-          builder: (context, constraints) => Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: date),
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * .45,
-                ),
-                child: badge,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            _summaryLine(minHeight: 26, child: badge),
+          ],
         ),
       ),
     );
@@ -332,7 +363,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Wrap(
               spacing: 16,
               runSpacing: 6,
@@ -372,10 +403,10 @@ class AdminItemDetailScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Product information',
+            'Product Information',
             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 12),
           _DetailRow(label: 'Category', value: category),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
@@ -397,7 +428,7 @@ class AdminItemDetailScreen extends StatelessWidget {
     final color = enabled ? InventoryColors.error : InventoryColors.muted;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 8),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -407,7 +438,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Discard remaining stock',
+                    'Discard Remaining Stock',
                     style: TextStyle(
                       fontSize: 13,
                       color: color,
@@ -428,24 +459,14 @@ class AdminItemDetailScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                key: const ValueKey('item-discard'),
-                onPressed: enabled ? () => _discard(context) : null,
-                style: TextButton.styleFrom(
-                  foregroundColor: InventoryColors.error,
-                  disabledForegroundColor: InventoryColors.muted,
-                  textStyle: TextStyle(
-                    fontFamily: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                child: Text(enabled ? 'Discard stock' : 'No remaining stock'),
-              ),
+            InventoryButton(
+              key: const ValueKey('item-discard'),
+              label: enabled ? 'Discard Stock' : 'No remaining stock',
+              icon: Icons.delete_outline_rounded,
+              danger: true,
+              height: 46,
+              fontSize: 14,
+              onPressed: enabled ? () => _discard(context) : null,
             ),
           ],
         ),
@@ -674,7 +695,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
           ),
           const SizedBox(height: 18),
           const Text(
-            'Discard remaining stock?',
+            'Discard Remaining Stock?',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
         ],

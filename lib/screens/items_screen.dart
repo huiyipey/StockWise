@@ -168,18 +168,16 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                 ),
                               ),
                               const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  const Expanded(
-                                    child: Text(
-                                      'All inventory',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w700,
-                                      ),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  const heading = Text(
+                                    'All Inventory',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w700,
                                     ),
-                                  ),
-                                  TextButton(
+                                  );
+                                  final manage = TextButton(
                                     onPressed: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -190,12 +188,29 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                     child: const Text(
                                       'Manage categories',
                                       style: TextStyle(
-                                        fontSize: 10.5,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  );
+                                  if (constraints.maxWidth < 300 ||
+                                      MediaQuery.textScalerOf(
+                                            context,
+                                          ).scale(12) >
+                                          16) {
+                                    return Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [heading, manage],
+                                    );
+                                  }
+                                  return Row(
+                                    children: [
+                                      const Expanded(child: heading),
+                                      manage,
+                                    ],
+                                  );
+                                },
                               ),
                               if (items.isEmpty)
                                 const InventoryEmpty(
@@ -206,6 +221,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
                                     child: InventoryBatchTile(
+                                      enlarged: true,
                                       item: item,
                                       categoryName: inventoryCategoryName(
                                         item.categoryId,

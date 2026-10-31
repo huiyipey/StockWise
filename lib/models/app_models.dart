@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'store_address.dart';
 import 'product_name.dart';
+import 'category_label.dart';
 
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
@@ -33,7 +34,7 @@ class StoreCategory {
   factory StoreCategory.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
       StoreCategory(
         id: doc.id,
-        name: doc.data()?['name'] as String? ?? doc.id,
+        name: categoryTitleCase(doc.data()?['name'] as String? ?? doc.id),
         active: doc.data()?['isActive'] == true,
         sortOrder: _int(doc.data()?['sortOrder']),
       );
