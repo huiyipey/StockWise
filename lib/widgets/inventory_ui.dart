@@ -3,10 +3,11 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../models/app_models.dart';
 import 'stockwise_ui.dart';
+import 'auth_ui.dart' show AuthColors;
 import 'glass_bottom_nav.dart' show NavItem;
 
 abstract final class InventoryColors {
-  static const background = Color(0xFFF4F6F0);
+  static const background = AuthColors.background;
   static const ink = Color(0xFF18382C);
   static const green = Color(0xFF247653);
   static const soft = Color(0xFFE1EBDD);
@@ -15,6 +16,40 @@ abstract final class InventoryColors {
   static const error = Color(0xFFBB513D);
   static const amber = Color(0xFFA26124);
 }
+
+SnackBar inventoryFeedback(
+  String message, {
+  bool error = false,
+  SnackBarAction? action,
+}) => SnackBar(
+  behavior: SnackBarBehavior.floating,
+  margin: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+  elevation: 0,
+  backgroundColor: error ? const Color(0xFFFAE7E0) : InventoryColors.ink,
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+  action: action,
+  content: Row(
+    children: [
+      Icon(
+        error ? Icons.error_outline_rounded : Icons.check_rounded,
+        color: error ? InventoryColors.error : Colors.white,
+        size: 20,
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Text(
+          message,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: error ? InventoryColors.error : Colors.white,
+          ),
+        ),
+      ),
+    ],
+  ),
+);
 
 /// Keeps the approved inventory design scoped to its own pages and dialogs.
 class InventoryTheme extends StatelessWidget {
@@ -40,28 +75,39 @@ class InventoryTheme extends StatelessWidget {
           displayColor: InventoryColors.ink,
         ),
         dividerColor: InventoryColors.line,
-        inputDecorationTheme: const InputDecorationTheme(
+        inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
           isDense: true,
+          constraints: const BoxConstraints(minHeight: 58),
           floatingLabelBehavior: FloatingLabelBehavior.always,
-          contentPadding: EdgeInsets.fromLTRB(14, 12, 14, 12),
-          labelStyle: TextStyle(color: InventoryColors.muted, fontSize: 12),
-          floatingLabelStyle: TextStyle(
+          contentPadding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          labelStyle: const TextStyle(
             color: InventoryColors.muted,
             fontSize: 12,
           ),
-          hintStyle: TextStyle(color: InventoryColors.muted, fontSize: 13),
+          floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+            (states) => TextStyle(
+              color: states.contains(WidgetState.error)
+                  ? InventoryColors.error
+                  : InventoryColors.muted,
+              fontSize: 12,
+            ),
+          ),
+          hintStyle: const TextStyle(
+            color: InventoryColors.muted,
+            fontSize: 13,
+          ),
           border: border,
           enabledBorder: border,
           disabledBorder: border,
-          focusedBorder: InventoryInputBorder(
+          focusedBorder: const InventoryInputBorder(
             borderSide: BorderSide(color: InventoryColors.green, width: 1.4),
           ),
-          errorBorder: InventoryInputBorder(
+          errorBorder: const InventoryInputBorder(
             borderSide: BorderSide(color: InventoryColors.error),
           ),
-          focusedErrorBorder: InventoryInputBorder(
+          focusedErrorBorder: const InventoryInputBorder(
             borderSide: BorderSide(color: InventoryColors.error, width: 1.4),
           ),
           errorMaxLines: 3,
@@ -78,12 +124,69 @@ class InventoryTheme extends StatelessWidget {
         dialogTheme: DialogThemeData(
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,
+          titleTextStyle: base.textTheme.titleLarge?.copyWith(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            color: InventoryColors.ink,
+          ),
+          contentTextStyle: base.textTheme.bodyMedium?.copyWith(
+            fontSize: 13,
+            height: 1.5,
+            color: InventoryColors.muted,
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(foregroundColor: InventoryColors.green),
+        ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          headerBackgroundColor: Colors.white,
+          headerForegroundColor: InventoryColors.ink,
+          rangePickerBackgroundColor: InventoryColors.background,
+          rangePickerSurfaceTintColor: Colors.transparent,
+          rangePickerHeaderBackgroundColor: InventoryColors.background,
+          rangePickerHeaderForegroundColor: InventoryColors.ink,
+          rangeSelectionBackgroundColor: InventoryColors.soft,
+          headerHelpStyle: base.textTheme.titleMedium?.copyWith(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+          ),
+          headerHeadlineStyle: base.textTheme.headlineSmall?.copyWith(
+            fontSize: 22,
+            color: InventoryColors.green,
+          ),
+          cancelButtonStyle: TextButton.styleFrom(
+            backgroundColor: InventoryColors.soft,
+            foregroundColor: InventoryColors.green,
+            minimumSize: const Size(100, 46),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          confirmButtonStyle: TextButton.styleFrom(
+            backgroundColor: InventoryColors.green,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(100, 46),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: const WidgetStatePropertyAll(Colors.white),
+          trackColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? InventoryColors.green
+                : InventoryColors.line,
+          ),
+          trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
@@ -159,12 +262,14 @@ class InventoryHeader extends StatelessWidget {
     this.back = false,
     this.onBack,
     this.trailing,
+    this.enlarged = false,
   });
   final String title;
   final String? storeName;
   final bool back;
   final VoidCallback? onBack;
   final Widget? trailing;
+  final bool enlarged;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -190,9 +295,9 @@ class InventoryHeader extends StatelessWidget {
               if (storeName != null) ...[
                 Text(
                   storeName!.toUpperCase(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: InventoryColors.muted,
-                    fontSize: 9,
+                    fontSize: enlarged ? 10 : 9,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -200,8 +305,8 @@ class InventoryHeader extends StatelessWidget {
               ],
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 24,
+                style: TextStyle(
+                  fontSize: enlarged ? 26 : 24,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
                   color: InventoryColors.ink,
@@ -226,11 +331,15 @@ class InventoryButton extends StatelessWidget {
     this.soft = false,
     this.centered = true,
     this.danger = false,
+    this.fontSize = 13,
+    this.height,
   });
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool busy, soft, centered, danger;
+  final double fontSize;
+  final double? height;
 
   @override
   Widget build(BuildContext context) => FilledButton(
@@ -242,12 +351,16 @@ class InventoryButton extends StatelessWidget {
           ? InventoryColors.soft
           : InventoryColors.green,
       foregroundColor: soft ? InventoryColors.green : Colors.white,
-      minimumSize: Size.fromHeight(soft || danger ? 46 : 52),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      minimumSize: Size.fromHeight(height ?? (soft || danger ? 46 : 52)),
+      padding: EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: soft || danger || (height ?? 52) <= 46 ? 12 : 14,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       textStyle: TextStyle(
         fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
-        fontSize: 13,
+        fontSize: fontSize,
+        height: 1.2,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -280,12 +393,15 @@ class InventoryBottomNav extends StatelessWidget {
     super.key,
     required this.currentIndex,
     required this.items,
+    this.fontSize = 9.5,
   });
   final int currentIndex;
   final List<NavItem> items;
+  final double fontSize;
   @override
   Widget build(BuildContext context) {
-    final labelHeight = MediaQuery.textScalerOf(context).scale(9.5) * 1.2 * 2;
+    final labelHeight =
+        MediaQuery.textScalerOf(context).scale(fontSize) * 1.2 * 2;
     return Container(
       height: (22 + 4 + labelHeight + 24).clamp(76, double.infinity),
       decoration: const BoxDecoration(
@@ -335,7 +451,7 @@ class InventoryBottomNav extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                fontSize: 9.5,
+                                fontSize: fontSize,
                                 height: 1.2,
                                 fontWeight: i == currentIndex
                                     ? FontWeight.w700
@@ -365,10 +481,12 @@ class InventoryEmpty extends StatelessWidget {
     required this.title,
     this.body,
     this.icon = Icons.inventory_2_outlined,
+    this.enlarged = false,
   });
   final String title;
   final String? body;
   final IconData icon;
+  final bool enlarged;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 42),
@@ -383,9 +501,9 @@ class InventoryEmpty extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: InventoryColors.ink,
-            fontSize: 21,
+            fontSize: enlarged ? 22 : 21,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -394,8 +512,8 @@ class InventoryEmpty extends StatelessWidget {
           Text(
             body!,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12.5,
+            style: TextStyle(
+              fontSize: enlarged ? 13.5 : 12.5,
               height: 1.5,
               color: InventoryColors.muted,
             ),
@@ -422,10 +540,12 @@ class InventoryBatchTile extends StatelessWidget {
     required this.item,
     required this.categoryName,
     required this.onTap,
+    this.enlarged = false,
   });
   final InventoryBatch item;
   final String categoryName;
   final VoidCallback onTap;
+  final bool enlarged;
   @override
   Widget build(BuildContext context) {
     final days = item.daysUntilExpiry;
@@ -447,25 +567,25 @@ class InventoryBatchTile extends StatelessWidget {
                   children: [
                     Text(
                       item.productName,
-                      style: const TextStyle(
-                        fontSize: 14,
+                      style: TextStyle(
+                        fontSize: enlarged ? 15 : 14,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       '$categoryName / ${item.quantityOnHand} ${item.unitLabel}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: InventoryColors.muted,
-                        fontSize: 10.5,
+                        fontSize: enlarged ? 11.5 : 10.5,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Exp: ${DateFormat('dd MMM yyyy').format(item.expiryAt)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: InventoryColors.muted,
-                        fontSize: 10.5,
+                        fontSize: enlarged ? 11.5 : 10.5,
                       ),
                     ),
                   ],
@@ -473,10 +593,10 @@ class InventoryBatchTile extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
+                key: ValueKey('expiry-badge-${item.id}'),
+                width: 68 * MediaQuery.textScalerOf(context).scale(11) / 11,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
                 decoration: BoxDecoration(
                   color: urgent
                       ? const Color(0xFFFAE7E0)
@@ -489,8 +609,9 @@ class InventoryBatchTile extends StatelessWidget {
                       : days == 0
                       ? 'Today'
                       : '$days ${days == 1 ? 'day' : 'days'}',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: enlarged ? 11 : 10,
                     fontWeight: FontWeight.w700,
                     color: urgent
                         ? InventoryColors.error
@@ -510,6 +631,7 @@ Future<String?> showInventoryCategorySheet({
   required BuildContext context,
   required Map<String, String> choices,
   required String selected,
+  String title = 'Filter by category',
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,
@@ -542,9 +664,9 @@ Future<String?> showInventoryCategorySheet({
                 ),
               ),
               const SizedBox(height: 26),
-              const Text(
-                'Filter by category',
-                style: TextStyle(
+              Text(
+                title,
+                style: const TextStyle(
                   fontSize: 23,
                   color: InventoryColors.ink,
                   fontWeight: FontWeight.w700,
@@ -625,9 +747,9 @@ class InventoryFilters extends StatelessWidget {
     required this.records,
     required this.category,
     required this.onCategory,
-    required this.range,
-    required this.onDate,
-    required this.onClearDate,
+    this.range,
+    this.onDate,
+    this.onClearDate,
     required this.ascending,
     required this.onSort,
     this.compact = false,
@@ -637,7 +759,8 @@ class InventoryFilters extends StatelessWidget {
   final String category;
   final ValueChanged<String> onCategory;
   final DateTimeRange? range;
-  final VoidCallback onDate, onClearDate, onSort;
+  final VoidCallback? onDate, onClearDate;
+  final VoidCallback onSort;
   final bool ascending, compact;
 
   @override
@@ -670,23 +793,38 @@ class InventoryFilters extends StatelessWidget {
       label: ascending ? 'Asc' : 'Desc',
       icon: ascending ? Icons.arrow_upward : Icons.arrow_downward,
       onPressed: onSort,
-      compact: true,
-    );
-    final dates = _InventoryFilterPill(
-      key: const ValueKey('inventory-date-filter'),
-      label: dateText,
-      icon: Icons.calendar_today_outlined,
-      onPressed: onDate,
       compact: compact,
-      muted: true,
-      outlined: !compact,
+      bold: true,
+      white: compact,
+      minWidth: compact ? 64 : 94,
+      fontSize: 12,
     );
-    final clear = range == null
+    final dates = onDate == null
         ? null
-        : IconButton(
-            onPressed: onClearDate,
-            tooltip: 'Clear date filter',
-            icon: const Icon(Icons.close, size: 18),
+        : _InventoryFilterPill(
+            key: const ValueKey('inventory-date-filter'),
+            label: dateText,
+            icon: Icons.calendar_today_outlined,
+            onPressed: onDate!,
+            compact: compact,
+            muted: true,
+            outlined: !compact,
+            fontSize: compact ? 11.5 : 11,
+            trailing: range == null
+                ? null
+                : IconButton(
+                    key: const ValueKey('inventory-clear-date'),
+                    onPressed: onClearDate,
+                    tooltip: 'Clear date filter',
+                    style: IconButton.styleFrom(
+                      backgroundColor: InventoryColors.background,
+                      foregroundColor: InventoryColors.green,
+                      minimumSize: const Size.square(32),
+                      padding: const EdgeInsets.all(6),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                  ),
           );
     if (compact) {
       final categories = _InventoryFilterPill(
@@ -695,12 +833,37 @@ class InventoryFilters extends StatelessWidget {
         onPressed: selectCategory,
         compact: true,
         bold: true,
+        fontSize: 12,
       );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           LayoutBuilder(
             builder: (context, constraints) {
+              if (dates == null) {
+                return Row(
+                  children: [
+                    Expanded(child: categories),
+                    const SizedBox(width: 8),
+                    sort,
+                  ],
+                );
+              }
+              if (range != null) {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: categories),
+                        const SizedBox(width: 6),
+                        sort,
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(width: double.infinity, child: dates),
+                  ],
+                );
+              }
               if (constraints.maxWidth < 300 ||
                   MediaQuery.textScalerOf(context).scale(11) > 14) {
                 return Wrap(
@@ -720,7 +883,6 @@ class InventoryFilters extends StatelessWidget {
               );
             },
           ),
-          ?clear,
         ],
       );
     }
@@ -732,18 +894,22 @@ class InventoryFilters extends StatelessWidget {
             key: const ValueKey('inventory-category-filter'),
             borderRadius: BorderRadius.circular(12),
             onTap: selectCategory,
-            child: InputDecorator(
-              decoration: const InputDecoration(labelText: 'Category'),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      choices[selected]!,
-                      overflow: TextOverflow.ellipsis,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: const InputDecoration(labelText: 'Category'),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        choices[selected]!,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_drop_down),
-                ],
+                    const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+                  ],
+                ),
               ),
             ),
           ),
@@ -751,8 +917,7 @@ class InventoryFilters extends StatelessWidget {
         const SizedBox(height: 10),
         Row(
           children: [
-            Expanded(child: dates),
-            ?clear,
+            if (dates != null) Expanded(child: dates) else const Spacer(),
             const SizedBox(width: 8),
             sort,
           ],
@@ -772,23 +937,30 @@ class _InventoryFilterPill extends StatelessWidget {
     this.muted = false,
     this.bold = false,
     this.outlined = false,
+    this.white = false,
+    this.trailing,
+    this.fontSize = 11,
+    this.minWidth = 0,
   });
   final String label;
   final VoidCallback onPressed;
   final IconData? icon;
   final bool compact, muted, bold, outlined;
+  final bool white;
+  final Widget? trailing;
+  final double fontSize, minWidth;
 
   @override
   Widget build(BuildContext context) => TextButton(
     onPressed: onPressed,
     style: TextButton.styleFrom(
-      backgroundColor: outlined ? Colors.white : InventoryColors.soft,
+      backgroundColor: outlined || white ? Colors.white : InventoryColors.soft,
       foregroundColor: muted ? InventoryColors.muted : InventoryColors.green,
-      minimumSize: const Size(0, 44),
+      minimumSize: Size(minWidth, 44),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(outlined ? 12 : 22),
+        borderRadius: BorderRadius.circular(outlined || !compact ? 12 : 22),
         side: outlined
             ? const BorderSide(color: InventoryColors.line)
             : BorderSide.none,
@@ -803,17 +975,19 @@ class _InventoryFilterPill extends StatelessWidget {
           const SizedBox(width: 6),
         ],
         Flexible(
+          fit: trailing == null ? FlexFit.loose : FlexFit.tight,
           child: Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily,
-              fontSize: 11,
+              fontSize: fontSize,
               fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ),
+        if (trailing != null) ...[const SizedBox(width: 4), trailing!],
       ],
     ),
   );

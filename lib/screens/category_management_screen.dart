@@ -6,11 +6,14 @@ import '../widgets/inventory_ui.dart';
 class CategoryManagementScreen extends StatefulWidget {
   final Stream<List<StoreCategory>>? categoryStream;
   final Future<void> Function(List<StoreCategory>)? orderSaver;
+  final Future<void> Function(String name, String? id, bool active)?
+  categorySaver;
 
   const CategoryManagementScreen({
     super.key,
     this.categoryStream,
     this.orderSaver,
+    this.categorySaver,
   });
   @override
   State<CategoryManagementScreen> createState() =>
@@ -24,23 +27,40 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
   Future<void> _edit([StoreCategory? category]) async {
     var name = category?.name ?? '';
+    final form = GlobalKey<FormState>();
     final value = await showDialog<String>(
       context: context,
       builder: (context) => InventoryTheme(
         child: AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
           title: Text(
             category == null ? 'Add category' : 'Rename category',
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
           ),
           content: SizedBox(
             width: 350,
-            child: TextFormField(
-              initialValue: name,
-              autofocus: true,
-              maxLength: 60,
-              decoration: const InputDecoration(labelText: 'Category name'),
-              style: const TextStyle(fontSize: 13),
-              onChanged: (v) => name = v,
+            child: Form(
+              key: form,
+              child: TextFormField(
+                initialValue: name,
+                autofocus: true,
+                maxLength: 60,
+                decoration: const InputDecoration(labelText: 'Category name'),
+                style: const TextStyle(fontSize: 13),
+                onChanged: (v) => name = v,
+                validator: (value) {
+                  final trimmed = value?.trim() ?? '';
+                  return trimmed.isEmpty ||
+                          trimmed.length > 60 ||
+                          trimmed == '.' ||
+                          trimmed == '..'
+                      ? 'Enter a name using 1-60 characters.'
+                      : null;
+                },
+              ),
             ),
           ),
           actionsPadding: const EdgeInsets.fromLTRB(22, 8, 22, 18),
@@ -58,7 +78,12 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                 Expanded(
                   child: InventoryButton(
                     label: 'Save',
-                    onPressed: () => Navigator.pop(context, name),
+                    height: 46,
+                    onPressed: () {
+                      if (form.currentState!.validate()) {
+                        Navigator.pop(context, name.trim());
+                      }
+                    },
                   ),
                 ),
               ],
@@ -69,24 +94,35 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     );
     if (value == null || !mounted) return;
     await _save(
-      () => FirestoreService.instance.saveCategory(
-        value,
-        id: category?.id,
-        active: category?.active ?? true,
-      ),
+      () => _saveCategory(value, category?.id, category?.active ?? true),
     );
   }
 
-  Future<void> _save(Future<void> Function() operation) async {
+  Future<void> _saveCategory(String name, String? id, bool active) =>
+      widget.categorySaver?.call(name, id, active) ??
+      FirestoreService.instance.saveCategory(name, id: id, active: active);
+
+  Future<void> _save(
+    Future<void> Function() operation, {
+    String? failureMessage,
+  }) async {
     if (busy) return;
     setState(() => busy = true);
     try {
       await operation();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          inventoryFeedback(
+            failureMessage ??
+                (e is StateError
+                    ? e.message.toString()
+                    : e is ArgumentError
+                    ? '${e.message}'
+                    : 'Could not save the category. Please try again.'),
+            error: true,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -107,6 +143,8 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
       () => (widget.orderSaver ?? FirestoreService.instance.reorderCategories)(
         reordered,
       ),
+      failureMessage:
+          'Could not save the category order. The previous order has been restored.',
     );
     if (mounted) setState(() => pendingOrder = null);
   }
@@ -129,7 +167,11 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return const Center(
-                        child: Text('Could not load categories.'),
+                        child: InventoryEmpty(
+                          title: 'Could not load categories',
+                          body: 'Please reopen this page.',
+                          icon: Icons.error_outline_rounded,
+                        ),
                       );
                     }
                     if (!snapshot.hasData) {
@@ -158,11 +200,14 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                             onPressed: busy ? null : () => _edit(),
                             icon: Icons.add,
                             label: 'Add category',
+                            height: 46,
+                            busy: busy,
                           ),
                           const SizedBox(height: 14),
                           if (items.isEmpty)
-                            const Text(
-                              'No categories yet. Add your first category.',
+                            const InventoryEmpty(
+                              title: 'No categories yet',
+                              body: 'Add your first category.',
                             ),
                         ],
                       ),
@@ -213,6 +258,11 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                                             context: context,
                                             builder: (context) => InventoryTheme(
                                               child: AlertDialog(
+                                                insetPadding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 20,
+                                                      vertical: 24,
+                                                    ),
                                                 title: Text(
                                                   v
                                                       ? 'Restore category?'
@@ -221,24 +271,40 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                                                 content: const Text(
                                                   'Existing products and past reports will be preserved.',
                                                 ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(
-                                                          context,
-                                                          false,
-                                                        ),
-                                                    child: const Text('Cancel'),
-                                                  ),
-                                                  FilledButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(
-                                                          context,
-                                                          true,
-                                                        ),
-                                                    child: const Text(
-                                                      'Confirm',
+                                                actionsPadding:
+                                                    const EdgeInsets.fromLTRB(
+                                                      20,
+                                                      8,
+                                                      20,
+                                                      22,
                                                     ),
+                                                actions: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: InventoryButton(
+                                                          label: 'Cancel',
+                                                          soft: true,
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                false,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 14),
+                                                      Expanded(
+                                                        child: InventoryButton(
+                                                          label: 'Confirm',
+                                                          height: 46,
+                                                          onPressed: () =>
+                                                              Navigator.pop(
+                                                                context,
+                                                                true,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ],
                                               ),
@@ -246,12 +312,11 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                                           );
                                           if (confirmed == true && mounted) {
                                             await _save(
-                                              () => FirestoreService.instance
-                                                  .saveCategory(
-                                                    category.name,
-                                                    id: category.id,
-                                                    active: v,
-                                                  ),
+                                              () => _saveCategory(
+                                                category.name,
+                                                category.id,
+                                                v,
+                                              ),
                                             );
                                           }
                                         },

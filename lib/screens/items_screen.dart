@@ -6,7 +6,6 @@ import '../services/inventory_list.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/inventory_expiry_range.dart';
-import '../widgets/stockwise_ui.dart';
 import 'add_item_screen.dart';
 import 'admin_item_detail_screen.dart';
 import 'barcode_scanner_screen.dart';
@@ -73,10 +72,13 @@ class _ItemsScreenState extends State<ItemsScreen> {
                         stream: inventory,
                         builder: (context, snapshot) {
                           if (snapshot.hasError) {
-                            return const InventoryEmpty(
-                              title: 'Could not load inventory',
-                              body:
-                                  'Check your connection and reopen this page.',
+                            return const Center(
+                              child: InventoryEmpty(
+                                icon: Icons.error_outline_rounded,
+                                title: 'Could not load inventory',
+                                body:
+                                    'Check your connection and reopen this page.',
+                              ),
                             );
                           }
                           if (!snapshot.hasData) {
@@ -112,19 +114,35 @@ class _ItemsScreenState extends State<ItemsScreen> {
                           return ListView(
                             padding: const EdgeInsets.fromLTRB(20, 6, 20, 92),
                             children: [
-                              AppSearchField(
-                                hint: 'Search name or barcode',
-                                controller: searchController,
-                                suffixIcon: IconButton(
-                                  tooltip: 'Scan barcode to search',
-                                  onPressed: _scanBarcode,
-                                  icon: const Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                    color: InventoryColors.green,
+                              ClipRRect(
+                                key: const ValueKey('inventory-search-outline'),
+                                borderRadius: BorderRadius.circular(12),
+                                child: TextField(
+                                  controller: searchController,
+                                  style: const TextStyle(fontSize: 13),
+                                  decoration: InputDecoration(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 46,
+                                    ),
+                                    hintText: 'Search name or barcode',
+                                    prefixIcon: const Icon(
+                                      Icons.search_rounded,
+                                      size: 18,
+                                      color: InventoryColors.muted,
+                                    ),
+                                    suffixIcon: IconButton(
+                                      tooltip: 'Scan barcode to search',
+                                      onPressed: _scanBarcode,
+                                      icon: const Icon(
+                                        Icons.qr_code_scanner_rounded,
+                                        color: InventoryColors.green,
+                                        size: 20,
+                                      ),
+                                    ),
                                   ),
+                                  onChanged: (value) =>
+                                      setState(() => query = value),
                                 ),
-                                onChanged: (value) =>
-                                    setState(() => query = value),
                               ),
                               const SizedBox(height: 16),
                               InventoryFilters(
@@ -214,6 +232,10 @@ class _ItemsScreenState extends State<ItemsScreen> {
           tooltip: 'Add item',
           backgroundColor: InventoryColors.green,
           foregroundColor: Colors.white,
+          elevation: 0,
+          highlightElevation: 0,
+          hoverElevation: 0,
+          focusElevation: 0,
           shape: const CircleBorder(),
           onPressed: () => Navigator.push(
             context,

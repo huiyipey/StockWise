@@ -7,6 +7,7 @@ Future<DateTimeRange?> showInventoryExpiryRange({
   required DateTime firstDate,
   required DateTime lastDate,
   DateTimeRange? initialDateRange,
+  bool showHeaderCalendar = true,
 }) => showDialog<DateTimeRange>(
   context: context,
   builder: (_) => InventoryTheme(
@@ -14,6 +15,7 @@ Future<DateTimeRange?> showInventoryExpiryRange({
       first: DateUtils.dateOnly(firstDate),
       last: DateUtils.dateOnly(lastDate),
       initial: initialDateRange,
+      showHeaderCalendar: showHeaderCalendar,
     ),
   ),
 );
@@ -23,9 +25,11 @@ class _ExpiryRangeDialog extends StatefulWidget {
     required this.first,
     required this.last,
     this.initial,
+    required this.showHeaderCalendar,
   });
   final DateTime first, last;
   final DateTimeRange? initial;
+  final bool showHeaderCalendar;
   @override
   State<_ExpiryRangeDialog> createState() => _ExpiryRangeDialogState();
 }
@@ -105,6 +109,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
   Widget build(BuildContext context) {
     final help = MaterialLocalizations.of(context).dateHelpText.toUpperCase();
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       title: Row(
         children: [
           const Expanded(
@@ -113,11 +118,12 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
             ),
           ),
-          IconButton(
-            onPressed: calendar,
-            tooltip: 'Choose range on calendar',
-            icon: const Icon(Icons.calendar_today_outlined, size: 21),
-          ),
+          if (widget.showHeaderCalendar)
+            IconButton(
+              onPressed: calendar,
+              tooltip: 'Choose range on calendar',
+              icon: const Icon(Icons.calendar_today_outlined, size: 21),
+            ),
         ],
       ),
       content: SizedBox(
@@ -193,7 +199,11 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: InventoryButton(label: 'Apply', onPressed: apply),
+              child: InventoryButton(
+                label: 'Apply',
+                height: 46,
+                onPressed: apply,
+              ),
             ),
           ],
         ),

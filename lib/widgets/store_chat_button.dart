@@ -4,6 +4,7 @@ import '../models/store_chat.dart';
 import '../screens/store_chat_inbox_screen.dart';
 import '../screens/store_chat_screen.dart';
 import '../services/store_chat_service.dart';
+import 'inventory_ui.dart' show InventoryColors;
 
 void openStoreChat(BuildContext context, {StoreChatRepository? repository}) {
   final chat = repository ?? StoreChatService.forSelectedStore();
@@ -19,7 +20,12 @@ void openStoreChat(BuildContext context, {StoreChatRepository? repository}) {
 
 class StoreChatButton extends StatefulWidget {
   final StoreChatRepository? repository;
-  const StoreChatButton({super.key, this.repository});
+  final bool inventoryStyle;
+  const StoreChatButton({
+    super.key,
+    this.repository,
+    this.inventoryStyle = false,
+  });
 
   @override
   State<StoreChatButton> createState() => _StoreChatButtonState();
@@ -45,9 +51,18 @@ class _StoreChatButtonState extends State<StoreChatButton> {
         child: IconButton(
           tooltip: repository.isAdmin ? 'Customer messages' : 'Chat with admin',
           onPressed: () => openStoreChat(context, repository: repository),
-          icon: const Icon(
+          style: widget.inventoryStyle
+              ? IconButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: InventoryColors.green,
+                  shape: const CircleBorder(),
+                  minimumSize: const Size.square(40),
+                )
+              : null,
+          icon: Icon(
             Icons.chat_bubble_outline_rounded,
-            color: Colors.white,
+            color: widget.inventoryStyle ? InventoryColors.green : Colors.white,
+            size: widget.inventoryStyle ? 20 : null,
           ),
         ),
       );

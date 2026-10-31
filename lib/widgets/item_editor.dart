@@ -44,6 +44,8 @@ class _ItemEditorState extends State<ItemEditor> {
   late bool notifications;
   DateTime? expiryAt;
   final expiryField = GlobalKey<FormFieldState<DateTime>>();
+  final quantityField = GlobalKey<FormFieldState<String>>();
+  bool quantityFocused = false;
   BarcodeProduct? reusedProduct;
   List<StoreCategory> availableCategories = [];
   String? lookupMessage;
@@ -113,8 +115,10 @@ class _ItemEditorState extends State<ItemEditor> {
                     builder: (context, snapshot) {
                       if (snapshot.hasError) {
                         return const Center(
-                          child: Text(
-                            'Could not load categories. Please reopen this page.',
+                          child: InventoryEmpty(
+                            title: 'Could not load categories',
+                            body: 'Please reopen this page.',
+                            icon: Icons.error_outline_rounded,
                           ),
                         );
                       }
@@ -181,14 +185,32 @@ class _ItemEditorState extends State<ItemEditor> {
                                               ),
                                               child: Semantics(
                                                 liveRegion: true,
-                                                child: Text(
-                                                  lookupMessage!,
-                                                  style: TextStyle(
-                                                    fontSize: 12,
-                                                    height: 1.5,
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(
+                                                    13,
+                                                  ),
+                                                  decoration: BoxDecoration(
                                                     color: lookupFailed
-                                                        ? InventoryColors.error
-                                                        : InventoryColors.green,
+                                                        ? const Color(
+                                                            0xFFFAE7E0,
+                                                          )
+                                                        : InventoryColors.soft,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          13,
+                                                        ),
+                                                  ),
+                                                  child: Text(
+                                                    lookupMessage!,
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      height: 1.5,
+                                                      color: lookupFailed
+                                                          ? InventoryColors
+                                                                .error
+                                                          : InventoryColors
+                                                                .green,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -248,49 +270,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                         const SizedBox(height: 18),
                                         _quantityRow(),
                                         const SizedBox(height: 18),
-                                        DropdownButtonFormField<String>(
-                                          key: ValueKey(
-                                            'item-category-$category',
-                                          ),
-                                          initialValue:
-                                              categories.any(
-                                                (c) => c.id == category,
-                                              )
-                                              ? category
-                                              : null,
-                                          isExpanded: true,
-                                          style: TextStyle(
-                                            fontFamily: Theme.of(
-                                              context,
-                                            ).textTheme.bodyMedium?.fontFamily,
-                                            color: InventoryColors.ink,
-                                            fontSize: 13,
-                                          ),
-                                          decoration: const InputDecoration(
-                                            labelText: 'Category',
-                                            hintText: 'Select category',
-                                          ),
-                                          items: categories
-                                              .map(
-                                                (value) => DropdownMenuItem(
-                                                  value: value.id,
-                                                  child: Text(
-                                                    '${value.name}${value.active ? '' : ' (archived)'}',
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: busy
-                                              ? null
-                                              : (value) => setState(
-                                                  () => category = value,
-                                                ),
-                                          validator: (value) => value == null
-                                              ? 'Choose a category'
-                                              : null,
-                                        ),
+                                        _categoryField(categories),
                                         const SizedBox(height: 18),
                                         LayoutBuilder(
                                           builder: (context, constraints) {
@@ -463,8 +443,9 @@ class _ItemEditorState extends State<ItemEditor> {
     child: InkWell(
       key: const ValueKey('item-photo'),
       onTap: busy ? null : _pickImage,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 126),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -476,8 +457,8 @@ class _ItemEditorState extends State<ItemEditor> {
                         borderRadius: BorderRadius.circular(10),
                         child: Image.memory(
                           snapshot.data!,
-                          width: 72,
-                          height: 72,
+                          width: 52,
+                          height: 52,
                           fit: BoxFit.cover,
                         ),
                       )
@@ -488,7 +469,7 @@ class _ItemEditorState extends State<ItemEditor> {
                       ),
               )
             else if (imagePath != null && imagePath!.isNotEmpty)
-              ProductArtwork(size: 72, imagePath: imagePath)
+              ProductArtwork(size: 52, imagePath: imagePath)
             else
               const Icon(
                 Icons.photo_outlined,
@@ -519,41 +500,137 @@ class _ItemEditorState extends State<ItemEditor> {
     ),
   );
 
-  Widget _quantityRow() => TextFormField(
-    key: const ValueKey('item-quantity'),
-    controller: quantity,
-    enabled: !busy,
-    keyboardType: TextInputType.number,
-    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-    textAlign: TextAlign.center,
-    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
-    onChanged: (_) => setState(() {}),
+  Widget _quantityRow() => FormField<String>(
+    key: quantityField,
+    initialValue: quantity.text,
     validator: (value) {
       final number = int.tryParse(value ?? '');
       return number == null || number < 0 ? 'Enter a valid quantity' : null;
     },
-    decoration: InputDecoration(
-      labelText: 'Quantity',
-      prefixIcon: IconButton(
-        tooltip: 'Decrease quantity',
-        onPressed: !busy && (int.tryParse(quantity.text) ?? 0) > 0
-            ? () => _changeQuantity(-1)
-            : null,
-        icon: const Icon(
-          Icons.remove_circle_outline_rounded,
-          color: InventoryColors.green,
+    builder: (field) => Focus(
+      onFocusChange: (value) => setState(() => quantityFocused = value),
+      child: InputDecorator(
+        isFocused: quantityFocused,
+        decoration: InputDecoration(
+          labelText: 'Quantity',
+          enabled: !busy,
+          errorText: field.errorText,
+          constraints: const BoxConstraints(minHeight: 68),
+          contentPadding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
         ),
-      ),
-      suffixIcon: IconButton(
-        tooltip: 'Increase quantity',
-        onPressed: busy ? null : () => _changeQuantity(1),
-        icon: const Icon(
-          Icons.add_circle_outline_rounded,
-          color: InventoryColors.green,
+        child: Row(
+          children: [
+            IconButton(
+              tooltip: 'Decrease quantity',
+              style: IconButton.styleFrom(
+                foregroundColor: InventoryColors.green,
+                disabledForegroundColor: InventoryColors.muted,
+                minimumSize: const Size.square(40),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: !busy && (int.tryParse(quantity.text) ?? 0) > 0
+                  ? () => _changeQuantity(-1)
+                  : null,
+              icon: const Icon(Icons.remove_circle_outline_rounded),
+            ),
+            Expanded(
+              child: TextFormField(
+                key: const ValueKey('item-quantity'),
+                controller: quantity,
+                enabled: !busy,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+                onChanged: (value) {
+                  field.didChange(value);
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  isCollapsed: true,
+                  isDense: true,
+                  filled: false,
+                  contentPadding: EdgeInsets.zero,
+                  constraints: BoxConstraints(),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Increase quantity',
+              style: IconButton.styleFrom(
+                foregroundColor: InventoryColors.green,
+                minimumSize: const Size.square(40),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: busy ? null : () => _changeQuantity(1),
+              icon: const Icon(Icons.add_circle_outline_rounded),
+            ),
+          ],
         ),
       ),
     ),
   );
+
+  Widget _categoryField(List<StoreCategory> records) {
+    final choices = {
+      for (final record in records)
+        record.id: '${record.name}${record.active ? '' : ' (archived)'}',
+    };
+    return FormField<String>(
+      key: ValueKey('item-category-$category'),
+      initialValue: choices.containsKey(category) ? category : null,
+      validator: (value) => value == null ? 'Choose a category' : null,
+      builder: (field) => Semantics(
+        button: true,
+        child: InkWell(
+          key: const ValueKey('item-category'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: busy
+              ? null
+              : () async {
+                  FocusScope.of(context).unfocus();
+                  final value = await showInventoryCategorySheet(
+                    context: context,
+                    choices: choices,
+                    selected: field.value ?? '',
+                    title: 'Category',
+                  );
+                  if (value != null && mounted) {
+                    field.didChange(value);
+                    setState(() => category = value);
+                  }
+                },
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Category',
+              enabled: !busy,
+              errorText: field.errorText,
+              suffixIcon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 20,
+              ),
+            ),
+            child: Text(
+              choices[field.value] ?? 'Select category',
+              style: TextStyle(
+                fontSize: 13,
+                color: field.value == null
+                    ? InventoryColors.muted
+                    : InventoryColors.ink,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   void _changeQuantity(int delta) {
     final number = (int.tryParse(quantity.text) ?? 0) + delta;
@@ -563,6 +640,7 @@ class _ItemEditorState extends State<ItemEditor> {
         selection: TextSelection.collapsed(offset: '$number'.length),
       );
     });
+    quantityField.currentState?.didChange(quantity.text);
   }
 
   Future<void> _pickDate(BuildContext pickerContext) async {
@@ -576,6 +654,8 @@ class _ItemEditorState extends State<ItemEditor> {
           : selected,
       firstDate: today,
       lastDate: today.add(const Duration(days: 3650)),
+      helpText: 'Choose expiry date',
+      builder: (_, child) => InventoryTheme(child: child!),
     );
     if (picked != null && mounted) {
       setState(() => expiryAt = picked);
@@ -607,10 +687,9 @@ class _ItemEditorState extends State<ItemEditor> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not scan the barcode. You can enter it manually.',
-            ),
+          inventoryFeedback(
+            'Could not scan the barcode. You can enter it manually.',
+            error: true,
           ),
         );
       }
@@ -628,6 +707,7 @@ class _ItemEditorState extends State<ItemEditor> {
     controller: barcode,
     enabled: !busy,
     keyboardType: TextInputType.number,
+    style: const TextStyle(fontSize: 13),
     onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
     decoration: InputDecoration(
       labelText: 'Barcode',
@@ -756,14 +836,24 @@ class _ItemEditorState extends State<ItemEditor> {
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.editing ? 'Item updated' : 'Item saved')),
+        inventoryFeedback(widget.editing ? 'Item updated' : 'Item saved'),
       );
       Navigator.pop(context);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_friendlyError(error))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          inventoryFeedback(
+            _friendlyError(error),
+            error: true,
+            action: image == null
+                ? null
+                : SnackBarAction(
+                    label: 'Remove photo',
+                    textColor: InventoryColors.error,
+                    onPressed: () => setState(() => image = null),
+                  ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => saving = false);
@@ -774,8 +864,9 @@ class _ItemEditorState extends State<ItemEditor> {
     final text = '$error';
     if (text.toLowerCase().contains('storage') ||
         text.toLowerCase().contains('bucket')) {
-      return 'Photo upload needs Firebase Storage billing. Save without a new photo for now.';
+      return 'Could not upload the photo. Try again or save without a new photo.';
     }
-    return text.replaceFirst('Invalid argument(s): ', '');
+    if (error is ArgumentError) return '${error.message}';
+    return 'Could not save the item. Please try again.';
   }
 }

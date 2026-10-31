@@ -4,7 +4,6 @@ import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
-import '../widgets/inventory_expiry_range.dart';
 import '../widgets/store_chat_button.dart';
 import 'add_item_screen.dart';
 import 'admin_item_detail_screen.dart';
@@ -23,7 +22,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String category = 'all';
-  DateTimeRange? expiryRange;
   bool expiryAscending = true;
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
@@ -35,13 +33,15 @@ class _HomeScreenState extends State<HomeScreen> {
     child: Builder(
       builder: (context) => Scaffold(
         body: SafeArea(
+          bottom: false,
           child: Column(
             children: [
               InventoryHeader(
                 title: 'Overview',
+                enlarged: true,
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
                 trailing: StoreSession.instance.canManageMembers
-                    ? const StoreChatButton()
+                    ? const StoreChatButton(inventoryStyle: true)
                     : null,
               ),
               Expanded(
@@ -52,10 +52,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         stream: inventory,
                         builder: (context, snapshot) {
                           if (snapshot.hasError) {
-                            return const InventoryEmpty(
-                              title: 'Could not load inventory',
-                              body:
-                                  'Check your connection and reopen this page.',
+                            return const Center(
+                              child: InventoryEmpty(
+                                enlarged: true,
+                                icon: Icons.error_outline_rounded,
+                                title: 'Could not load inventory',
+                                body:
+                                    'Check your connection and reopen this page.',
+                              ),
                             );
                           }
                           if (!snapshot.hasData) {
@@ -83,15 +87,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return days >= 0 &&
                                     days <= 7 &&
                                     (category == 'all' ||
-                                        item.categoryId == category) &&
-                                    _inRange(item.expiryAt);
+                                        item.categoryId == category);
                               }).toList()..sort(
                                 (a, b) => expiryAscending
                                     ? a.expiryAt.compareTo(b.expiryAt)
                                     : b.expiryAt.compareTo(a.expiryAt),
                               );
                           return ListView(
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 104),
                             children: [
                               _stats(active.length, expiring.length),
                               const SizedBox(height: 18),
@@ -101,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: Text(
                                       'Expiring stock',
                                       style: TextStyle(
-                                        fontSize: 20,
+                                        fontSize: 21,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -116,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     child: const Text(
                                       'View all',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -130,10 +133,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 category: category,
                                 onCategory: (value) =>
                                     setState(() => category = value),
-                                range: expiryRange,
-                                onDate: () => _pickExpiryRange(context),
-                                onClearDate: () =>
-                                    setState(() => expiryRange = null),
                                 ascending: expiryAscending,
                                 onSort: () => setState(
                                   () => expiryAscending = !expiryAscending,
@@ -143,6 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               if (expiring.isEmpty)
                                 const Card(
                                   child: InventoryEmpty(
+                                    enlarged: true,
                                     title: 'All clear for the next 7 days',
                                     body:
                                         'No stock expires in the next 7 days.',
@@ -154,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
                                     child: InventoryBatchTile(
+                                      enlarged: true,
                                       item: item,
                                       categoryName: inventoryCategoryName(
                                         item.categoryId,
@@ -179,20 +180,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-                child: InventoryButton(
-                  label: 'Add inventory',
-                  centered: false,
-                  icon: Icons.add,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AddItemScreen()),
-                  ),
-                ),
-              ),
-              _bottomNav(context),
             ],
+          ),
+        ),
+        bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+        floatingActionButton: SizedBox(
+          width: MediaQuery.sizeOf(context).width - 40,
+          child: InventoryButton(
+            key: const ValueKey('home-add-inventory'),
+            label: 'Add inventory',
+            height: 44,
+            fontSize: 14,
+            icon: Icons.add,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AddItemScreen()),
+            ),
           ),
         ),
       ),
@@ -216,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
               'ACTIVE BATCHES',
               style: TextStyle(
                 color: Color(0xFFC9DBCA),
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -237,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
               'Across ${StoreSession.instance.store?.name ?? 'your store'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFC9DBCA), fontSize: 11),
+              style: const TextStyle(color: Color(0xFFC9DBCA), fontSize: 12),
             ),
           ],
         ),
@@ -272,7 +276,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const Text(
               'Expiring in\n7 days',
-              style: TextStyle(fontSize: 10.5, color: InventoryColors.muted),
+              style: TextStyle(fontSize: 11.5, color: InventoryColors.muted),
             ),
           ],
         ),
@@ -295,26 +299,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   );
 
-  bool _inRange(DateTime date) {
-    final range = expiryRange;
-    if (range == null) return true;
-    final day = DateUtils.dateOnly(date);
-    return !day.isBefore(DateUtils.dateOnly(range.start)) &&
-        !day.isAfter(DateUtils.dateOnly(range.end));
-  }
-
-  Future<void> _pickExpiryRange(BuildContext context) async {
-    final now = DateTime.now();
-    final selected = await showInventoryExpiryRange(
-      context: context,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 10),
-      initialDateRange: expiryRange,
-    );
-    if (selected != null && mounted) setState(() => expiryRange = selected);
-  }
-
   Widget _bottomNav(BuildContext context) => InventoryBottomNav(
+    fontSize: 10.5,
     currentIndex: 0,
     items: [
       const NavItem(
