@@ -110,12 +110,12 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
       child: SizedBox(
         key: const ValueKey('expiry-range-surface'),
         width: 350,
-        height: 480,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
+            Flexible(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(18, 24, 18, 24),
+                padding: const EdgeInsets.fromLTRB(18, 24, 18, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -190,34 +190,10 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Row(
-                  key: const ValueKey('expiry-range-actions'),
-                  children: [
-                    Expanded(
-                      child: InventoryButton(
-                        label: 'Cancel',
-                        height: 46,
-                        soft: true,
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: InventoryButton(
-                        label: 'OK',
-                        height: 46,
-                        onPressed: apply,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            InventoryDateActions(
+              key: const ValueKey('expiry-range-actions'),
+              onCancel: () => Navigator.pop(context),
+              onConfirm: apply,
             ),
           ],
         ),

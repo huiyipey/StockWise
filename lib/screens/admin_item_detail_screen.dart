@@ -79,10 +79,10 @@ class AdminItemDetailScreen extends StatelessWidget {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${categorySentenceCase(category)} / Per $priceUnit',
+                                    '$category / Per $priceUnit',
                                     key: const ValueKey('item-category-unit'),
                                     style: const TextStyle(
-                                      fontSize: 9.5,
+                                      fontSize: 12,
                                       color: InventoryColors.green,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -212,7 +212,7 @@ class AdminItemDetailScreen extends StatelessWidget {
         _summaryLine(
           minHeight: 40,
           child: const Text(
-            'Quantity on hand',
+            'Quantity on Hand',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
@@ -275,7 +275,7 @@ class AdminItemDetailScreen extends StatelessWidget {
       children: [
         const Expanded(
           child: Text(
-            'Expiry date',
+            'Expiry Date',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,

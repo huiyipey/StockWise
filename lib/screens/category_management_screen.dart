@@ -39,7 +39,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
             vertical: 24,
           ),
           title: Text(
-            category == null ? 'Add category' : 'Rename category',
+            category == null ? 'Add Category' : 'Rename category',
             style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
           ),
           content: SizedBox(
@@ -207,7 +207,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                             key: const ValueKey('add-category'),
                             onPressed: busy ? null : () => _edit(),
                             icon: Icons.add,
-                            label: 'Add category',
+                            label: 'Add Category',
                             height: 46,
                             busy: busy,
                           ),

@@ -45,7 +45,7 @@ class _CategoryFilterState extends State<CategoryFilter> {
         isExpanded: true,
         decoration: widget.decoration,
         items: [
-          const DropdownMenuItem(value: 'all', child: Text('All categories')),
+          const DropdownMenuItem(value: 'all', child: Text('All Categories')),
           ...ids.map(
             (id) => DropdownMenuItem(
               value: id,

@@ -493,6 +493,49 @@ class InventoryButton extends StatelessWidget {
   );
 }
 
+/// A padded, equal-width footer shared by the inventory date dialogs.
+class InventoryDateActions extends StatelessWidget {
+  const InventoryDateActions({
+    super.key,
+    required this.onCancel,
+    required this.onConfirm,
+    this.topPadding = 12,
+  });
+
+  final VoidCallback onCancel, onConfirm;
+  final double topPadding;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(18, topPadding, 18, 20),
+    child: Theme(
+      data: Theme.of(
+        context,
+      ).copyWith(materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      child: Row(
+        children: [
+          Expanded(
+            child: InventoryButton(
+              label: 'Cancel',
+              height: 46,
+              soft: true,
+              onPressed: onCancel,
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: InventoryButton(
+              label: 'OK',
+              height: 46,
+              onPressed: onConfirm,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class InventoryBottomNav extends StatelessWidget {
   const InventoryBottomNav({
     super.key,
@@ -884,7 +927,7 @@ class InventoryFilters extends StatelessWidget {
       ...unknown,
     ];
     final choices = <String, String>{
-      'all': 'All categories',
+      'all': 'All Categories',
       for (final id in ordered) id: inventoryCategoryName(id, records),
     };
     Future<void> selectCategory() async {

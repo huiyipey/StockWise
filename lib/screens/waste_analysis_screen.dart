@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/glass_bottom_nav.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../services/store_session.dart';
 import 'home_screen.dart';
 import 'items_screen.dart';
 import 'orders_screen.dart';
@@ -8,21 +9,33 @@ import 'profile_screen.dart';
 import 'report_dashboard.dart';
 
 class WasteAnalysisScreen extends StatelessWidget {
-  const WasteAnalysisScreen({super.key});
+  const WasteAnalysisScreen({
+    super.key,
+    this.dashboard = const ReportDashboard(),
+  });
+  final Widget dashboard;
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const StockWiseHeader(title: 'Reports'),
-          const Expanded(child: ReportDashboard()),
-          _bottomNav(context),
-        ],
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              InventoryHeader(
+                title: 'Reports',
+                storeName: StoreSession.instance.store?.name ?? 'StockWise',
+              ),
+              Expanded(child: dashboard),
+            ],
+          ),
+        ),
+        bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
       ),
     ),
   );
 
-  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+  Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     currentIndex: 2,
     items: [
       NavItem(

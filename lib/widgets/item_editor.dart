@@ -9,6 +9,7 @@ import '../models/product_name.dart';
 import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
+import 'inventory_expiry_date.dart';
 import 'product_name_formatter.dart';
 import '../screens/barcode_scanner_screen.dart';
 import 'stockwise_ui.dart';
@@ -238,7 +239,10 @@ class _ItemEditorState extends State<ItemEditor> {
                                           inputFormatters: const [
                                             ProductNameFormatter(),
                                           ],
-                                          style: const TextStyle(fontSize: 14),
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: InventoryColors.muted,
+                                          ),
                                           decoration: const InputDecoration(
                                             labelText: 'Name',
                                             hintText: 'e.g. Fresh Milk',
@@ -272,11 +276,9 @@ class _ItemEditorState extends State<ItemEditor> {
                                                     : DateFormat(
                                                         'dd MMM yyyy',
                                                       ).format(field.value!),
-                                                style: TextStyle(
+                                                style: const TextStyle(
                                                   fontSize: 14,
-                                                  color: field.value == null
-                                                      ? InventoryColors.muted
-                                                      : InventoryColors.ink,
+                                                  color: InventoryColors.muted,
                                                 ),
                                               ),
                                             ),
@@ -298,6 +300,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 enabled: !busy,
                                                 style: const TextStyle(
                                                   fontSize: 14,
+                                                  color: InventoryColors.muted,
                                                 ),
                                                 decoration:
                                                     const InputDecoration(
@@ -314,6 +317,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                                 enabled: !busy,
                                                 style: const TextStyle(
                                                   fontSize: 14,
+                                                  color: InventoryColors.muted,
                                                 ),
                                                 keyboardType:
                                                     const TextInputType.numberWithOptions(
@@ -324,6 +328,11 @@ class _ItemEditorState extends State<ItemEditor> {
                                                       labelText:
                                                           'Regular Price',
                                                       prefixText: 'RM ',
+                                                      prefixStyle: TextStyle(
+                                                        fontSize: 14,
+                                                        color: InventoryColors
+                                                            .muted,
+                                                      ),
                                                       hintText: '0.00',
                                                     ),
                                                 validator: _priceValidator,
@@ -380,6 +389,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                             enabled: !busy,
                                             style: const TextStyle(
                                               fontSize: 14,
+                                              color: InventoryColors.muted,
                                             ),
                                             keyboardType:
                                                 const TextInputType.numberWithOptions(
@@ -388,6 +398,10 @@ class _ItemEditorState extends State<ItemEditor> {
                                             decoration: const InputDecoration(
                                               labelText: 'Promotion Price',
                                               prefixText: 'RM ',
+                                              prefixStyle: TextStyle(
+                                                fontSize: 14,
+                                                color: InventoryColors.muted,
+                                              ),
                                               hintText: '0.00',
                                             ),
                                             validator: _priceValidator,
@@ -635,11 +649,9 @@ class _ItemEditorState extends State<ItemEditor> {
             ),
             child: Text(
               choices[field.value] ?? 'Select category',
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 14,
-                color: field.value == null
-                    ? InventoryColors.muted
-                    : InventoryColors.ink,
+                color: InventoryColors.muted,
               ),
             ),
           ),
@@ -663,15 +675,13 @@ class _ItemEditorState extends State<ItemEditor> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final selected = expiryAt;
-    final picked = await showDatePicker(
+    final picked = await showInventoryExpiryDate(
       context: pickerContext,
       initialDate: selected == null || selected.isBefore(today)
           ? today
           : selected,
       firstDate: today,
       lastDate: today.add(const Duration(days: 3650)),
-      helpText: 'Choose expiry date',
-      builder: (_, child) => InventoryTheme(child: child!),
     );
     if (picked != null && mounted) {
       setState(() => expiryAt = picked);
@@ -723,7 +733,7 @@ class _ItemEditorState extends State<ItemEditor> {
     controller: barcode,
     enabled: !busy,
     keyboardType: TextInputType.number,
-    style: const TextStyle(fontSize: 14),
+    style: const TextStyle(fontSize: 14, color: InventoryColors.muted),
     autovalidateMode: AutovalidateMode.onUserInteraction,
     onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
     validator: (value) => !widget.editing && (value?.trim().isEmpty ?? true)

@@ -49,6 +49,7 @@ class StoreInfo {
   final String currency;
   final String shopAddress;
   final StoreAddress? address;
+  final DateTime? createdAt;
 
   const StoreInfo({
     required this.id,
@@ -59,6 +60,7 @@ class StoreInfo {
     this.currency = 'MYR',
     this.shopAddress = '',
     this.address,
+    this.createdAt,
   });
 
   factory StoreInfo.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -74,6 +76,11 @@ class StoreInfo {
       currency: data['currency'] as String? ?? 'MYR',
       shopAddress: data['shopAddress'] as String? ?? '',
       address: StoreAddress.fromMap(data['address']),
+      createdAt: data['createdAt'] is Timestamp
+          ? (data['createdAt'] as Timestamp).toDate()
+          : data['createdAt'] is DateTime
+          ? data['createdAt'] as DateTime
+          : null,
     );
   }
 }
