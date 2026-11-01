@@ -6,10 +6,10 @@ import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../services/profile_fields.dart';
 import '../services/address_book_service.dart';
-import '../theme/app_theme.dart';
 import '../widgets/glass_bottom_nav.dart';
-import '../widgets/profile_avatar.dart';
 import '../widgets/store_chat_button.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/profile_ui.dart';
 import '../services/store_chat_service.dart';
 import '../services/password_change_service.dart';
 import '../services/store_fields.dart';
@@ -29,16 +29,6 @@ import 'staff_management_screen.dart';
 import 'waste_analysis_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  final Stream<Map<String, dynamic>>? profileStream;
-  final String? accountEmail;
-  final ProfileSaver? onSave;
-  final Future<XFile?> Function()? pickPhoto;
-  final AddressBookRepository? addressRepository;
-  final StoreChatRepository? chatRepository;
-  final PasswordChanger? onChangePassword;
-  final Stream<StoreInfo?>? shopStream;
-  final StoreUpdater? onSaveShop;
-
   const ProfileScreen({
     super.key,
     this.profileStream,
@@ -50,8 +40,22 @@ class ProfileScreen extends StatefulWidget {
     this.onChangePassword,
     this.shopStream,
     this.onSaveShop,
+    this.onNotificationPreference,
+    this.onSignOut,
+    this.onSignedOut,
   });
-
+  final Stream<Map<String, dynamic>>? profileStream;
+  final String? accountEmail;
+  final ProfileSaver? onSave;
+  final Future<XFile?> Function()? pickPhoto;
+  final AddressBookRepository? addressRepository;
+  final StoreChatRepository? chatRepository;
+  final PasswordChanger? onChangePassword;
+  final Stream<StoreInfo?>? shopStream;
+  final StoreUpdater? onSaveShop;
+  final Future<void> Function(bool)? onNotificationPreference;
+  final Future<void> Function()? onSignOut;
+  final VoidCallback? onSignedOut;
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
@@ -62,7 +66,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget.profileStream ?? FirestoreService.instance.watchUserProfile();
   late final shop =
       widget.shopStream ?? FirestoreService.instance.watchSelectedStore();
-
+  bool preferenceSaving = false, loggingOut = false;
+  bool? preferenceValue;
+  String? preferenceError, logoutError;
   @override
   void dispose() {
     scroll.dispose();
@@ -70,292 +76,360 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final email =
-        widget.accountEmail ?? FirebaseAuth.instance.currentUser?.email ?? '';
-    final session = StoreSession.instance;
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              height: 96,
-              color: AppColors.primary,
-              alignment: Alignment.center,
-              child: const Text(
-                'My Profile',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) {
+        final email =
+            widget.accountEmail ??
+            FirebaseAuth.instance.currentUser?.email ??
+            '';
+        return PopScope(
+          canPop: !loggingOut,
+          child: Scaffold(
+            body: SafeArea(
+              bottom: false,
+              child: Column(
+                children: [
+                  const InventoryHeader(title: 'Your profile'),
+                  Expanded(
+                    child: StreamBuilder<Map<String, dynamic>>(
+                      stream: profile,
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          return const SingleChildScrollView(
+                            child: ProfileEmpty(
+                              'Could not load your profile',
+                              body: 'Please reopen this page.',
+                            ),
+                          );
+                        }
+                        if (!snapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          );
+                        }
+                        if (StoreSession.instance.isOwner) {
+                          return StreamBuilder<StoreInfo?>(
+                            stream: shop,
+                            initialData: StoreSession.instance.store,
+                            builder: (context, store) =>
+                                content(context, snapshot.data!, email, store),
+                          );
+                        }
+                        return content(context, snapshot.data!, email, null);
+                      },
+                    ),
+                  ),
+                ],
               ),
             ),
-            Expanded(
-              child: StreamBuilder<Map<String, dynamic>>(
-                stream: profile,
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return const Center(
-                      child: Text(
-                        'Could not load your profile. Please reopen this page.',
-                      ),
-                    );
-                  }
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  final data = snapshot.data ?? const <String, dynamic>{};
-                  final preferences = Map<String, dynamic>.from(
-                    data['preferences'] as Map? ?? const {},
-                  );
-                  final enabled = preferences['expiryAlerts'] as bool? ?? true;
-                  return ListView(
-                    controller: scroll,
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      ProfileAvatar(photoPath: data['photoPath'] as String?),
-                      const SizedBox(height: 14),
-                      Text(
-                        data['displayName'] as String? ?? 'StockWise User',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      Text(
-                        email,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.muted),
-                      ),
-                      if ((data['phoneNumber'] as String? ?? '').isNotEmpty)
-                        Text(
-                          data['phoneNumber'] as String,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppColors.muted),
-                        ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '${session.store?.name ?? ''}  •  ${session.role.toUpperCase()}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.primaryDark,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      if (session.isOwner) ...[
-                        _shopDetails(),
-                        const SizedBox(height: 14),
-                      ],
-                      Card(
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(Icons.edit_outlined),
-                              title: const Text(
-                                'Edit profile',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () => _editProfile(context, data, email),
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.lock_outline_rounded),
-                              title: const Text(
-                                'Change password',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () => _changePassword(context),
-                            ),
-                            const Divider(height: 1),
-                            if (session.canManageMembers ||
-                                !session.canManage) ...[
-                              ListTile(
-                                leading: const Icon(
-                                  Icons.chat_bubble_outline_rounded,
-                                ),
-                                title: Text(
-                                  session.canManageMembers
-                                      ? 'Customer messages'
-                                      : 'Chat with admin',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                ),
-                                onTap: () => openStoreChat(
-                                  context,
-                                  repository: widget.chatRepository,
-                                ),
-                              ),
-                              const Divider(height: 1),
-                            ],
-                            if (!session.canManage) ...[
-                              ListTile(
-                                leading: const Icon(
-                                  Icons.contact_mail_outlined,
-                                ),
-                                title: const Text(
-                                  'Address book',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                                subtitle: const Text(
-                                  'Saved delivery addresses',
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                ),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => AddressBookScreen(
-                                      initialName:
-                                          data['displayName'] as String? ?? '',
-                                      initialPhone:
-                                          data['phoneNumber'] as String? ?? '',
-                                      repository: widget.addressRepository,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const Divider(height: 1),
-                            ],
-                            SwitchListTile.adaptive(
-                              secondary: const Icon(
-                                Icons.notifications_outlined,
-                              ),
-                              title: const Text(
-                                'Receive Notifications',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              subtitle: const Text(
-                                'Expiry, promotion, and order updates',
-                              ),
-                              value: enabled,
-                              onChanged: (value) => FirestoreService.instance
-                                  .updateNotificationPreference(value),
-                            ),
-                            const Divider(height: 1),
-                            ListTile(
-                              leading: const Icon(Icons.swap_horiz_rounded),
-                              title: const Text(
-                                'Switch store',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded),
-                              onTap: () => _switchStore(context),
-                            ),
-                            if (session.canManageMembers) ...[
-                              const Divider(height: 1),
-                              ListTile(
-                                leading: const Icon(Icons.groups_2_outlined),
-                                title: const Text(
-                                  'Manage store admins',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                                subtitle: const Text(
-                                  'Add staff access by email',
-                                ),
-                                trailing: const Icon(
-                                  Icons.chevron_right_rounded,
-                                ),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const StaffManagementScreen(),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.danger,
-                        ),
-                        onPressed: () => _logout(context),
-                        icon: const Icon(Icons.logout_rounded),
-                        label: const Text('LOG OUT'),
-                      ),
-                    ],
-                  );
-                },
+            bottomNavigationBar: SafeArea(
+              top: false,
+              child: AbsorbPointer(
+                absorbing: loggingOut,
+                child: _bottomNav(context),
               ),
             ),
-            _bottomNav(context),
-          ],
-        ),
-      ),
-    );
-  }
+          ),
+        );
+      },
+    ),
+  );
 
-  Widget _shopDetails() => StreamBuilder<StoreInfo?>(
-    stream: shop,
-    initialData: StoreSession.instance.store,
-    builder: (context, snapshot) {
-      if (snapshot.hasError) {
-        return const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'Could not load your shop details. Please reopen this page.',
-            ),
-          ),
-        );
-      }
-      final store = snapshot.data;
-      if (store == null) {
-        return const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('This shop no longer exists.'),
-          ),
-        );
-      }
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
+  Widget content(
+    BuildContext context,
+    Map<String, dynamic> data,
+    String email,
+    AsyncSnapshot<StoreInfo?>? shopData,
+  ) {
+    final session = StoreSession.instance;
+    final preferences = Map<String, dynamic>.from(
+      data['preferences'] as Map? ?? const {},
+    );
+    final enabled = preferences['expiryAlerts'] as bool? ?? true;
+    if (!preferenceSaving && preferenceValue == enabled) preferenceValue = null;
+    final name = (data['displayName'] as String?)?.trim();
+    final store = shopData?.data ?? session.store;
+    return ListView(
+      key: const ValueKey('profile-scroll'),
+      controller: scroll,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        ProfileIdentity(
+          key: const ValueKey('profile-identity'),
+          name: name?.isNotEmpty == true ? name! : 'StockWise User',
+          email: email,
+          phone: data['phoneNumber'] as String?,
+          photo: data['photoPath'] as String?,
+          role: '${session.role[0].toUpperCase()}${session.role.substring(1)}',
+          storeName: store?.name ?? 'StockWise',
+        ),
+        if (session.isOwner) ...[
+          const SizedBox(height: 16),
+          shopDetails(shopData!),
+        ],
+        const ProfileSection('Your account'),
+        ProfilePanel(
+          padding: 0,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Shop details',
-                style: Theme.of(context).textTheme.titleLarge,
+              ProfileAction(
+                key: const ValueKey('profile-edit-action'),
+                label: 'Edit profile',
+                icon: Icons.edit_outlined,
+                onTap: loggingOut
+                    ? null
+                    : () => _editProfile(context, data, email),
               ),
-              const SizedBox(height: 12),
-              const Text('Shop name', style: TextStyle(color: AppColors.muted)),
-              Text(
-                store.name,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Shop address',
-                style: TextStyle(color: AppColors.muted),
-              ),
-              Text(
-                store.shopAddress.isEmpty
-                    ? 'No shop address saved yet.'
-                    : store.shopAddress,
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _editShop(store),
-                icon: const Icon(Icons.edit_outlined),
-                label: const Text('Edit shop'),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              ProfileAction(
+                key: const ValueKey('profile-password-action'),
+                label: 'Change password',
+                icon: Icons.lock_outline_rounded,
+                onTap: loggingOut ? null : () => _changePassword(context),
               ),
             ],
           ),
         ),
+        const ProfileSection('Store and preferences'),
+        ProfilePanel(
+          padding: 0,
+          child: Column(
+            children: [
+              if (session.canManageMembers || !session.canManage) ...[
+                ProfileAction(
+                  label: session.canManageMembers
+                      ? 'Customer messages'
+                      : 'Chat with admin',
+                  icon: Icons.chat_bubble_outline_rounded,
+                  onTap: loggingOut
+                      ? null
+                      : () => openStoreChat(
+                          context,
+                          repository: widget.chatRepository,
+                        ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+              ],
+              if (!session.canManage) ...[
+                ProfileAction(
+                  label: 'Address book',
+                  subtitle: 'Saved delivery addresses',
+                  icon: Icons.contact_mail_outlined,
+                  onTap: loggingOut
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AddressBookScreen(
+                              initialName: data['displayName'] as String? ?? '',
+                              initialPhone:
+                                  data['phoneNumber'] as String? ?? '',
+                              repository: widget.addressRepository,
+                            ),
+                          ),
+                        ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+              ],
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_outlined,
+                      size: 21,
+                      color: InventoryColors.green,
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Receive Notifications',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            'Expiry, promotion, and order updates',
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.4,
+                              color: InventoryColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      key: const ValueKey('profile-notifications'),
+                      value: preferenceValue ?? enabled,
+                      activeTrackColor: InventoryColors.green,
+                      onChanged: preferenceSaving || loggingOut
+                          ? null
+                          : changePreference,
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              ProfileAction(
+                label: 'Switch store',
+                icon: Icons.swap_horiz_rounded,
+                onTap: loggingOut ? null : () => _switchStore(context),
+              ),
+              if (session.canManageMembers) ...[
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ProfileAction(
+                  label: 'Manage store admins',
+                  subtitle: 'Add staff access by email',
+                  icon: Icons.groups_2_outlined,
+                  onTap: loggingOut
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const StaffManagementScreen(),
+                          ),
+                        ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (preferenceSaving) ...[
+          const SizedBox(height: 16),
+          const ProfileNotice('Saving notification preference...', busy: true),
+        ],
+        if (preferenceError != null) ...[
+          const SizedBox(height: 16),
+          ProfileNotice(preferenceError!, error: true),
+        ],
+        if (logoutError != null) ...[
+          const SizedBox(height: 16),
+          ProfileNotice(logoutError!, error: true),
+        ],
+        const SizedBox(height: 22),
+        InventoryButton(
+          key: const ValueKey('profile-logout'),
+          label: loggingOut ? 'Logging out...' : 'Log out',
+          icon: Icons.logout_rounded,
+          danger: true,
+          busy: loggingOut,
+          onPressed: loggingOut ? null : () => _logout(context),
+        ),
+      ],
+    );
+  }
+
+  Widget shopDetails(AsyncSnapshot<StoreInfo?> snapshot) {
+    if (snapshot.hasError) {
+      return const ProfilePanel(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Shop details',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            SizedBox(height: 14),
+            ProfileNotice(
+              'Could not load your shop details. Please reopen this page.',
+              error: true,
+            ),
+          ],
+        ),
       );
-    },
-  );
+    }
+    final store = snapshot.data;
+    if (store == null) {
+      return const ProfilePanel(child: Text('This shop no longer exists.'));
+    }
+    return ProfilePanel(
+      key: const ValueKey('profile-shop-details'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.storefront_outlined,
+                color: InventoryColors.green,
+                size: 22,
+              ),
+              SizedBox(width: 10),
+              Text(
+                'Shop details',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            store.name,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.location_on_outlined,
+                size: 18,
+                color: InventoryColors.muted,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  store.shopAddress.isEmpty
+                      ? 'No shop address saved yet.'
+                      : store.shopAddress,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.6,
+                    color: InventoryColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          InventoryButton(
+            label: 'Edit shop',
+            icon: Icons.edit_outlined,
+            soft: true,
+            onPressed: loggingOut ? null : () => _editShop(store),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> changePreference(bool value) async {
+    if (preferenceSaving) return;
+    setState(() {
+      preferenceValue = value;
+      preferenceSaving = true;
+      preferenceError = null;
+    });
+    try {
+      await (widget.onNotificationPreference ??
+          FirestoreService.instance.updateNotificationPreference)(value);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          preferenceValue = null;
+          preferenceError = 'Could not update notifications. Please try again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => preferenceSaving = false);
+    }
+  }
 
   Future<void> _editShop(StoreInfo store) async {
     final updated = await showDialog<StoreInfo>(
@@ -378,7 +452,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {});
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Shop details updated')));
+    ).showSnackBar(inventoryFeedback('Shop details updated'));
   }
 
   Future<void> _editProfile(
@@ -403,7 +477,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (scroll.hasClients) scroll.jumpTo(0);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+      ).showSnackBar(inventoryFeedback('Profile updated'));
     }
   }
 
@@ -416,9 +490,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (changed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password changed successfully')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(inventoryFeedback('Password changed successfully'));
     }
   }
 
@@ -433,19 +507,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _logout(BuildContext context) async {
-    StoreSession.instance.clear();
-    await FirebaseAuth.instance.signOut();
-    if (!context.mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const AuthGate()),
-      (_) => false,
+    if (loggingOut) return;
+    final confirmed = await showProfileConfirmation(
+      context: context,
+      title: 'Log out of StockWise?',
+      message:
+          'You will return to the sign-in page. Your saved account and store information will stay available.',
+      action: 'Log out',
+      cancel: 'Stay signed in',
+      danger: true,
     );
+    if (!confirmed || !context.mounted) return;
+    setState(() {
+      loggingOut = true;
+      logoutError = null;
+    });
+    final navigator = Navigator.of(context, rootNavigator: true);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: Dialog(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Logging out',
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w700,
+                    color: InventoryColors.ink,
+                  ),
+                ),
+                SizedBox(height: 22),
+                ProfileNotice(
+                  'Please wait while StockWise signs you out.',
+                  busy: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ).ignore();
+    try {
+      await (widget.onSignOut ?? FirebaseAuth.instance.signOut)();
+      if (!context.mounted) return;
+      navigator.pop();
+      StoreSession.instance.clear();
+      if (widget.onSignedOut != null) {
+        widget.onSignedOut!();
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const AuthGate()),
+          (_) => false,
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        navigator.pop();
+        setState(() => logoutError = 'Could not sign out. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => loggingOut = false);
+    }
   }
 
   Widget _bottomNav(BuildContext context) {
     if (StoreSession.instance.canManage) {
-      return GlassBottomNav(
+      return InventoryBottomNav(
         currentIndex: 4,
         items: [
           NavItem(
@@ -492,7 +627,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
-    return GlassBottomNav(
+    return InventoryBottomNav(
       currentIndex: 3,
       items: [
         NavItem(

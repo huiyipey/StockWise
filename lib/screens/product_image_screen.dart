@@ -7,6 +7,7 @@ class ProductImageScreen extends StatefulWidget {
   final bool inventoryStyle;
   final bool receiptStyle;
   final String? subtitle;
+  final bool showZoomControls;
 
   const ProductImageScreen({
     super.key,
@@ -15,6 +16,7 @@ class ProductImageScreen extends StatefulWidget {
     this.inventoryStyle = false,
     this.receiptStyle = false,
     this.subtitle,
+    this.showZoomControls = false,
   });
 
   @override
@@ -190,7 +192,7 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
               },
             ),
           ),
-          if (!widget.inventoryStyle)
+          if (!widget.inventoryStyle || widget.showZoomControls)
             ValueListenableBuilder<Matrix4>(
               valueListenable: transformation,
               builder: (context, matrix, _) {

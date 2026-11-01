@@ -6,6 +6,7 @@ import '../models/store_chat.dart';
 import '../screens/product_image_screen.dart';
 import '../services/chat_attachment_files.dart';
 import '../services/store_chat_service.dart';
+import 'inventory_ui.dart';
 
 typedef ChatAttachmentOpener =
     Future<void> Function(Uint8List bytes, String name, String contentType);
@@ -48,9 +49,9 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
           attachment.contentType,
         );
         if (saved && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Attachment downloaded')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(inventoryFeedback('Attachment downloaded'));
         }
       } else {
         await (widget.openFile ?? ChatAttachmentFiles.open)(
@@ -63,12 +64,11 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
       download = null;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              failure is StateError
-                  ? failure.message.toString()
-                  : 'Could not open this attachment. Please try again.',
-            ),
+          inventoryFeedback(
+            failure is StateError
+                ? failure.message.toString()
+                : 'Could not open this attachment. Please try again.',
+            error: true,
           ),
         );
       }
@@ -121,6 +121,8 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
                       builder: (_) => ProductImageScreen(
                         image: MemoryImage(snapshot.data!),
                         title: attachment.fileName,
+                        inventoryStyle: true,
+                        showZoomControls: true,
                       ),
                     ),
                   ),

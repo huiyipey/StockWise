@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../services/password_change_service.dart';
 import '../services/password_policy.dart';
-import '../theme/app_theme.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/profile_ui.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   final PasswordChanger? onChangePassword;
@@ -21,7 +21,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final visible = [false, false, false];
   bool saving = false;
   String? error;
-
   @override
   void dispose() {
     currentPassword.dispose();
@@ -72,6 +71,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     key: ValueKey('password-$index'),
     controller: controller,
     enabled: !saving,
+    style: const TextStyle(fontSize: 13),
     obscureText: !visible[index],
     autocorrect: false,
     enableSuggestions: false,
@@ -97,78 +97,76 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   );
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !saving,
-    child: Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            StockWiseHeader(
-              title: 'Change Password',
-              leading: saving ? null : const BackCircleButton(),
-            ),
-            Expanded(
-              child: Form(
-                key: form,
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    const Text(
-                      'Enter your current password, then choose and confirm a new password.',
-                    ),
-                    const SizedBox(height: 24),
-                    _passwordField(
-                      index: 0,
-                      label: 'Current password',
-                      controller: currentPassword,
-                      validator: currentPasswordError,
-                      autofillHint: AutofillHints.password,
-                    ),
-                    const SizedBox(height: 16),
-                    _passwordField(
-                      index: 1,
-                      label: 'New password',
-                      controller: newPassword,
-                      validator: (value) =>
-                          newPasswordError(value, currentPassword.text),
-                      autofillHint: AutofillHints.newPassword,
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Text(
-                        passwordRequirements,
-                        style: TextStyle(color: AppColors.muted),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _passwordField(
-                      index: 2,
-                      label: 'Confirm new password',
-                      controller: confirmation,
-                      validator: (value) =>
-                          confirmPasswordError(value, newPassword.text),
-                      autofillHint: AutofillHints.newPassword,
-                    ),
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          error!,
-                          style: const TextStyle(color: AppColors.danger),
-                        ),
-                      ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: saving ? null : _save,
-                      child: Text(saving ? 'CHANGING...' : 'CHANGE PASSWORD'),
-                    ),
-                  ],
+  Widget build(BuildContext context) => ProfileFormPage(
+    title: 'Change password',
+    busy: saving,
+    body: Form(
+      key: form,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          ProfilePanel(
+            padding: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Enter your current password, then choose and confirm a new password.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: InventoryColors.muted,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 24),
+                _passwordField(
+                  index: 0,
+                  label: 'Current password',
+                  controller: currentPassword,
+                  validator: currentPasswordError,
+                  autofillHint: AutofillHints.password,
+                ),
+                const SizedBox(height: 22),
+                _passwordField(
+                  index: 1,
+                  label: 'New password',
+                  controller: newPassword,
+                  validator: (value) =>
+                      newPasswordError(value, currentPassword.text),
+                  autofillHint: AutofillHints.newPassword,
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  passwordRequirements,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.5,
+                    color: InventoryColors.muted,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                _passwordField(
+                  index: 2,
+                  label: 'Confirm new password',
+                  controller: confirmation,
+                  validator: (value) =>
+                      confirmPasswordError(value, newPassword.text),
+                  autofillHint: AutofillHints.newPassword,
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 18),
+                  ProfileNotice(error!, error: true),
+                ],
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
+    ),
+    footer: ProfileFooter(
+      label: saving ? 'Changing...' : 'Change password',
+      busy: saving,
+      onPressed: saving ? null : _save,
     ),
   );
 }

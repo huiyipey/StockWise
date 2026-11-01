@@ -5,9 +5,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../services/firestore_service.dart';
 import '../services/profile_fields.dart';
-import '../theme/app_theme.dart';
-import '../widgets/profile_avatar.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/profile_ui.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String displayName;
@@ -40,6 +39,129 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool saving = false;
   bool picking = false;
   String? error;
+  bool completed = false;
+  bool get dirty =>
+      name.text != widget.displayName ||
+      phone.text != widget.phoneNumber ||
+      photo != null;
+
+  @override
+  void initState() {
+    super.initState();
+    name.addListener(refresh);
+    phone.addListener(refresh);
+  }
+
+  @override
+  Widget build(BuildContext context) => ProfileFormPage(
+    title: 'Edit profile',
+    dirty: dirty,
+    busy: saving || picking,
+    completed: completed,
+    discardTitle: 'Discard profile changes?',
+    body: Form(
+      key: form,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          ProfilePanel(
+            padding: 20,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ProfilePhoto(
+                  name: name.text,
+                  path: widget.photoPath,
+                  preview: preview,
+                  radius: 38,
+                ),
+                const SizedBox(height: 20),
+                InventoryButton(
+                  label: picking ? 'Loading photo...' : 'Change profile photo',
+                  icon: Icons.image_outlined,
+                  soft: true,
+                  busy: picking,
+                  onPressed: saving || picking ? null : _pickPhoto,
+                ),
+                if (photo != null)
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () => setState(() {
+                            photo = null;
+                            preview = null;
+                          }),
+                    child: const Text('Undo photo change'),
+                  ),
+                const SizedBox(height: 24),
+                TextFormField(
+                  key: const ValueKey('profile-name'),
+                  controller: name,
+                  enabled: !saving && !picking,
+                  maxLength: 80,
+                  style: const TextStyle(fontSize: 13),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'Full name',
+                    counterText: '',
+                  ),
+                  validator: profileNameError,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: const ValueKey('profile-phone'),
+                  controller: phone,
+                  enabled: !saving && !picking,
+                  style: const TextStyle(fontSize: 13),
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number (optional)',
+                    hintText: 'Enter your phone number',
+                  ),
+                  validator: profilePhoneError,
+                ),
+                const SizedBox(height: 20),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: TextFormField(
+                    initialValue: widget.email,
+                    readOnly: true,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: InventoryColors.muted,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      fillColor: InventoryColors.background,
+                      constraints: BoxConstraints(),
+                      suffixIcon: Icon(
+                        Icons.lock_outline_rounded,
+                        size: 17,
+                        color: InventoryColors.muted,
+                      ),
+                    ),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 18),
+                  ProfileNotice(error!, error: true),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+    footer: ProfileFooter(
+      label: saving ? 'Saving...' : 'Save changes',
+      busy: saving,
+      onPressed: saving || picking ? null : _save,
+    ),
+  );
+  void refresh() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -49,6 +171,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _pickPhoto() async {
+    if (saving || picking) return;
     setState(() => picking = true);
     try {
       final selected =
@@ -97,7 +220,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         photo: photo,
       );
       if (mounted) {
-        setState(() => saving = false);
+        setState(() {
+          saving = false;
+          completed = true;
+        });
         await WidgetsBinding.instance.endOfFrame;
         if (mounted) Navigator.pop(context, true);
       }
@@ -113,93 +239,4 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) setState(() => saving = false);
     }
   }
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: !saving,
-    child: Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            StockWiseHeader(
-              title: 'Edit Profile',
-              leading: saving ? null : const BackCircleButton(),
-            ),
-            Expanded(
-              child: Form(
-                key: form,
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    ProfileAvatar(
-                      photoPath: widget.photoPath,
-                      preview: preview,
-                      radius: 56,
-                    ),
-                    TextButton.icon(
-                      onPressed: saving || picking ? null : _pickPhoto,
-                      icon: const Icon(Icons.photo_camera_outlined),
-                      label: Text(
-                        picking ? 'Loading photo...' : 'Change profile photo',
-                      ),
-                    ),
-                    if (photo != null)
-                      TextButton(
-                        onPressed: saving
-                            ? null
-                            : () => setState(() {
-                                photo = null;
-                                preview = null;
-                              }),
-                        child: const Text('Undo photo change'),
-                      ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      key: const ValueKey('profile-name'),
-                      controller: name,
-                      enabled: !saving,
-                      maxLength: 80,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(labelText: 'Name'),
-                      validator: profileNameError,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      key: const ValueKey('profile-phone'),
-                      controller: phone,
-                      enabled: !saving,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone number (optional)',
-                      ),
-                      validator: profilePhoneError,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: widget.email,
-                      readOnly: true,
-                      decoration: const InputDecoration(labelText: 'Email'),
-                    ),
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: Text(
-                          error!,
-                          style: const TextStyle(color: AppColors.danger),
-                        ),
-                      ),
-                    const SizedBox(height: 22),
-                    ElevatedButton(
-                      onPressed: saving || picking ? null : _save,
-                      child: Text(saving ? 'SAVING...' : 'SAVE CHANGES'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
