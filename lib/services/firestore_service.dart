@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'cart_item_data.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -599,17 +600,12 @@ class FirestoreService {
         'ownerUid': _user.uid,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
-      final itemData = <String, dynamic>{
-        'storeId': _storeId,
-        'batchId': batch.id,
-        'productId': batch.productId,
-        'productName': batch.productName,
-        'imagePath': batch.imagePath,
-        'expiryAt': Timestamp.fromDate(batch.expiryAt),
-        'quantity': currentQuantity + quantity,
-        'unitPriceCents': batch.sellingPriceCents,
-        'updatedAt': FieldValue.serverTimestamp(),
-      };
+      final itemData = cartItemData(
+        storeId: _storeId,
+        batchId: batchSnap.id,
+        batch: batchSnap.data()!,
+        quantity: currentQuantity + quantity,
+      )..['updatedAt'] = FieldValue.serverTimestamp();
       if (!itemSnap.exists) {
         itemData['addedAt'] = FieldValue.serverTimestamp();
       }
