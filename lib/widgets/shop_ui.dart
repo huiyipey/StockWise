@@ -184,7 +184,7 @@ class ShopProductCard extends StatelessWidget {
       onTap: onOpen,
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: featured ? _featured(context) : _row(context),
+        child: featured ? _featured(context) : _grid(context),
       ),
     ),
   );
@@ -258,65 +258,52 @@ class ShopProductCard extends StatelessWidget {
     ],
   );
 
-  Widget _row(BuildContext context) {
-    final large = MediaQuery.textScalerOf(context).scale(14) > 19;
-    final description = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          category,
-          style: const TextStyle(fontSize: 10, color: InventoryColors.muted),
+  Widget _grid(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AspectRatio(
+        aspectRatio: 1.1,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ShopProductPhoto(item: item, image: image),
+            Positioned(right: 4, bottom: 4, child: _addButton()),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
+      ),
+      const SizedBox(height: 12),
+      Text(
+        category,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
+      ),
+      const SizedBox(height: 4),
+      SizedBox(
+        height: MediaQuery.textScalerOf(context).scale(15) * 1.3 * 2,
+        child: Text(
           item.productName,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             height: 1.3,
             fontWeight: FontWeight.w700,
           ),
         ),
-        const SizedBox(height: 7),
-        Text(
-          '${item.availableQuantity} ${item.unitLabel} available',
-          style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
-        ),
-        const SizedBox(height: 6),
-        _expiry(),
-        const SizedBox(height: 9),
-        Row(
-          children: [
-            Expanded(child: _price()),
-            _addButton(),
-          ],
-        ),
-      ],
-    );
-    return large
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(
-                height: 140,
-                child: ShopProductPhoto(item: item, image: image),
-              ),
-              const SizedBox(height: 14),
-              description,
-            ],
-          )
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SizedBox(
-                width: 92,
-                height: 118,
-                child: ShopProductPhoto(item: item, image: image),
-              ),
-              const SizedBox(width: 14),
-              Expanded(child: description),
-            ],
-          );
-  }
+      ),
+      const SizedBox(height: 8),
+      _price(),
+      const SizedBox(height: 9),
+      _expiry(),
+      const SizedBox(height: 6),
+      Text(
+        '${item.availableQuantity} ${item.unitLabel} available',
+        style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
+      ),
+    ],
+  );
 
   Widget _price() => Wrap(
     spacing: 7,

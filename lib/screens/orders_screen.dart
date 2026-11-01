@@ -180,6 +180,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         for (final order in filtered)
                           OrderListCard(
                             order: order,
+                            enlarged: widget.isAdmin,
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(

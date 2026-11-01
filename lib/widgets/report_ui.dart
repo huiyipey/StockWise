@@ -25,17 +25,17 @@ class ReportPeriodFilter extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             for (final value in ReportPeriod.values) ...[
-              if (value != ReportPeriod.values.first) const SizedBox(width: 6),
+              if (value != ReportPeriod.values.first) const SizedBox(width: 8),
               Semantics(
                 selected: selected == value,
                 child: TextButton(
                   key: ValueKey('report-period-${value.name}'),
                   onPressed: () => onSelected(value),
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 32),
+                    minimumSize: const Size(76, 46),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                      horizontal: 18,
+                      vertical: 12,
                     ),
                     tapTargetSize: MaterialTapTargetSize.padded,
                     backgroundColor: selected == value
@@ -46,7 +46,7 @@ class ReportPeriodFilter extends StatelessWidget {
                         : InventoryColors.muted,
                     shape: const StadiumBorder(),
                     textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontSize: 11.5,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0,
                       height: 1.2,

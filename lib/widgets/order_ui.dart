@@ -37,8 +37,14 @@ class OrderHeading extends StatelessWidget {
 }
 
 class OrderBadge extends StatelessWidget {
-  const OrderBadge(this.label, {super.key, this.value = 'paid'});
+  const OrderBadge(
+    this.label, {
+    super.key,
+    this.value = 'paid',
+    this.fontSize = 10,
+  });
   final String label, value;
+  final double fontSize;
   @override
   Widget build(BuildContext context) {
     final warning = value == 'unpaid' || value == 'to_pay';
@@ -56,7 +62,7 @@ class OrderBadge extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: fontSize,
           fontWeight: FontWeight.w700,
           color: error
               ? InventoryColors.error
@@ -83,17 +89,17 @@ class OrderStatusFilter extends StatelessWidget {
     child: Row(
       children: [
         for (final value in ['all', ...orderStatuses]) ...[
-          if (value != 'all') const SizedBox(width: 7),
+          if (value != 'all') const SizedBox(width: 8),
           Semantics(
             selected: value == selected,
             child: TextButton(
               key: ValueKey('order-filter-$value'),
               onPressed: () => onSelected(value),
               style: TextButton.styleFrom(
-                minimumSize: const Size(0, 34),
+                minimumSize: const Size(72, 46),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 9,
+                  horizontal: 20,
+                  vertical: 12,
                 ),
                 shape: const StadiumBorder(),
                 foregroundColor: selected == value
@@ -103,9 +109,10 @@ class OrderStatusFilter extends StatelessWidget {
                     ? InventoryColors.soft
                     : Colors.white,
                 textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0,
+                  height: 1.2,
                 ),
               ),
               child: Text(value == 'all' ? 'All' : orderLabel(value)),
@@ -118,9 +125,15 @@ class OrderStatusFilter extends StatelessWidget {
 }
 
 class OrderListCard extends StatelessWidget {
-  const OrderListCard({super.key, required this.order, required this.onTap});
+  const OrderListCard({
+    super.key,
+    required this.order,
+    required this.onTap,
+    this.enlarged = false,
+  });
   final StoreOrder order;
   final VoidCallback onTap;
+  final bool enlarged;
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
@@ -136,20 +149,7 @@ class OrderListCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (MediaQuery.textScalerOf(context).scale(12) > 16) ...[
-                _number(),
-                const SizedBox(height: 10),
-                Wrap(spacing: 6, runSpacing: 6, children: _badges()),
-              ] else
-                Row(
-                  children: [
-                    Expanded(child: _number()),
-                    const SizedBox(width: 8),
-                    _badges().first,
-                    const SizedBox(width: 6),
-                    _badges().last,
-                  ],
-                ),
+              _header(context),
               const SizedBox(height: 15),
               Row(
                 children: [
@@ -198,15 +198,69 @@ class OrderListCard extends StatelessWidget {
     ),
   );
 
+  Widget _header(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      double textWidth(String text, double size) {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: DefaultTextStyle.of(
+              context,
+            ).style.copyWith(fontSize: size, fontWeight: FontWeight.w700),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width;
+      }
+
+      final width =
+          textWidth('#${order.orderNumber}', enlarged ? 15 : 12) +
+          textWidth(orderLabel(order.paymentStatus), enlarged ? 12 : 10) +
+          textWidth(orderLabel(order.status), enlarged ? 12 : 10) +
+          50;
+      final badges = _badges();
+      if (width > constraints.maxWidth) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _number(),
+            const SizedBox(height: 10),
+            Wrap(spacing: 6, runSpacing: 6, children: badges),
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: _number()),
+          const SizedBox(width: 8),
+          badges.first,
+          const SizedBox(width: 6),
+          badges.last,
+        ],
+      );
+    },
+  );
+
   Widget _number() => Text(
     '#${order.orderNumber}',
     maxLines: 2,
     overflow: TextOverflow.ellipsis,
-    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+    style: TextStyle(fontSize: enlarged ? 15 : 12, fontWeight: FontWeight.w700),
   );
   List<Widget> _badges() => [
-    OrderBadge(orderLabel(order.paymentStatus), value: order.paymentStatus),
-    OrderBadge(orderLabel(order.status), value: order.status),
+    OrderBadge(
+      orderLabel(order.paymentStatus),
+      value: order.paymentStatus,
+      fontSize: enlarged ? 12 : 10,
+    ),
+    OrderBadge(
+      orderLabel(order.status),
+      value: order.status,
+      fontSize: enlarged ? 12 : 10,
+    ),
   ];
 }
 

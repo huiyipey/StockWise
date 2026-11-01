@@ -254,7 +254,11 @@ class ProfileIdentity extends StatelessWidget {
             height: 96,
             child: Stack(
               children: [
-                Container(height: 52, color: InventoryColors.soft),
+                Container(
+                  key: const ValueKey('profile-identity-band'),
+                  height: 64,
+                  color: InventoryColors.soft,
+                ),
                 Positioned(
                   right: -16,
                   top: -38,
@@ -276,6 +280,7 @@ class ProfileIdentity extends StatelessWidget {
                   top: 22,
                   child: Center(
                     child: Container(
+                      key: const ValueKey('profile-identity-photo'),
                       padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
@@ -296,7 +301,7 @@ class ProfileIdentity extends StatelessWidget {
                   name,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 21,
                     height: 1.3,
                     fontWeight: FontWeight.w700,
                     color: InventoryColors.ink,
@@ -312,7 +317,7 @@ class ProfileIdentity extends StatelessWidget {
                     Text(
                       role,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                         color: InventoryColors.green,
                       ),
@@ -323,14 +328,14 @@ class ProfileIdentity extends StatelessWidget {
                     ),
                     const Icon(
                       Icons.storefront_outlined,
-                      size: 14,
+                      size: 16,
                       color: InventoryColors.muted,
                     ),
                     Text(
                       storeName,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 13,
                         color: InventoryColors.muted,
                       ),
                     ),
@@ -367,14 +372,14 @@ class ProfileIdentity extends StatelessWidget {
   Widget _contact(IconData icon, String value) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
-      Icon(icon, size: 15, color: InventoryColors.green),
+      Icon(icon, size: 17, color: InventoryColors.green),
       const SizedBox(width: 8),
       Flexible(
         child: Text(
           value,
           textAlign: TextAlign.center,
           style: const TextStyle(
-            fontSize: 11,
+            fontSize: 13,
             height: 1.5,
             color: InventoryColors.muted,
           ),

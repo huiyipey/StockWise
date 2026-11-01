@@ -399,9 +399,22 @@ class _ShopScreenState extends State<ShopScreen> {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverList.separated(
-              itemCount: regular.length,
+              itemCount: (regular.length / 2).ceil(),
               separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (_, index) => _product(regular[index], records),
+              itemBuilder: (_, row) => IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: _product(regular[row * 2], records)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: row * 2 + 1 < regular.length
+                          ? _product(regular[row * 2 + 1], records)
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 28)),
