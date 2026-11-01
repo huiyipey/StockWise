@@ -1,220 +1,318 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
+import '../models/order_status.dart';
 import '../services/firestore_service.dart';
-import '../theme/app_theme.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/order_receipt.dart';
+import '../widgets/order_ui.dart';
+import '../widgets/stockwise_ui.dart' show ProductArtwork;
 import 'item_detail_screen.dart';
 import 'admin_item_detail_screen.dart';
 
 class OrderDetailScreen extends StatefulWidget {
-  final StoreOrder order;
-  final bool isAdmin;
-  final Stream<List<OrderLine>>? orderLinesStream;
-  final Future<InventoryBatch?> Function(OrderLine)? productLookup;
-
   const OrderDetailScreen({
     super.key,
     required this.order,
     this.isAdmin = true,
     this.orderLinesStream,
     this.productLookup,
+    this.liveUpdates = true,
+    this.orderUpdates,
+    this.saveStatus,
+    this.pickReceipt,
+    this.uploadReceipt,
+    this.receiptImage,
   });
-
+  final StoreOrder order;
+  final bool isAdmin, liveUpdates;
+  final Stream<List<OrderLine>>? orderLinesStream;
+  final Stream<StoreOrder?>? orderUpdates;
+  final Future<InventoryBatch?> Function(OrderLine)? productLookup;
+  final Future<void> Function(StoreOrder, String)? saveStatus;
+  final Future<XFile?> Function()? pickReceipt;
+  final Future<String> Function(XFile, String)? uploadReceipt;
+  final Future<ImageProvider> Function(String)? receiptImage;
   @override
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
-  late String status = widget.order.status;
-  bool saving = false;
-  bool uploadingReceipt = false;
-  late String? receiptPath = widget.order.receiptPath;
-  String? openingLineId;
-  late final orderLines =
+  late StoreOrder order = widget.order;
+  late String status = order.status;
+  late String? receiptPath = order.receiptPath;
+  bool saving = false, uploadingReceipt = false, pickingReceipt = false;
+  bool allowPop = false, missing = false;
+  String? openingLineId, saveError, receiptError, updateNotice;
+  StreamSubscription<StoreOrder?>? subscription;
+  late Stream<List<OrderLine>> lines = watchLines();
+  bool get dirty => widget.isAdmin && status != order.status;
+  bool get busy => saving || uploadingReceipt || pickingReceipt;
+  bool get hasReceipt => receiptPath?.trim().isNotEmpty == true;
+  Stream<List<OrderLine>> watchLines() =>
       widget.orderLinesStream ??
-      FirestoreService.instance.watchOrderLines(widget.order.id);
+      FirestoreService.instance.watchOrderLines(order.id);
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const StockWiseHeader(
-            title: 'Order Details',
-            leading: BackCircleButton(),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(18),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _row('Order', '#${widget.order.orderNumber}'),
-                        _row(
-                          'Placed',
-                          DateFormat(
-                            'dd MMM yyyy, HH:mm',
-                          ).format(widget.order.placedAt),
-                        ),
-                        _row(
-                          'Fulfillment',
-                          _label(widget.order.fulfillmentType),
-                        ),
-                        _row('Payment', _label(widget.order.paymentStatus)),
-                        _row(
-                          'Method',
-                          widget.order.payment['methodLabel'] as String? ?? '-',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text('Items', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                StreamBuilder<List<OrderLine>>(
-                  stream: orderLines,
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) return Text('${snapshot.error}');
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
+  void initState() {
+    super.initState();
+    if (widget.liveUpdates) {
+      subscription =
+          (widget.orderUpdates ??
+                  FirestoreService.instance.watchOrder(order.id))
+              .listen(
+                (value) {
+                  if (!mounted) return;
+                  setState(() {
+                    missing = value == null;
+                    if (value == null) return;
+                    if (value.status != order.status) {
+                      status = value.status;
+                      if (!saving) {
+                        updateNotice =
+                            'This order was updated. Review its current status.';
+                      }
                     }
-                    return Column(
-                      children: snapshot.data!
-                          .map(
-                            (line) => Card(
-                              child: ListTile(
-                                onTap: openingLineId != null
-                                    ? null
-                                    : () => _openProduct(line),
-                                leading: ProductArtwork(
-                                  size: 50,
-                                  imagePath: line.imagePath,
-                                ),
-                                title: Text(
-                                  line.productName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  '${line.quantity} ${line.unitLabel}  •  Exp ${DateFormat('dd/MM/yyyy').format(line.expiryAt)}',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'RM ${(line.lineTotalCents / 100).toStringAsFixed(2)}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    openingLineId == line.id
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          )
-                                        : const Icon(
-                                            Icons.chevron_right_rounded,
-                                          ),
-                                  ],
+                    order = value;
+                    receiptPath = value.receiptPath;
+                  });
+                },
+                onError: (Object _) {
+                  if (mounted) {
+                    setState(
+                      () => updateNotice =
+                          'Live updates are unavailable. Refresh the order before making changes.',
+                    );
+                  }
+                },
+              );
+    }
+  }
+
+  @override
+  void dispose() {
+    subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => PopScope(
+        canPop: allowPop || (!dirty && !busy),
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) leave();
+        },
+        child: Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                InventoryHeader(
+                  title: 'Order details',
+                  back: true,
+                  onBack: leave,
+                ),
+                Expanded(
+                  child: StreamBuilder<List<OrderLine>>(
+                    stream: lines,
+                    builder: (context, snapshot) => ListView(
+                      key: const ValueKey('order-details-scroll'),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                      children: [
+                        if (missing)
+                          const OrderNotice(
+                            'This order is no longer available.',
+                            error: true,
+                          ),
+                        if (updateNotice != null) ...[
+                          OrderNotice(updateNotice!),
+                          const SizedBox(height: 16),
+                        ],
+                        OrderPanel(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '#${order.orderNumber}',
+                                style: const TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                    );
-                  },
-                ),
-                const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        _moneyRow('Subtotal', widget.order.subtotalCents),
-                        _moneyRow('Shipping', widget.order.shippingFeeCents),
-                        const Divider(),
-                        _moneyRow('Total', widget.order.totalCents, bold: true),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text('Receiver', style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.order.receiver['name'] as String? ?? '-',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
+                              const SizedBox(height: 16),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OrderBadge(
+                                    orderLabel(order.paymentStatus),
+                                    value: order.paymentStatus,
+                                  ),
+                                  OrderBadge(
+                                    orderLabel(order.status),
+                                    value: order.status,
+                                  ),
+                                ],
+                              ),
+                              const Divider(height: 30),
+                              OrderValueRow(
+                                'Placed',
+                                DateFormat(
+                                  'd MMM yyyy, HH:mm',
+                                ).format(order.placedAt),
+                              ),
+                              OrderValueRow(
+                                'Fulfillment',
+                                orderLabel(order.fulfillmentType),
+                              ),
+                              OrderValueRow(
+                                'Payment method',
+                                order.payment['methodLabel'] as String? ?? '-',
+                              ),
+                            ],
+                          ),
                         ),
-                        Text(widget.order.receiver['phone'] as String? ?? '-'),
-                        Text(widget.order.receiver['email'] as String? ?? '-'),
-                        if ((widget.order.receiver['addressLine1'] as String? ??
-                                '')
-                            .isNotEmpty)
-                          Text(
-                            '${widget.order.receiver['addressLine1']}, ${widget.order.receiver['city']}, ${widget.order.receiver['state']} ${widget.order.receiver['postalCode']}',
+                        const OrderHeading('Items'),
+                        Builder(
+                          builder: (context) {
+                            if (snapshot.hasError) {
+                              return OrderPanel(
+                                child: Column(
+                                  children: [
+                                    const Text(
+                                      'Could not load order items. Please try again.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 18),
+                                    InventoryButton(
+                                      label: 'Retry',
+                                      icon: Icons.refresh_rounded,
+                                      onPressed: () =>
+                                          setState(() => lines = watchLines()),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return const OrderPanel(
+                                child: Padding(
+                                  padding: EdgeInsets.all(25),
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                            if (snapshot.data!.isEmpty) {
+                              return const OrderPanel(
+                                child: Text(
+                                  'No items found for this order.',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              );
+                            }
+                            return Column(
+                              children: [
+                                for (final line in snapshot.data!)
+                                  lineCard(line),
+                              ],
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 6),
+                        OrderTotals(
+                          subtotal: order.subtotalCents,
+                          delivery: order.shippingFeeCents,
+                        ),
+                        const OrderHeading('Receiver'),
+                        OrderPanel(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                receiver('name'),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                receiver('phone'),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.6,
+                                  color: InventoryColors.muted,
+                                ),
+                              ),
+                              Text(
+                                receiver('email'),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  height: 1.6,
+                                  color: InventoryColors.muted,
+                                ),
+                              ),
+                              if (deliveryAddress.isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  deliveryAddress,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Payment receipt',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        if (receiptPath != null) ...[
-                          ProductArtwork(
-                            size: 160,
-                            imagePath: receiptPath,
-                            enlargeOnTap: widget.isAdmin,
-                            imageLabel:
-                                'Payment receipt #${widget.order.orderNumber}',
+                        ),
+                        const OrderHeading('Payment Receipt'),
+                        OrderReceipt(
+                          orderNumber: order.orderNumber,
+                          isAdmin: widget.isAdmin,
+                          path: receiptPath,
+                          busy: uploadingReceipt || pickingReceipt,
+                          onUpload: missing ? null : upload,
+                          imageResolver: widget.receiptImage,
+                        ),
+                        if (uploadingReceipt) ...[
+                          const SizedBox(height: 16),
+                          const OrderNotice(
+                            'Uploading your receipt. Please wait.',
                           ),
-                          const SizedBox(height: 10),
-                          const StatusPill(
-                            'Receipt uploaded',
-                            color: AppColors.primaryDark,
+                        ],
+                        if (receiptError != null) ...[
+                          const SizedBox(height: 16),
+                          OrderNotice(receiptError!, error: true),
+                        ],
+                        if (widget.isAdmin) ...[
+                          const OrderHeading('Order Status'),
+                          OrderPickerField(
+                            key: const ValueKey('order-status'),
+                            value: orderLabel(status),
+                            onTap: busy || missing ? null : chooseStatus,
                           ),
-                        ] else
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 10),
-                            child: Text('No payment receipt uploaded yet.'),
-                          ),
-                        if (!widget.isAdmin) ...[
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: uploadingReceipt ? null : _uploadReceipt,
-                            icon: const Icon(Icons.upload_file_rounded),
-                            label: Text(
-                              uploadingReceipt
-                                  ? 'UPLOADING...'
-                                  : receiptPath == null
-                                  ? 'UPLOAD RECEIPT'
-                                  : 'REPLACE RECEIPT',
+                          if (saveError != null) ...[
+                            const SizedBox(height: 16),
+                            OrderNotice(saveError!, error: true),
+                          ],
+                        ] else ...[
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Status updates appear in your order history.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: InventoryColors.muted,
                             ),
                           ),
                         ],
@@ -222,46 +320,227 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     ),
                   ),
                 ),
-                if (widget.isAdmin) ...[
-                  const SizedBox(height: 18),
-                  DropdownButtonFormField<String>(
-                    initialValue: status,
-                    decoration: const InputDecoration(
-                      labelText: 'Order status',
-                    ),
-                    items:
-                        const [
-                              'to_pay',
-                              'to_ship',
-                              'to_receive',
-                              'completed',
-                              'cancelled',
-                            ]
-                            .map(
-                              (value) => DropdownMenuItem(
-                                value: value,
-                                child: Text(value),
-                              ),
-                            )
-                            .toList(),
-                    onChanged: (value) =>
-                        setState(() => status = value ?? status),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: saving ? null : _save,
-                    child: Text(saving ? 'SAVING...' : 'SAVE ORDER'),
-                  ),
-                ],
               ],
             ),
           ),
-        ],
+          bottomNavigationBar: widget.isAdmin
+              ? SafeArea(
+                  top: false,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      border: Border(
+                        top: BorderSide(color: InventoryColors.line),
+                      ),
+                    ),
+                    child: InventoryButton(
+                      key: const ValueKey('save-order'),
+                      label: saving ? 'Saving...' : 'Save Order',
+                      busy: saving,
+                      onPressed: dirty && !busy && !missing ? save : null,
+                    ),
+                  ),
+                )
+              : null,
+        ),
       ),
     ),
   );
 
-  Future<void> _openProduct(OrderLine line) async {
+  String receiver(String key) =>
+      (order.receiver[key] as String?)?.trim().isNotEmpty == true
+      ? order.receiver[key] as String
+      : '-';
+  String get deliveryAddress => [
+    order.receiver['addressLine1'],
+    order.receiver['addressLine2'],
+    [
+      order.receiver['postalCode'],
+      order.receiver['city'],
+    ].where((v) => v != null && '$v'.trim().isNotEmpty).join(' '),
+    order.receiver['state'],
+  ].where((v) => v != null && '$v'.trim().isNotEmpty).join(', ');
+
+  Widget lineCard(OrderLine line) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        key: ValueKey('order-line-${line.id}'),
+        onTap: openingLineId != null || busy ? null : () => openProduct(line),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProductArtwork(size: 57, imagePath: line.imagePath),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.productName,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${line.quantity} ${line.unitLabel} / Exp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        height: 1.5,
+                        color: InventoryColors.muted,
+                      ),
+                    ),
+                    const SizedBox(height: 9),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            orderMoney(line.lineTotalCents),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: InventoryColors.green,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        openingLineId == line.id
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.chevron_right_rounded,
+                                size: 18,
+                                color: InventoryColors.muted,
+                              ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Future<void> chooseStatus() async {
+    final disabled = <String, String>{};
+    for (final next in orderStatuses) {
+      final error = orderStatusError(
+        order.status,
+        next,
+        hasReceipt: hasReceipt,
+      );
+      if (error != null) disabled[next] = error;
+    }
+    final value = await showOrderChoices(
+      context: context,
+      title: 'Order Status',
+      choices: {for (final value in orderStatuses) value: orderLabel(value)},
+      selected: status,
+      disabled: disabled,
+    );
+    if (mounted && value != null) {
+      setState(() {
+        status = value;
+        saveError = null;
+      });
+    }
+  }
+
+  Future<void> leave() async {
+    if (busy) return;
+    if (dirty &&
+        !await showOrderConfirmation(
+          context: context,
+          title: 'Discard status change?',
+          message: 'Your order status change has not been saved.',
+          action: 'Discard',
+          danger: true,
+        )) {
+      return;
+    }
+    if (mounted) {
+      setState(() => allowPop = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) Navigator.maybePop(context);
+    }
+  }
+
+  Future<void> save() async {
+    if (busy || !dirty || missing) return;
+    final current = order;
+    final next = status;
+    final validation = orderStatusError(
+      current.status,
+      next,
+      hasReceipt: hasReceipt,
+    );
+    if (validation != null) {
+      setState(() => saveError = validation);
+      return;
+    }
+    final cancel = next == 'cancelled';
+    if (!await showOrderConfirmation(
+      context: context,
+      title: cancel ? 'Cancel this order?' : 'Save order status?',
+      message: cancel
+          ? 'Change #${order.orderNumber} to Cancelled?'
+          : 'Update #${order.orderNumber} from ${orderLabel(order.status)} to ${orderLabel(next)}.',
+      action: cancel ? 'Cancel order' : 'Save status',
+      cancel: cancel ? 'Keep order' : 'Keep editing',
+      danger: cancel,
+    )) {
+      return;
+    }
+    if (!mounted) return;
+    if (order.status != current.status) {
+      setState(
+        () => saveError =
+            'This order changed. Review its current status before saving.',
+      );
+      return;
+    }
+    setState(() {
+      saving = true;
+      saveError = null;
+    });
+    try {
+      await (widget.saveStatus ?? FirestoreService.instance.updateOrderStatus)(
+        current,
+        next,
+      );
+      if (mounted) {
+        setState(() => allowPop = true);
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => saveError = error is StateError
+              ? error.message
+              : 'Could not save the order. Please try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> openProduct(OrderLine line) async {
     if (openingLineId != null) return;
     setState(() => openingLineId = line.id);
     try {
@@ -274,22 +553,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       setState(() => openingLineId = null);
       if (item == null ||
           (!widget.isAdmin && !item.canSellAt(DateTime.now()))) {
-        await showDialog<void>(
+        await showOrderConfirmation(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Oops...'),
-            content: Text(
-              widget.isAdmin
-                  ? 'This item no longer exists in the inventory.'
-                  : 'This product no longer exists or is no longer available for sale.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
+          title: widget.isAdmin ? 'Item unavailable' : 'Product unavailable',
+          message: widget.isAdmin
+              ? 'This item no longer exists in the inventory.'
+              : 'This product no longer exists or is no longer available for sale.',
+          action: 'OK',
+          single: true,
         );
       } else {
         await Navigator.push(
@@ -304,10 +575,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not load the product. Please check your connection and try again.',
-            ),
+          inventoryFeedback(
+            'Could not load the product. Please check your connection and try again.',
+            error: true,
           ),
         );
       }
@@ -316,75 +586,56 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
-  Widget _row(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(label, style: const TextStyle(color: AppColors.muted)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    ),
-  );
-  Widget _moneyRow(String label, int cents, {bool bold = false}) =>
-      _row(label, 'RM ${(cents / 100).toStringAsFixed(2)}');
-  String _label(String value) => value
-      .split('_')
-      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-      .join(' ');
-
-  Future<void> _save() async {
-    setState(() => saving = true);
+  Future<void> upload() async {
+    if (busy || missing) return;
+    setState(() {
+      pickingReceipt = true;
+      receiptError = null;
+    });
     try {
-      await FirestoreService.instance.updateOrderStatus(widget.order, status);
-      if (mounted) Navigator.pop(context);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
-    } finally {
-      if (mounted) setState(() => saving = false);
-    }
-  }
-
-  Future<void> _uploadReceipt() async {
-    final file = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1800,
-    );
-    if (file == null) return;
-    setState(() => uploadingReceipt = true);
-    try {
-      final path = await FirestoreService.instance.uploadOrderReceipt(
-        file,
-        widget.order.id,
-      );
+      final file =
+          await (widget.pickReceipt ??
+              () => ImagePicker().pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 85,
+                maxWidth: 1800,
+              ))();
+      if (!mounted || file == null) return;
+      setState(() {
+        pickingReceipt = false;
+        uploadingReceipt = true;
+      });
+      final path =
+          await (widget.uploadReceipt ??
+              FirestoreService.instance.uploadOrderReceipt)(file, order.id);
       if (mounted) {
         setState(() => receiptPath = path);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payment receipt uploaded.')),
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(inventoryFeedback('Payment receipt uploaded.'));
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        setState(
+          () => receiptError = error.code.contains('access_denied')
+              ? 'Allow photo access in your device settings to select a receipt.'
+              : 'Could not open your photos. Please try again.',
         );
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not upload receipt: $error')),
+        setState(
+          () =>
+              receiptError = 'Could not upload the receipt. Please try again.',
         );
       }
     } finally {
-      if (mounted) setState(() => uploadingReceipt = false);
+      if (mounted) {
+        setState(() {
+          pickingReceipt = false;
+          uploadingReceipt = false;
+        });
+      }
     }
   }
 }

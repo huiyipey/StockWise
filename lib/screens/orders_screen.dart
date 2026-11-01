@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
-import '../theme/app_theme.dart';
+import '../services/store_session.dart';
 import '../widgets/glass_bottom_nav.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/order_ui.dart';
 import 'cart_screen.dart';
 import 'home_screen.dart';
 import 'items_screen.dart';
@@ -16,139 +15,197 @@ import 'waste_analysis_screen.dart';
 
 class OrdersScreen extends StatefulWidget {
   final bool isAdmin;
+  final String initialStatus;
+  final Stream<List<StoreOrder>> Function()? orderSource;
 
-  const OrdersScreen({super.key, this.isAdmin = true});
+  const OrdersScreen({
+    super.key,
+    this.isAdmin = true,
+    this.initialStatus = 'all',
+    this.orderSource,
+  });
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
-  String status = 'to_pay';
+  late String status = widget.initialStatus;
   String query = '';
+  final search = TextEditingController();
+  late Stream<List<StoreOrder>> orders = watch();
 
-  static const statuses = ['to_pay', 'to_ship', 'to_receive', 'completed'];
+  Stream<List<StoreOrder>> watch() =>
+      widget.orderSource?.call() ??
+      FirestoreService.instance.watchOrders(admin: widget.isAdmin);
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          StockWiseHeader(title: widget.isAdmin ? 'Orders' : 'Order History'),
-          Expanded(
-            child: StreamBuilder<List<StoreOrder>>(
-              stream: FirestoreService.instance.watchOrders(
-                admin: widget.isAdmin,
+  void dispose() {
+    search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              InventoryHeader(
+                title: widget.isAdmin ? 'Orders' : 'Order history',
+                storeName: StoreSession.instance.store?.name ?? 'StockWise',
               ),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Could not load orders: ${snapshot.error}'),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final orders = snapshot.data!
-                    .where(
-                      (order) =>
-                          order.status == status &&
-                          order.orderNumber.toLowerCase().contains(
-                            query.toLowerCase(),
-                          ),
-                    )
-                    .toList();
-                return ListView(
-                  padding: const EdgeInsets.all(18),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                child: Column(
                   children: [
-                    AppSearchField(
-                      hint: 'Search order number',
-                      onChanged: (value) => setState(() => query = value),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: TextField(
+                        key: const ValueKey('order-search'),
+                        controller: search,
+                        textAlignVertical: TextAlignVertical.center,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: InputDecoration(
+                          floatingLabelBehavior: FloatingLabelBehavior.never,
+                          constraints: const BoxConstraints(minHeight: 46),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          hintText: 'Search order number',
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 21,
+                          ),
+                          suffixIcon: query.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear search',
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 19,
+                                  ),
+                                  onPressed: () => setState(() {
+                                    search.clear();
+                                    query = '';
+                                  }),
+                                ),
+                        ),
+                        onChanged: (value) => setState(() => query = value),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: statuses
-                            .map(
-                              (value) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  selected: status == value,
-                                  label: Text(_label(value)),
-                                  onSelected: (_) =>
-                                      setState(() => status = value),
+                    OrderStatusFilter(
+                      selected: status,
+                      onSelected: (value) => setState(() => status = value),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<List<StoreOrder>>(
+                  stream: orders,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          OrderEmpty(
+                            'Could not load orders',
+                            onRetry: () => setState(() => orders = watch()),
+                          ),
+                        ],
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          for (var i = 0; i < 3; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 14),
+                              child: Container(
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8ECE7),
+                                  borderRadius: BorderRadius.circular(22),
+                                ),
+                                child: i == 1
+                                    ? const Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                            ),
+                        ],
+                      );
+                    }
+                    final needle = query.trim().toLowerCase().replaceFirst(
+                      RegExp(r'^#'),
+                      '',
+                    );
+                    final filtered = snapshot.data!
+                        .where(
+                          (order) =>
+                              (status == 'all' || order.status == status) &&
+                              order.orderNumber.toLowerCase().contains(needle),
+                        )
+                        .toList();
+                    return ListView(
+                      key: const ValueKey('orders-list'),
+                      padding: const EdgeInsets.fromLTRB(20, 6, 20, 24),
+                      children: [
+                        if (filtered.isEmpty)
+                          OrderEmpty(
+                            needle.isNotEmpty
+                                ? 'No matching orders'
+                                : snapshot.data!.isEmpty
+                                ? 'No orders yet'
+                                : status == 'all'
+                                ? 'No orders yet'
+                                : {
+                                        'to_pay': 'No orders to pay',
+                                        'to_ship': 'No orders to ship',
+                                        'to_receive': 'No orders to receive',
+                                        'completed': 'No completed orders',
+                                        'cancelled': 'No cancelled orders',
+                                      }[status] ??
+                                      'No orders',
+                          ),
+                        for (final order in filtered)
+                          OrderListCard(
+                            order: order,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => OrderDetailScreen(
+                                  order: order,
+                                  isAdmin: widget.isAdmin,
                                 ),
                               ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    if (orders.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 48),
-                        child: Center(child: Text('No orders in this status.')),
-                      ),
-                    ...orders.map((order) => _orderCard(order)),
-                  ],
-                );
-              },
-            ),
-          ),
-          _bottomNav(context),
-        ],
-      ),
-    ),
-  );
-
-  Widget _orderCard(StoreOrder order) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(14),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                '#${order.orderNumber}',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
-            StatusPill(
-              _label(order.paymentStatus),
-              color: order.paymentStatus == 'paid'
-                  ? AppColors.primaryDark
-                  : AppColors.warning,
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(
-            '${_label(order.fulfillmentType)}  •  ${DateFormat('dd MMM yyyy').format(order.placedAt)}\nRM ${(order.totalCents / 100).toStringAsFixed(2)}',
+            ],
           ),
         ),
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                OrderDetailScreen(order: order, isAdmin: widget.isAdmin),
-          ),
-        ),
+        bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
       ),
     ),
   );
-
-  static String _label(String value) => value
-      .split('_')
-      .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
-      .join(' ');
 
   Widget _bottomNav(BuildContext context) {
     if (widget.isAdmin) {
-      return GlassBottomNav(
+      return InventoryBottomNav(
         currentIndex: 3,
         items: [
           NavItem(
@@ -195,7 +252,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ],
       );
     }
-    return GlassBottomNav(
+    return InventoryBottomNav(
       currentIndex: 2,
       items: [
         NavItem(

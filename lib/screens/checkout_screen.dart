@@ -7,33 +7,35 @@ import '../models/app_models.dart';
 import '../models/saved_address.dart';
 import '../services/address_book_service.dart';
 import '../services/firestore_service.dart';
-import '../theme/app_theme.dart';
-import '../widgets/stockwise_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/order_ui.dart';
 import 'orders_screen.dart';
 import 'address_book_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
-  final List<CartLine> lines;
-  final AddressBookRepository? addressRepository;
-  final String? initialName;
-  final String? accountEmail;
-
   const CheckoutScreen({
     super.key,
     required this.lines,
     this.addressRepository,
     this.initialName,
     this.accountEmail,
+    this.placeOrder,
+    this.onPlaced,
   });
-
+  final List<CartLine> lines;
+  final AddressBookRepository? addressRepository;
+  final String? initialName, accountEmail;
+  final Future<String> Function(Map<String, dynamic>, String)? placeOrder;
+  final VoidCallback? onPlaced;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final formKey = GlobalKey<FormState>();
-  late final TextEditingController name;
-  late final TextEditingController email;
+  final scroll = ScrollController();
+  final anchors = <String, GlobalKey>{};
+  late final TextEditingController name, email;
   final phone = TextEditingController();
   final address = TextEditingController();
   final city = TextEditingController();
@@ -45,11 +47,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       widget.addressRepository ?? AddressBookService.instance;
   StreamSubscription<AddressBook>? addressSubscription;
   AddressBook book = const AddressBook();
-  String? selectedAddressId;
-  bool userSelectedAddress = false;
-  bool manualDetails = false;
-  bool loadingAddresses = true;
-  String? addressError;
+  String? selectedAddressId, addressError, placementError;
+  bool userSelectedAddress = false,
+      manualDetails = false,
+      loadingAddresses = true;
 
   @override
   void initState() {
@@ -75,21 +76,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (!userSelectedAddress &&
               !manualDetails &&
               book.defaultAddress != null) {
-            _fillAddress(book.defaultAddress!);
+            fillAddress(book.defaultAddress!);
           } else if (selected != null && !manualDetails) {
-            _fillAddress(selected);
+            fillAddress(selected);
           } else if (selectedAddressId != null && selected == null) {
             selectedAddressId = null;
             manualDetails = true;
           }
         });
       },
-      onError: (Object error) {
+      onError: (Object _) {
         if (mounted) {
           setState(() {
             loadingAddresses = false;
             addressError =
-                'Could not load saved addresses. Enter your delivery details below.';
+                'Could not load saved addresses. Enter delivery details manually.';
           });
         }
       },
@@ -99,17 +100,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void dispose() {
     addressSubscription?.cancel();
-    name.dispose();
-    email.dispose();
-    phone.dispose();
-    address.dispose();
-    city.dispose();
-    state.dispose();
-    postalCode.dispose();
+    scroll.dispose();
+    for (final controller in [
+      name,
+      email,
+      phone,
+      address,
+      city,
+      state,
+      postalCode,
+    ]) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  void _fillAddress(SavedAddress saved) {
+  void fillAddress(SavedAddress saved) {
     selectedAddressId = saved.id;
     manualDetails = false;
     name.text = saved.name;
@@ -120,15 +126,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     postalCode.text = saved.postalCode;
   }
 
-  void _deliveryEdited(String _) {
-    setState(() {
-      userSelectedAddress = true;
-      manualDetails = true;
-      selectedAddressId = null;
-    });
-  }
+  void deliveryEdited(String _) => setState(() {
+    userSelectedAddress = true;
+    manualDetails = true;
+    selectedAddressId = null;
+  });
 
-  Future<void> _manageAddresses() async {
+  Future<void> manageAddresses() async {
     final previousDefault = book.defaultAddress?.id;
     await Navigator.push(
       context,
@@ -146,246 +150,298 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         previousDefault != book.defaultAddress!.id) {
       setState(() {
         userSelectedAddress = false;
-        _fillAddress(book.defaultAddress!);
+        fillAddress(book.defaultAddress!);
       });
     }
   }
 
-  Widget _addressSelector() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      if (loadingAddresses) const LinearProgressIndicator(),
-      if (addressError != null)
-        Text(addressError!, style: const TextStyle(color: AppColors.danger)),
-      if (book.addresses.isNotEmpty)
-        DropdownButtonFormField<String>(
-          key: ValueKey(selectedAddressId ?? 'manual-address'),
-          initialValue: selectedAddressId ?? 'manual-address',
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Delivery address'),
-          items: [
-            ...book.addresses.map(
-              (saved) => DropdownMenuItem(
-                value: saved.id,
-                child: Text(
-                  '${saved.label}${book.defaultAddress?.id == saved.id ? ' (Default)' : ''}',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-            const DropdownMenuItem(
-              value: 'manual-address',
-              child: Text('Enter address manually'),
-            ),
-          ],
-          onChanged: placing
-              ? null
-              : (value) => setState(() {
-                  final saved = book.find(value);
-                  userSelectedAddress = true;
-                  if (saved != null) {
-                    _fillAddress(saved);
-                  } else {
-                    selectedAddressId = null;
-                    manualDetails = true;
-                    address.clear();
-                    city.clear();
-                    state.clear();
-                    postalCode.clear();
-                  }
-                }),
-        ),
-      Align(
-        alignment: Alignment.centerRight,
-        child: TextButton.icon(
-          onPressed: placing ? null : _manageAddresses,
-          icon: const Icon(Icons.contact_mail_outlined),
-          label: const Text('Manage addresses'),
-        ),
-      ),
-    ],
-  );
+  Future<void> chooseAddress() async {
+    final selected = await showOrderChoices(
+      context: context,
+      title: 'Delivery address',
+      choices: {
+        for (final saved in book.addresses)
+          saved.id:
+              '${saved.label}${book.defaultAddress?.id == saved.id ? ' (Default)' : ''}',
+        'manual-address': 'Enter address manually',
+      },
+      selected: selectedAddressId ?? 'manual-address',
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      userSelectedAddress = true;
+      final saved = book.find(selected);
+      if (saved != null) {
+        fillAddress(saved);
+      } else {
+        selectedAddressId = null;
+        manualDetails = true;
+        address.clear();
+        city.clear();
+        state.clear();
+        postalCode.clear();
+      }
+    });
+  }
+
+  Future<void> choosePayment() async {
+    final selected = await showOrderChoices(
+      context: context,
+      title: 'Payment method',
+      choices: const {
+        'Bank transfer': 'Bank transfer',
+        'Touch n Go': 'Touch n Go',
+      },
+      selected: payment,
+    );
+    if (mounted && selected != null) setState(() => payment = selected);
+  }
 
   int get subtotal =>
       widget.lines.fold<int>(0, (sum, line) => sum + line.lineTotalCents);
   int get shipping => 500;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const StockWiseHeader(title: 'Checkout', leading: BackCircleButton()),
-          Expanded(
-            child: Form(
-              key: formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(18),
-                children: [
-                  Text(
-                    'Delivery details',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 10),
-                  _addressSelector(),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-name'),
-                    controller: name,
-                    onChanged: _deliveryEdited,
-                    decoration: const InputDecoration(labelText: 'Name'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-phone'),
-                    controller: phone,
-                    onChanged: _deliveryEdited,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-address'),
-                    controller: address,
-                    onChanged: _deliveryEdited,
-                    decoration: const InputDecoration(labelText: 'Address'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-city'),
-                    controller: city,
-                    onChanged: _deliveryEdited,
-                    decoration: const InputDecoration(labelText: 'City'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-state'),
-                    controller: state,
-                    onChanged: _deliveryEdited,
-                    decoration: const InputDecoration(labelText: 'State'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    key: const ValueKey('checkout-postal'),
-                    controller: postalCode,
-                    onChanged: _deliveryEdited,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Postal code'),
-                    validator: _required,
-                  ),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<String>(
-                    initialValue: payment,
-                    decoration: const InputDecoration(
-                      labelText: 'Payment method',
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Bank transfer',
-                        child: Text('Bank transfer'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Touch n Go',
-                        child: Text('Touch n Go'),
-                      ),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => payment = value ?? payment),
-                  ),
-                  const SizedBox(height: 20),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          _line('Subtotal', subtotal),
-                          _line('Shipping', shipping),
-                          const Divider(),
-                          _line('Total', subtotal + shipping, bold: true),
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => PopScope(
+        canPop: !placing,
+        child: Scaffold(
+          body: SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                InventoryHeader(
+                  title: 'Checkout',
+                  back: true,
+                  onBack: placing ? null : () => Navigator.maybePop(context),
+                ),
+                Expanded(
+                  child: Form(
+                    key: formKey,
+                    child: ListView(
+                      key: const ValueKey('checkout-scroll'),
+                      controller: scroll,
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                      children: [
+                        if (addressError != null) ...[
+                          OrderNotice(addressError!, error: true),
+                          const SizedBox(height: 16),
                         ],
-                      ),
+                        OrderPanel(
+                          padding: 20,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Delivery details',
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              if (loadingAddresses) ...[
+                                const LinearProgressIndicator(),
+                                const SizedBox(height: 16),
+                              ],
+                              OrderPickerField(
+                                label: 'Delivery address',
+                                value: selectedAddressId == null
+                                    ? 'Enter address manually'
+                                    : '${book.find(selectedAddressId)?.label ?? 'Saved address'}${book.defaultAddress?.id == selectedAddressId ? ' (Default)' : ''}',
+                                onTap: placing ? null : chooseAddress,
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: placing ? null : manageAddresses,
+                                  child: const Text(
+                                    'Manage addresses',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              field('name', 'Name', name),
+                              field(
+                                'phone',
+                                'Phone',
+                                phone,
+                                keyboard: TextInputType.phone,
+                              ),
+                              field(
+                                'email',
+                                'Email',
+                                email,
+                                keyboard: TextInputType.emailAddress,
+                              ),
+                              field('address', 'Address', address),
+                              field('city', 'City', city),
+                              field('state', 'State', state),
+                              field(
+                                'postal',
+                                'Postal code',
+                                postalCode,
+                                keyboard: TextInputType.number,
+                              ),
+                              OrderPickerField(
+                                key: const ValueKey('checkout-payment'),
+                                label: 'Payment method',
+                                value: payment,
+                                onTap: placing ? null : choosePayment,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        OrderTotals(subtotal: subtotal, delivery: shipping),
+                        if (placementError != null) ...[
+                          const SizedBox(height: 18),
+                          OrderNotice(placementError!, error: true),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  ElevatedButton(
-                    onPressed: placing ? null : _placeOrder,
-                    child: Text(placing ? 'PLACING ORDER...' : 'PLACE ORDER'),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          bottomNavigationBar: SafeArea(
+            top: false,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(top: BorderSide(color: InventoryColors.line)),
+              ),
+              child: InventoryButton(
+                key: const ValueKey('place-order'),
+                label: placing ? 'Placing order...' : 'Place order',
+                busy: placing,
+                onPressed: place,
               ),
             ),
           ),
-        ],
+        ),
       ),
     ),
   );
 
-  Widget _line(String label, int cents, {bool bold = false}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontWeight: bold ? FontWeight.w900 : FontWeight.w500,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          'RM ${(cents / 100).toStringAsFixed(2)}',
-          style: TextStyle(
-            fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
-            color: bold ? AppColors.primaryDark : null,
-          ),
-        ),
-      ],
+  Widget field(
+    String id,
+    String label,
+    TextEditingController controller, {
+    TextInputType? keyboard,
+  }) => Padding(
+    key: anchors.putIfAbsent(id, () => GlobalKey()),
+    padding: const EdgeInsets.only(bottom: 20),
+    child: TextFormField(
+      key: ValueKey('checkout-$id'),
+      controller: controller,
+      enabled: !placing,
+      onChanged: id == 'email' ? null : deliveryEdited,
+      keyboardType: keyboard,
+      style: const TextStyle(fontSize: 13),
+      textInputAction: TextInputAction.next,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: 'Enter ${label.toLowerCase()}',
+      ),
+      validator: (value) => value == null || value.trim().isEmpty
+          ? 'Required'
+          : id == 'email' &&
+                !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())
+          ? 'Enter a valid email.'
+          : null,
     ),
   );
 
-  static String? _required(String? value) =>
-      value == null || value.trim().isEmpty ? 'Required' : null;
-
-  Future<void> _placeOrder() async {
-    if (!(formKey.currentState?.validate() ?? false)) return;
-    setState(() => placing = true);
+  Future<void> place() async {
+    if (placing) return;
+    if (!(formKey.currentState?.validate() ?? false)) {
+      final invalid =
+          {
+                'name': name,
+                'phone': phone,
+                'email': email,
+                'address': address,
+                'city': city,
+                'state': state,
+                'postal': postalCode,
+              }.entries
+              .where(
+                (entry) =>
+                    entry.value.text.trim().isEmpty ||
+                    entry.key == 'email' &&
+                        !RegExp(
+                          r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
+                        ).hasMatch(entry.value.text.trim()),
+              )
+              .firstOrNull;
+      final anchor = anchors[invalid?.key]?.currentContext;
+      if (anchor != null) {
+        await Scrollable.ensureVisible(
+          anchor,
+          alignment: .1,
+          duration: const Duration(milliseconds: 240),
+        );
+      }
+      return;
+    }
+    setState(() {
+      placing = true;
+      placementError = null;
+    });
+    final receiver = <String, dynamic>{
+      'name': name.text.trim(),
+      'phone': phone.text.trim(),
+      'email': email.text.trim(),
+      'addressLine1': address.text.trim(),
+      'city': city.text.trim(),
+      'state': state.text.trim(),
+      'postalCode': postalCode.text.trim(),
+      'countryCode': 'MY',
+    };
     try {
-      await FirestoreService.instance.placeOrder(
-        fulfillmentType: 'delivery',
-        paymentMethod: payment,
-        receiver: {
-          'name': name.text.trim(),
-          'phone': phone.text.trim(),
-          'email': email.text.trim(),
-          'addressLine1': address.text.trim(),
-          'city': city.text.trim(),
-          'state': state.text.trim(),
-          'postalCode': postalCode.text.trim(),
-          'countryCode': 'MY',
-        },
-      );
+      await (widget.placeOrder ??
+          (receiver, payment) => FirestoreService.instance.placeOrder(
+            fulfillmentType: 'delivery',
+            paymentMethod: payment,
+            receiver: receiver,
+          ))(receiver, payment);
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const OrdersScreen(isAdmin: false)),
-        (route) => route.isFirst,
-      );
+      if (widget.onPlaced != null) {
+        widget.onPlaced!();
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                const OrdersScreen(isAdmin: false, initialStatus: 'to_pay'),
+          ),
+          (route) => route.isFirst,
+        );
+      }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+        setState(
+          () => placementError = error is StateError
+              ? error.message
+              : 'Could not place the order. Please try again.',
+        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && scroll.hasClients) {
+            scroll.animateTo(
+              scroll.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOut,
+            );
+          }
+        });
       }
     } finally {
       if (mounted) setState(() => placing = false);

@@ -11,6 +11,7 @@ import '../models/store_address.dart';
 import '../models/barcode_product.dart';
 import '../models/product_name.dart';
 import '../models/category_label.dart';
+import '../models/order_status.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -568,7 +569,8 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(CartLine.fromDoc).toList());
 
-  Future<void> addToCart(InventoryBatch batch) async {
+  Future<void> addToCart(InventoryBatch batch, {int quantity = 1}) async {
+    if (quantity < 1) throw ArgumentError.value(quantity, 'quantity');
     if (batch.availableQuantity <= 0) {
       throw StateError('This item is out of stock.');
     }
@@ -589,7 +591,7 @@ class FirestoreService {
       final currentQuantity = itemSnap.exists
           ? (itemSnap.data()?['quantity'] as num? ?? 0).round()
           : 0;
-      if (currentQuantity + 1 > currentBatch.availableQuantity) {
+      if (currentQuantity + quantity > currentBatch.availableQuantity) {
         throw StateError('Only ${currentBatch.availableQuantity} available.');
       }
       transaction.set(cartRef, {
@@ -604,7 +606,7 @@ class FirestoreService {
         'productName': batch.productName,
         'imagePath': batch.imagePath,
         'expiryAt': Timestamp.fromDate(batch.expiryAt),
-        'quantity': currentQuantity + 1,
+        'quantity': currentQuantity + quantity,
         'unitPriceCents': batch.sellingPriceCents,
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -682,11 +684,17 @@ class FirestoreService {
         'SW-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
 
     await _db.runTransaction((transaction) async {
+      final batches = <String, DocumentSnapshot<Map<String, dynamic>>>{};
+      for (final line in cartLines) {
+        batches[line.batchId] = await transaction.get(
+          _storeRef.collection('inventoryBatches').doc(line.batchId),
+        );
+      }
       for (final line in cartLines) {
         final batchRef = _storeRef
             .collection('inventoryBatches')
             .doc(line.batchId);
-        final batchSnap = await transaction.get(batchRef);
+        final batchSnap = batches[line.batchId]!;
         if (!batchSnap.exists) {
           throw StateError('${line.productName} is no longer available.');
         }
@@ -779,6 +787,12 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
 
+  Stream<StoreOrder?> watchOrder(String orderId) => _storeRef
+      .collection('orders')
+      .doc(orderId)
+      .snapshots()
+      .map((snapshot) => snapshot.exists ? StoreOrder.fromDoc(snapshot) : null);
+
   Future<InventoryBatch?> findSellingOrderProduct(OrderLine line) async {
     final batches = _storeRef.collection('inventoryBatches');
     final List<InventoryBatch> inventory;
@@ -818,7 +832,7 @@ class FirestoreService {
         ? file.name.split('.').last.toLowerCase()
         : 'jpg';
     final ref = _storage.ref(
-      'stores/$_storeId/order-attachments/$orderId/receipt.$extension',
+      'stores/$_storeId/order-attachments/$orderId/receipt-${DateTime.now().microsecondsSinceEpoch}.$extension',
     );
     await ref.putData(
       bytes,
@@ -833,21 +847,45 @@ class FirestoreService {
   }
 
   Future<void> updateOrderStatus(StoreOrder order, String status) async {
-    final paid = status == 'to_pay' ? 'unpaid' : 'paid';
-    await _storeRef.collection('orders').doc(order.id).update({
-      'status': status,
-      'paymentStatus': paid,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (status == 'completed') 'completedAt': FieldValue.serverTimestamp(),
+    final store = _storeRef;
+    final orderRef = store.collection('orders').doc(order.id);
+    final notice = store.collection('notifications').doc();
+    await _db.runTransaction((transaction) async {
+      final snapshot = await transaction.get(orderRef);
+      if (!snapshot.exists) {
+        throw StateError('This order is no longer available.');
+      }
+      final current = StoreOrder.fromDoc(snapshot);
+      if (current.status != order.status) {
+        throw StateError(
+          'This order changed. Review its current status before saving.',
+        );
+      }
+      final error = orderStatusError(
+        current.status,
+        status,
+        hasReceipt: current.receiptPath?.trim().isNotEmpty == true,
+      );
+      if (error != null) throw StateError(error);
+      if (current.status == status) return;
+      transaction.update(orderRef, {
+        'status': status,
+        'paymentStatus': orderPaymentAfter(current.paymentStatus, status),
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (status == 'completed') 'completedAt': FieldValue.serverTimestamp(),
+      });
+      transaction.set(notice, {
+        'storeId': store.id,
+        'recipientUid': current.userId,
+        'type': 'order_status',
+        'title': 'Order ${current.orderNumber} updated',
+        'body': 'Status: ${orderLabel(status)}.',
+        'relatedCollection': 'orders',
+        'relatedDocumentId': current.id,
+        'readAt': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     });
-    await _createNotification(
-      recipientUid: order.userId,
-      type: 'order_status',
-      title: 'Order ${order.orderNumber} updated',
-      body: 'Status: ${status.replaceAll('_', ' ')}.',
-      relatedCollection: 'orders',
-      relatedDocumentId: order.id,
-    );
   }
 
   Stream<List<AppNotification>> watchNotifications() => _storeRef

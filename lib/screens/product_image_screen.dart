@@ -5,12 +5,16 @@ class ProductImageScreen extends StatefulWidget {
   final ImageProvider image;
   final String title;
   final bool inventoryStyle;
+  final bool receiptStyle;
+  final String? subtitle;
 
   const ProductImageScreen({
     super.key,
     required this.image,
     required this.title,
     this.inventoryStyle = false,
+    this.receiptStyle = false,
+    this.subtitle,
   });
 
   @override
@@ -23,6 +27,12 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
   Size viewport = Size.zero;
   Offset doubleTapPosition = Offset.zero;
   int reload = 0;
+  bool get styled => widget.inventoryStyle || widget.receiptStyle;
+  Color get background => widget.receiptStyle
+      ? const Color(0xFF10241D)
+      : widget.inventoryStyle
+      ? const Color(0xFF1B2D24)
+      : Colors.black;
 
   @override
   void dispose() {
@@ -67,37 +77,44 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: widget.inventoryStyle
-        ? const Color(0xFF1B2D24)
-        : Colors.black,
+    backgroundColor: background,
     appBar: AppBar(
-      backgroundColor: widget.inventoryStyle
-          ? const Color(0xFF1B2D24)
-          : Colors.black,
+      backgroundColor: background,
       foregroundColor: Colors.white,
       systemOverlayStyle: SystemUiOverlayStyle.light,
-      leadingWidth: widget.inventoryStyle ? 70 : null,
-      titleSpacing: widget.inventoryStyle ? 0 : null,
+      leadingWidth: styled ? 70 : null,
+      titleSpacing: styled ? 0 : null,
       leading: Padding(
-        padding: widget.inventoryStyle
+        padding: styled
             ? const EdgeInsets.fromLTRB(20, 8, 8, 8)
             : EdgeInsets.zero,
         child: IconButton(
           tooltip: 'Close image',
-          style: widget.inventoryStyle
+          style: styled
               ? IconButton.styleFrom(backgroundColor: const Color(0xFF334A3C))
               : null,
           onPressed: () => Navigator.pop(context),
           icon: const Icon(Icons.close_rounded),
         ),
       ),
-      title: Text(
-        widget.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: widget.inventoryStyle
-            ? const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)
-            : null,
+      title: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: styled
+                ? const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)
+                : null,
+          ),
+          if (widget.subtitle != null)
+            Text(
+              widget.subtitle!,
+              style: const TextStyle(fontSize: 11, color: Colors.white70),
+            ),
+        ],
       ),
     ),
     body: SafeArea(
@@ -125,14 +142,12 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
                       child: Image(
                         key: ValueKey(reload),
                         image: widget.image,
-                        width: widget.inventoryStyle
-                            ? viewport.width - 40
-                            : null,
+                        width: styled ? viewport.width - 40 : null,
                         fit: BoxFit.contain,
                         semanticLabel: widget.title,
                         frameBuilder: (context, child, frame, synchronous) =>
                             frame != null || synchronous
-                            ? widget.inventoryStyle
+                            ? styled
                                   ? Center(
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(16),
@@ -155,9 +170,11 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
                                 size: 44,
                               ),
                               const SizedBox(height: 12),
-                              const Text(
-                                'Could not load this image.',
-                                style: TextStyle(color: Colors.white),
+                              Text(
+                                widget.receiptStyle
+                                    ? 'Could not load the receipt.'
+                                    : 'Could not load this image.',
+                                style: const TextStyle(color: Colors.white),
                               ),
                               TextButton(
                                 onPressed: _retry,
@@ -215,7 +232,9 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
               widget.inventoryStyle ? 38 : 12,
             ),
             child: Text(
-              widget.inventoryStyle
+              widget.receiptStyle
+                  ? 'Pinch to zoom / drag to explore'
+                  : widget.inventoryStyle
                   ? 'Pinch to zoom. Drag to move.'
                   : 'Pinch to zoom • Double-tap to enlarge or reset',
               textAlign: TextAlign.center,

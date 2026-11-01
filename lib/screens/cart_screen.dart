@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/cart_availability.dart';
-import '../theme/app_theme.dart';
+import '../services/store_session.dart';
 import '../widgets/glass_bottom_nav.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/order_ui.dart';
 import '../widgets/stockwise_ui.dart';
 import 'checkout_screen.dart';
 import 'item_detail_screen.dart';
@@ -17,12 +19,14 @@ class CartScreen extends StatefulWidget {
   final Stream<List<CartLine>>? cartStream;
   final Stream<List<InventoryBatch>>? inventoryStream;
   final Future<void> Function(String)? removeItem;
+  final Future<void> Function(CartLine, int)? changeQuantity;
 
   const CartScreen({
     super.key,
     this.cartStream,
     this.inventoryStream,
     this.removeItem,
+    this.changeQuantity,
   });
 
   @override
@@ -30,169 +34,134 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
+  final pending = <String>{};
   late final cart = widget.cartStream ?? FirestoreService.instance.watchCart();
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const StockWiseHeader(title: 'Cart'),
-          Expanded(
-            child: StreamBuilder<List<CartLine>>(
-              stream: cart,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Could not load cart: ${snapshot.error}'),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final lines = snapshot.data!;
-                final subtotal = lines.fold<int>(
-                  0,
-                  (sum, line) => sum + line.lineTotalCents,
-                );
-                if (lines.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.shopping_cart_outlined,
-                          size: 60,
-                          color: AppColors.muted,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'Your cart is empty',
-                          style: TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return StreamBuilder<List<InventoryBatch>>(
-                  stream: inventory,
-                  builder: (context, stockSnapshot) {
-                    if (stockSnapshot.hasError) {
-                      return const Center(
-                        child: Text(
-                          'Could not check item availability. Please reopen your cart.',
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              InventoryHeader(
+                title: 'Cart',
+                storeName: StoreSession.instance.store?.name ?? 'StockWise',
+              ),
+              Expanded(
+                child: StreamBuilder<List<CartLine>>(
+                  stream: cart,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const SingleChildScrollView(
+                        child: OrderEmpty(
+                          'Could not load your cart',
+                          icon: Icons.shopping_cart_outlined,
                         ),
                       );
                     }
-                    if (!stockSnapshot.hasData) {
+                    if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    final batches = {
-                      for (final item in stockSnapshot.data!) item.id: item,
-                    };
-                    final now = DateTime.now();
-                    final unavailable = <String, String>{};
-                    for (final line in lines) {
-                      final reason = cartUnavailableReason(
-                        line,
-                        batches[line.batchId],
-                        now,
+                    final lines = snapshot.data!;
+                    final subtotal = lines.fold<int>(
+                      0,
+                      (sum, line) => sum + line.lineTotalCents,
+                    );
+                    if (lines.isEmpty) {
+                      return const SingleChildScrollView(
+                        child: OrderEmpty(
+                          'Your cart is empty',
+                          icon: Icons.shopping_cart_outlined,
+                        ),
                       );
-                      if (reason != null) unavailable[line.id] = reason;
                     }
-                    return ListView(
-                      padding: const EdgeInsets.all(18),
-                      children: [
-                        if (unavailable.isNotEmpty)
-                          _unavailableNotice(
-                            lines
-                                .where(
-                                  (line) => unavailable.containsKey(line.id),
-                                )
-                                .toList(),
-                          ),
-                        ...lines.map(
-                          (line) => _line(
-                            context,
+                    return StreamBuilder<List<InventoryBatch>>(
+                      stream: inventory,
+                      builder: (context, stockSnapshot) {
+                        if (stockSnapshot.hasError) {
+                          return const Center(
+                            child: Text(
+                              'Could not check item availability. Please reopen your cart.',
+                            ),
+                          );
+                        }
+                        if (!stockSnapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        final batches = {
+                          for (final item in stockSnapshot.data!) item.id: item,
+                        };
+                        final now = DateTime.now();
+                        final unavailable = <String, String>{};
+                        for (final line in lines) {
+                          final reason = cartUnavailableReason(
                             line,
                             batches[line.batchId],
-                            unavailable[line.id],
-                          ),
-                        ),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              children: [
-                                const Text(
-                                  'Subtotal',
-                                  style: TextStyle(fontWeight: FontWeight.w800),
-                                ),
-                                const Spacer(),
-                                Text(
-                                  'RM ${(subtotal / 100).toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ],
+                            now,
+                          );
+                          if (reason != null) unavailable[line.id] = reason;
+                        }
+                        return ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                          children: [
+                            if (unavailable.isNotEmpty)
+                              _unavailableNotice(
+                                lines
+                                    .where(
+                                      (line) =>
+                                          unavailable.containsKey(line.id),
+                                    )
+                                    .toList(),
+                              ),
+                            ...lines.map(
+                              (line) => _line(
+                                context,
+                                line,
+                                batches[line.batchId],
+                                unavailable[line.id],
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: unavailable.isNotEmpty
-                              ? null
-                              : () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        CheckoutScreen(lines: lines),
-                                  ),
-                                ),
-                          child: const Text('CHECKOUT'),
-                        ),
-                      ],
+                            OrderTotals(subtotal: subtotal),
+                            const SizedBox(height: 16),
+                            InventoryButton(
+                              label: 'Checkout',
+                              onPressed:
+                                  unavailable.isNotEmpty || pending.isNotEmpty
+                                  ? null
+                                  : () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            CheckoutScreen(lines: lines),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
-          _bottomNav(context),
-        ],
+        ),
+        bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
       ),
     ),
   );
 
   Widget _unavailableNotice(List<CartLine> lines) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
-    child: Card(
-      color: AppColors.danger.withValues(alpha: .08),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: AppColors.danger),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'some item(s) are no longer available. Please remove from your cart.',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: AppColors.danger,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...lines.map((line) => Text('• ${line.productName}')),
-          ],
-        ),
-      ),
+    child: const OrderNotice(
+      'Some items are no longer available. Please remove them from your cart.',
+      error: true,
     ),
   );
 
@@ -203,10 +172,12 @@ class _CartScreenState extends State<CartScreen> {
     String? unavailable,
   ) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
-    child: Card(
+    child: Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: item == null
+        borderRadius: BorderRadius.circular(22),
+        onTap: item == null || unavailable != null || pending.contains(line.id)
             ? null
             : () => Navigator.push(
                 context,
@@ -214,71 +185,119 @@ class _CartScreenState extends State<CartScreen> {
               ),
         child: Padding(
           padding: const EdgeInsets.all(14),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ProductArtwork(size: 62, imagePath: line.imagePath),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      line.productName,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      'Exp: ${DateFormat('dd/MM/yyyy').format(line.expiryAt)}',
-                      style: const TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    if (unavailable != null)
-                      Text(
-                        unavailable,
-                        style: const TextStyle(
-                          color: AppColors.danger,
-                          fontWeight: FontWeight.w700,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ProductArtwork(size: 62, imagePath: line.imagePath),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          line.productName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                    Row(
+                        const SizedBox(height: 7),
+                        Text(
+                          'Exp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
+                          style: const TextStyle(
+                            color: InventoryColors.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        if (unavailable != null)
+                          Text(
+                            unavailable,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: InventoryColors.error,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
                       children: [
                         IconButton(
-                          onPressed: item?.canSellAt(DateTime.now()) != true
+                          tooltip: 'Decrease quantity',
+                          color: InventoryColors.green,
+                          onPressed:
+                              pending.contains(line.id) ||
+                                  item?.canSellAt(DateTime.now()) != true
                               ? null
                               : () =>
                                     _quantity(context, line, line.quantity - 1),
-                          icon: const Icon(Icons.remove_circle_outline_rounded),
+                          icon: const Icon(
+                            Icons.remove_circle_outline_rounded,
+                            size: 21,
+                          ),
                         ),
-                        Text(
-                          '${line.quantity}',
-                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        Flexible(
+                          child: Text(
+                            '${line.quantity}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
                         IconButton(
-                          onPressed: unavailable != null
+                          tooltip: 'Increase quantity',
+                          color: InventoryColors.green,
+                          onPressed:
+                              pending.contains(line.id) ||
+                                  unavailable != null ||
+                                  line.quantity >=
+                                      (item?.availableQuantity ?? 0)
                               ? null
                               : () =>
                                     _quantity(context, line, line.quantity + 1),
-                          icon: const Icon(Icons.add_circle_outline_rounded),
+                          icon: const Icon(
+                            Icons.add_circle_outline_rounded,
+                            size: 21,
+                          ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'RM ${(line.lineTotalCents / 100).toStringAsFixed(2)}',
-                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Flexible(
+                    child: Text(
+                      orderMoney(line.lineTotalCents),
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                   IconButton(
-                    color: AppColors.danger,
+                    color: InventoryColors.error,
                     tooltip: 'Remove',
-                    onPressed: () => _remove(context, line),
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    onPressed: pending.contains(line.id)
+                        ? null
+                        : () => _remove(context, line),
+                    icon: pending.contains(line.id)
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline_rounded, size: 21),
                   ),
                 ],
               ),
@@ -290,16 +309,23 @@ class _CartScreenState extends State<CartScreen> {
   );
 
   Future<void> _remove(BuildContext context, CartLine line) async {
+    if (pending.contains(line.id)) return;
+    setState(() => pending.add(line.id));
     try {
       await (widget.removeItem ?? FirestoreService.instance.removeCartItem)(
         line.id,
       );
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          inventoryFeedback(
+            'Could not remove the item. Please try again.',
+            error: true,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => pending.remove(line.id));
     }
   }
 
@@ -308,18 +334,26 @@ class _CartScreenState extends State<CartScreen> {
     CartLine line,
     int quantity,
   ) async {
+    if (pending.contains(line.id)) return;
+    setState(() => pending.add(line.id));
     try {
-      await FirestoreService.instance.updateCartQuantity(line, quantity);
+      await (widget.changeQuantity ??
+          FirestoreService.instance.updateCartQuantity)(line, quantity);
     } catch (error) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          inventoryFeedback(
+            'Could not update the quantity. Please try again.',
+            error: true,
+          ),
+        );
       }
+    } finally {
+      if (mounted) setState(() => pending.remove(line.id));
     }
   }
 
-  Widget _bottomNav(BuildContext context) => GlassBottomNav(
+  Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     currentIndex: 1,
     items: [
       NavItem(
