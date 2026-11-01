@@ -4,9 +4,9 @@ import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../services/shopping_assistant_service.dart';
-import '../theme/app_theme.dart';
-import '../widgets/stockwise_ui.dart';
-import '../widgets/product_price.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/shop_ui.dart';
+import '../widgets/profile_ui.dart' show ProfilePanel, ProfileNotice;
 import 'item_detail_screen.dart';
 
 class ShoppingAssistantScreen extends StatefulWidget {
@@ -84,6 +84,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
         setState(
           () => messages.add({
             'role': 'StockWise',
+            'error': 'true',
             'text': error.code == 'resource-exhausted'
                 ? 'You have reached this hour’s limit. Please try again later.'
                 : 'I could not connect. Please try again shortly.',
@@ -95,6 +96,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
         setState(
           () => messages.add({
             'role': 'StockWise',
+            'error': 'true',
             'text': 'Something went wrong. Please try again.',
           }),
         );
@@ -117,233 +119,471 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Column(
-        children: [
-          const StockWiseHeader(
-            title: 'Ask StockWise',
-            leading: BackCircleButton(),
-          ),
-          Expanded(
-            child: StreamBuilder<List<InventoryBatch>>(
-              stream: inventory,
-              builder: (context, snapshot) {
-                final products = (snapshot.data ?? <InventoryBatch>[])
-                    .where(
-                      (p) =>
-                          p.status == 'active' &&
-                          p.availableQuantity > 0 &&
-                          p.expiryAt.isAfter(DateTime.now()),
-                    )
-                    .toList();
-                return ListView(
-                  controller: scroll,
-                  padding: const EdgeInsets.all(18),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => InventoryTheme(
+    child: Builder(
+      builder: (context) => Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              InventoryHeader(
+                title: 'Ask StockWise',
+                back: true,
+                onBack: () => Navigator.maybePop(context),
+                trailing: IconButton(
+                  tooltip: 'How your data is used',
+                  onPressed: () => _showPrivacy(context),
+                  icon: const Icon(
+                    Icons.info_outline_rounded,
+                    color: InventoryColors.green,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: StreamBuilder<List<InventoryBatch>>(
+                  stream: inventory,
+                  builder: (context, snapshot) {
+                    final products = (snapshot.data ?? <InventoryBatch>[])
+                        .where((p) => p.canSellAt(DateTime.now()))
+                        .toList();
+                    final ids = products.map((p) => p.id).toSet();
+                    // Removed/expired products cannot stay selected for a comparison.
+                    selected.removeWhere((id) => !ids.contains(id));
+                    return ListView(
+                      controller: scroll,
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      children: [
+                        if (messages.isEmpty) ...[
+                          ProfilePanel(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const CircleAvatar(
+                                  radius: 24,
+                                  backgroundColor: InventoryColors.soft,
+                                  child: Icon(
+                                    Icons.auto_awesome_rounded,
+                                    color: InventoryColors.green,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'Ask StockWise anything',
+                                  style: TextStyle(
+                                    fontSize: 23,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  'Get suggestions from your recent purchases, compare products, or ask Gemini general questions.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    height: 1.5,
+                                    color: InventoryColors.muted,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                InventoryButton(
+                                  label: started
+                                      ? 'Refresh recommendations'
+                                      : 'Show recommendations',
+                                  onPressed: busy ? null : () => _ask(''),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: () => _showPrivacy(context),
+                                  icon: const Icon(
+                                    Icons.shield_outlined,
+                                    size: 16,
+                                  ),
+                                  label: const Text(
+                                    'How your data is used',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        ...messages.map(_messageCard),
+                        if (busy)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 14),
+                            child: ProfileNotice(
+                              'StockWise is thinking...',
+                              busy: true,
+                            ),
+                          ),
+                        if (picks.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Recommended for you',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...picks.map((pick) {
+                            final product = products
+                                .where((p) => p.id == pick['id'])
+                                .firstOrNull;
+                            if (product == null) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: ProfilePanel(
+                                padding: 0,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(22),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ItemDetailScreen(item: product),
+                                    ),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 60,
+                                          height: 78,
+                                          child: ShopProductPhoto(
+                                            item: product,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                product.productName,
+                                                style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Text(
+                                                '${pick['reason']}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  height: 1.4,
+                                                  color: InventoryColors.muted,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              Text(
+                                                'RM ${(product.sellingPriceCents / 100).toStringAsFixed(2)}',
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: InventoryColors.green,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.chevron_right_rounded,
+                                          size: 19,
+                                          color: InventoryColors.muted,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                        if (messages.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          InventoryButton(
+                            label: 'Refresh recommendations',
+                            soft: true,
+                            onPressed: busy ? null : () => _ask(''),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        ProfilePanel(
+                          padding: 0,
+                          child: Theme(
+                            data: Theme.of(
+                              context,
+                            ).copyWith(dividerColor: Colors.transparent),
+                            child: ExpansionTile(
+                              tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 5,
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                8,
+                                0,
+                                8,
+                                12,
+                              ),
+                              iconColor: InventoryColors.green,
+                              title: Text(
+                                'Select products to compare (${selected.length}/2)',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              children: [
+                                if (snapshot.hasError)
+                                  const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: ProfileNotice(
+                                      'Could not load products. Try opening the assistant again.',
+                                      error: true,
+                                    ),
+                                  )
+                                else if (!snapshot.hasData)
+                                  const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: LinearProgressIndicator(),
+                                  )
+                                else if (products.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Text(
+                                      'No products available to compare.',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: InventoryColors.muted,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  SizedBox(
+                                    height: 220,
+                                    child: ListView(
+                                      children: products
+                                          .map(
+                                            (p) => CheckboxListTile(
+                                              value: selected.contains(p.id),
+                                              activeColor:
+                                                  InventoryColors.green,
+                                              title: Text(
+                                                p.productName,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              subtitle: Text(
+                                                'RM ${(p.sellingPriceCents / 100).toStringAsFixed(2)} / ${p.unitLabel}',
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: InventoryColors.muted,
+                                                ),
+                                              ),
+                                              onChanged:
+                                                  busy ||
+                                                      (!selected.contains(
+                                                            p.id,
+                                                          ) &&
+                                                          selected.length >= 2)
+                                                  ? null
+                                                  : (v) => setState(() {
+                                                      if (v == true) {
+                                                        selected.add(p.id);
+                                                      } else {
+                                                        selected.remove(p.id);
+                                                      }
+                                                    }),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            const Icon(
-                              Icons.auto_awesome,
-                              color: AppColors.primaryDark,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Ask StockWise anything',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                            const Text(
-                              'Get suggestions from your recent purchases, compare products, or ask Gemini general questions.',
-                            ),
-                            const SizedBox(height: 10),
-                            const Text(
-                              'Your questions, recent conversation, store product details and purchased product names are sent to Google’s AI service. Your account email, delivery address and receipts are not included automatically. Answers may be inaccurate; check product labels for ingredients and allergens.',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: AppColors.muted,
+                            ActionChip(
+                              backgroundColor: Colors.white,
+                              side: BorderSide.none,
+                              label: const Text(
+                                'What should I buy?',
+                                style: TextStyle(fontSize: 12),
                               ),
+                              onPressed: busy
+                                  ? null
+                                  : () => _ask(
+                                      'What should I buy based on my purchases?',
+                                    ),
                             ),
-                            const SizedBox(height: 10),
-                            FilledButton(
-                              onPressed: busy ? null : () => _ask(''),
-                              child: Text(
-                                started
-                                    ? 'Refresh recommendations'
-                                    : 'Show recommendations',
+                            ActionChip(
+                              backgroundColor: Colors.white,
+                              side: BorderSide.none,
+                              label: const Text(
+                                'Compare selected products',
+                                style: TextStyle(fontSize: 12),
                               ),
+                              onPressed: busy || selected.length != 2
+                                  ? null
+                                  : () => _ask(
+                                      'What is the difference between these two selected products?',
+                                    ),
                             ),
                           ],
                         ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: question,
+                        maxLength: 1000,
+                        minLines: 1,
+                        maxLines: 3,
+                        enabled: !busy,
+                        style: const TextStyle(fontSize: 13),
+                        decoration: const InputDecoration(
+                          hintText: 'Ask StockWise anything...',
+                          counterText: '',
+                        ),
                       ),
                     ),
-                    if (messages.isNotEmpty)
-                      Column(children: messages.map(_messageCard).toList()),
-                    if (busy)
-                      const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Center(child: CircularProgressIndicator()),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Send question',
+                      onPressed: busy
+                          ? null
+                          : () {
+                              if (question.text.trim().isNotEmpty) _ask();
+                            },
+                      style: IconButton.styleFrom(
+                        backgroundColor: InventoryColors.green,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: InventoryColors.soft,
+                        minimumSize: const Size.square(46),
                       ),
-                    if (picks.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Recommended for you',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      ...picks.map((pick) {
-                        final product = products
-                            .where((p) => p.id == pick['id'])
-                            .firstOrNull;
-                        if (product == null) return const SizedBox.shrink();
-                        return Card(
-                          child: ListTile(
-                            leading: ProductArtwork(
-                              size: 48,
-                              imagePath: product.imagePath,
-                            ),
-                            title: Text(product.productName),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${pick['reason']}'),
-                                ProductPrice(item: product, fontSize: 14),
-                              ],
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ItemDetailScreen(item: product),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                    const SizedBox(height: 14),
-                    ExpansionTile(
-                      title: Text(
-                        'Select products to compare (${selected.length}/2)',
-                      ),
-                      children: [
-                        if (snapshot.hasError)
-                          const Text('Could not load products.'),
-                        if (!snapshot.hasData) const LinearProgressIndicator(),
-                        SizedBox(
-                          height: 220,
-                          child: ListView(
-                            children: products
-                                .map(
-                                  (p) => CheckboxListTile(
-                                    value: selected.contains(p.id),
-                                    title: Text(p.productName),
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        ProductPrice(item: p, fontSize: 14),
-                                        Text(p.unitLabel),
-                                      ],
-                                    ),
-                                    onChanged:
-                                        busy ||
-                                            (!selected.contains(p.id) &&
-                                                selected.length >= 2)
-                                        ? null
-                                        : (v) => setState(() {
-                                            if (v == true) {
-                                              selected.add(p.id);
-                                            } else {
-                                              selected.remove(p.id);
-                                            }
-                                          }),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ActionChip(
-                          label: const Text('What should I buy?'),
-                          onPressed: busy
-                              ? null
-                              : () => _ask(
-                                  'What should I buy based on my purchases?',
-                                ),
-                        ),
-                        ActionChip(
-                          label: const Text('Compare selected products'),
-                          onPressed: busy || selected.length != 2
-                              ? null
-                              : () => _ask(
-                                  'What is the difference between these two selected products?',
-                                ),
-                        ),
-                      ],
+                      icon: const Icon(Icons.send_rounded, size: 21),
                     ),
                   ],
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: question,
-                    maxLength: 1000,
-                    minLines: 1,
-                    maxLines: 3,
-                    enabled: !busy,
-                    decoration: const InputDecoration(
-                      hintText: 'Ask StockWise anything…',
-                      counterText: '',
-                    ),
-                  ),
                 ),
-                IconButton(
-                  tooltip: 'Send question',
-                  onPressed: busy
-                      ? null
-                      : () {
-                          if (question.text.trim().isNotEmpty) _ask();
-                        },
-                  icon: const Icon(Icons.send_rounded),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     ),
   );
 
-  Widget _messageCard(Map<String, String> message) => Card(
-    key: identical(message, messages.last) ? latestMessage : null,
-    color: message['role'] == 'You' ? AppColors.primarySoft : null,
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            message['role']!,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 5),
-          SelectableText(message['text']!),
-        ],
+  void _showPrivacy(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+    ),
+    builder: (context) => SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Icon(
+              Icons.shield_outlined,
+              size: 32,
+              color: InventoryColors.green,
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'How your data is used',
+              style: TextStyle(
+                fontSize: 22,
+                color: InventoryColors.ink,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Your questions, recent conversation, store product details and purchased product names are sent to Google’s AI service. Your account email, delivery address and receipts are not included automatically. Answers may be inaccurate; check product labels for ingredients and allergens.',
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: InventoryColors.muted,
+              ),
+            ),
+            const SizedBox(height: 24),
+            InventoryButton(
+              label: 'Got it',
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     ),
   );
+
+  Widget _messageCard(Map<String, String> message) {
+    final user = message['role'] == 'You';
+    final failed = message['error'] == 'true';
+    return Padding(
+      key: identical(message, messages.last) ? latestMessage : null,
+      padding: EdgeInsets.only(
+        bottom: 12,
+        left: user ? 30 : 0,
+        right: user ? 0 : 20,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: failed
+              ? const Color(0xFFFAE7E0)
+              : user
+              ? InventoryColors.soft
+              : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              message['role']!,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: failed ? InventoryColors.error : InventoryColors.green,
+              ),
+            ),
+            const SizedBox(height: 7),
+            SelectableText(
+              message['text']!,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: failed ? InventoryColors.error : InventoryColors.ink,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
