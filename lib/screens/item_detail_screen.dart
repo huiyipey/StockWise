@@ -6,6 +6,8 @@ import '../models/shelf_life.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
+import '../widgets/customer_ui.dart';
+import '../widgets/catalogue_cache_notice.dart';
 import 'product_image_screen.dart';
 
 class ItemDetailScreen extends StatefulWidget {
@@ -51,6 +53,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
+              const CatalogueCacheNotice(),
               Expanded(
                 child: ListView(
                   key: const ValueKey('customer-product-scroll'),
@@ -86,56 +89,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    OrderPanel(
+                    ProductPricingCard(
                       key: const ValueKey('customer-product-pricing'),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Pricing',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              Text(
-                                orderMoney(item.sellingPriceCents),
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              if (item.bundlePromotion)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 10),
-                                  child: Text(
-                                    item.promotionLabel,
-                                    style: const TextStyle(
-                                      color: InventoryColors.green,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              if (item.promotionEnabled &&
-                                  item.promotionPriceCents != null)
-                                Text(
-                                  orderMoney(item.basePriceCents),
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: InventoryColors.muted,
-                                    decoration: TextDecoration.lineThrough,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
+                      item: item,
                     ),
                     const SizedBox(height: 16),
                     stockCard(),
@@ -227,7 +183,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
             child: InventoryButton(
               key: const ValueKey('customer-product-add'),
-              label: adding ? 'Adding...' : 'Add to cart',
+              label: adding ? 'Adding...' : 'Add to Cart',
               busy: adding,
               onPressed: selling ? add : null,
             ),
@@ -276,7 +232,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     Text(
                       '${item.availableQuantity} ${item.availableQuantity == 1 ? unit : item.unitLabel}',
                       style: const TextStyle(
-                        fontSize: 23,
+                        fontSize: 19,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -362,9 +318,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             quantity: amount,
           ))(item, quantity);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(inventoryFeedback('Added to cart'));
+        showCustomerFeedback(context, 'Added to cart');
       }
     } catch (failure) {
       if (mounted) {
@@ -451,15 +405,18 @@ class _ProductPhotoState extends State<_ProductPhoto> {
                     fit: BoxFit.contain,
                     errorBuilder: (_, _, _) => placeholder(),
                   ),
-                  const Positioned(
+                  Positioned(
                     right: 10,
                     bottom: 10,
-                    child: CircleAvatar(
-                      radius: 17,
-                      backgroundColor: Colors.white,
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(9),
+                      ),
                       child: Icon(
-                        Icons.open_in_full_rounded,
-                        size: 18,
+                        Icons.fullscreen_rounded,
+                        size: 20,
                         color: InventoryColors.green,
                       ),
                     ),

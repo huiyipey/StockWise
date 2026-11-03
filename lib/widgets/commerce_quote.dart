@@ -11,7 +11,9 @@ class QuoteLines extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       for (final raw in (quote?['lines'] as List? ?? const []))
-        if (raw is Map && raw['kind'] == 'bundle')
+        if (raw is Map &&
+            raw['kind'] == 'bundle' &&
+            raw['sourceBatchId'] != raw['batchId'])
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: OrderPanel(

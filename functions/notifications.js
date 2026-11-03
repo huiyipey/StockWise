@@ -1,11 +1,11 @@
 const {createHash}=require('node:crypto');
 const {HttpsError}=require('firebase-functions/v2/https');
-const {shelfLife,expiryStage}=require('./commerce_logic');
+const {shelfLife,expiryStage,titleCase}=require('./commerce_logic');
 const key=token=>createHash('sha256').update(token).digest('hex');
 function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
   async function tokens(uid,type){
     const profile=(await db.collection('users').doc(uid).get()).data()||{};
-    const flag=type==='expiry'?'expiryAlerts':'orders';if((type==='expiry'?profile.preferences?.expiryAlerts:(profile.preferences?.orderUpdates??profile.preferences?.orders))===false)return [];
+    const enabled=type==='expiry'?profile.preferences?.expiryAlerts:type==='promotion'?profile.preferences?.promotions:(profile.preferences?.orderUpdates??profile.preferences?.orders);if(enabled===false)return [];
     const devices=await db.collection('users').doc(uid).collection('devices').get();const result=[];
     for(const device of devices.docs){const token=device.data().token;if(typeof token!=='string')continue;
       const owner=await db.collection('pushInstallations').doc(key(token)).get();if(owner.data()?.uid===uid)result.push(token);}
@@ -19,6 +19,12 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
         await db.collection('users').doc(uid).collection('devices').doc(key(chunk[j])).delete();await db.collection('pushInstallations').doc(key(chunk[j])).delete();
       }
     }
+  }
+  async function once(store, id, action) {
+    const ref=store.collection('pushDeliveries').doc(key(id));
+    const claimed=await db.runTransaction(async tx=>{const saved=await tx.get(ref);if(saved.exists)return false;tx.set(ref,{createdAt:serverTimestamp()});return true;});
+    if(!claimed)return;
+    try{await action();}catch(e){await ref.delete();throw e;}
   }
   async function recipients(store){const members=await store.collection('members').get();return members.docs.filter(m=>m.data().isActive===true&&['owner','admin','manager','staff'].includes(m.data().role)).map(m=>m.id);}
   async function cleanup(store,ref,now=new Date()){
@@ -52,6 +58,26 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
       const uids=data.senderRole==='customer'?team.docs.filter(d=>d.data().isActive===true&&['owner','admin'].includes(d.data().role)).map(d=>d.id):[event.params.customerId];
       for(const uid of uids)if(uid!==data.senderId)await notify(uid,`${data.senderName} · ${shop.name}`,data.text||'Sent an attachment',
         {storeId:store.id,customerId:event.params.customerId,type:'chat'},'order');
+    },
+    orderStatus:async event=>{
+      const before=event.data?.before?.data(),after=event.data?.after?.data();
+      if(!before||!after||before.status===after.status||!after.userId)return;
+      const store=db.collection('stores').doc(event.params.storeId),shop=(await store.get()).data();if(shop?.status!=='active')return;
+      await once(store,`status-${store.id}-${event.params.orderId}-${after.status}`,()=>notify(after.userId,`Order ${after.orderNumber} updated`,
+        `${titleCase(after.status.replaceAll('_',' '))}${after.cancellationReason?': '+after.cancellationReason:''}`,
+        {storeId:store.id,orderId:event.params.orderId,type:'order_status'},'order'));
+    },
+    promotion:async event=>{
+      const before=event.data?.before?.data(),after=event.data?.after?.data();
+      if(!after||!after.promotionEnabled||after.status!=='active'||after.quantityOnHand<=0||!after.expiryAt?.toDate||after.expiryAt.toDate()<=new Date())return;
+      const signature=b=>JSON.stringify([b?.promotionEnabled,b?.promotion||null,b?.basePriceCents,b?.promotionPriceCents]);
+      if(before&&signature(before)===signature(after))return;
+      const store=db.collection('stores').doc(event.params.storeId),shop=(await store.get()).data();if(shop?.status!=='active')return;
+      const [customers,members]=await Promise.all([db.collection('users').where('activeStoreId','==',store.id).get(),store.collection('members').get()]);
+      const team=new Set(members.docs.filter(d=>d.data().isActive===true&&['owner','admin','manager','staff'].includes(d.data().role)).map(d=>d.id));
+      await once(store,`promotion-${event.id||store.id+'-'+event.params.batchId+'-'+signature(after)}`,async()=>{
+        for(const user of customers.docs)if(!team.has(user.id))await notify(user.id,`New promotion · ${shop.name}`,`${after.productName}${after.promotion?.label?': '+after.promotion.label:' is on promotion.'}`,{storeId:store.id,batchId:event.params.batchId,type:'promotion'},'promotion');
+      });
     },
     inventoryWritten:async event=>{const after=event.data?.after;if(!after?.exists)return;
       const b=after.data(),now=new Date(),store=db.collection('stores').doc(event.params.storeId);

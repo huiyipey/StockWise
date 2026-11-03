@@ -286,7 +286,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
               Text(
                 widget.repository.isAdmin
                     ? widget.customerName ?? 'Customer'
-                    : 'Chat with admin',
+                    : widget.repository.storeName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -295,14 +295,6 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                   color: InventoryColors.ink,
                 ),
               ),
-              if (!widget.repository.isAdmin)
-                Text(
-                  widget.repository.storeName,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: InventoryColors.muted,
-                  ),
-                ),
             ],
           ),
         ),

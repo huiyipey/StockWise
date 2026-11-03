@@ -100,7 +100,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget build(BuildContext context) => ProfileFormPage(
     title: 'Change Password',
     busy: saving,
+    dirty: [
+      currentPassword,
+      newPassword,
+      confirmation,
+    ].any((field) => field.text.isNotEmpty),
     body: Form(
+      onChanged: () => setState(() {}),
       key: form,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),

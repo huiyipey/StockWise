@@ -10,7 +10,8 @@ import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
 import '../widgets/commerce_quote.dart';
-import 'orders_screen.dart';
+import '../widgets/customer_ui.dart';
+import 'order_detail_screen.dart';
 import 'address_book_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -258,7 +259,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       (quote?['deliveryFeeCents'] as num?)?.toInt() ?? (usesQuote ? 0 : 500);
   bool get canPlace =>
       !usesQuote ||
-      (!quoting && quoteError == null && quote?['canOrder'] == true);
+      (!quoting &&
+          quoteError == null &&
+          quote != null &&
+          quote?['deliveryFeeCents'] != null);
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
@@ -318,6 +322,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   child: const Text(
                                     'Manage addresses',
                                     style: TextStyle(
+                                      decoration: TextDecoration.underline,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -360,13 +365,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         if (usesQuote && quoting)
                           const Center(child: CircularProgressIndicator()),
                         if (!usesQuote || quote != null)
-                          OrderTotals(subtotal: subtotal, delivery: shipping),
+                          OrderTotals(
+                            subtotal: subtotal,
+                            delivery:
+                                usesQuote && quote?['deliveryFeeCents'] == null
+                                ? null
+                                : shipping,
+                          ),
                         if (quote?['deliveryFeeCents'] == null && usesQuote)
                           const Text(
                             'Delivery fee: unavailable until a supported postcode is entered.',
                           ),
-                        if (quote?['message'] != null)
-                          OrderNotice('${quote!['message']}', error: true),
+                        if (quote?['deliveryFeeCents'] == null &&
+                            quote?['message'] != null)
+                          const OrderNotice(
+                            'Delivery is not configured for this postcode. Please contact the store.',
+                            error: true,
+                          ),
                         if (quoteError != null)
                           OrderNotice(quoteError!, error: true),
                         if (usesQuote) ...[
@@ -398,7 +413,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               child: InventoryButton(
                 key: const ValueKey('place-order'),
-                label: placing ? 'Placing order...' : 'Place order',
+                label: placing ? 'Placing order...' : 'Place Order',
                 busy: placing,
                 onPressed: canPlace ? place : null,
               ),
@@ -485,29 +500,46 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'countryCode': 'MY',
     };
     try {
-      await (widget.placeOrder ??
-          (receiver, payment) => FirestoreService.instance.placeOrder(
-            fulfillmentType: 'delivery',
-            paymentMethod: payment,
-            receiver: receiver,
-            expectedTotalCents: (quote?['totalCents'] as num?)?.toInt(),
-          ))(receiver, payment);
+      final orderId =
+          await (widget.placeOrder ??
+              (receiver, payment) => FirestoreService.instance.placeOrder(
+                fulfillmentType: 'delivery',
+                paymentMethod: payment,
+                receiver: receiver,
+                expectedTotalCents: (quote?['totalCents'] as num?)?.toInt(),
+              ))(receiver, payment);
       if (!mounted) return;
+      showCustomerFeedback(context, 'Order placed successfully');
       if (widget.onPlaced != null) {
         widget.onPlaced!();
       } else {
-        Navigator.pushAndRemoveUntil(
+        Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                const OrdersScreen(isAdmin: false, initialStatus: 'to_pay'),
+            builder: (_) => PlacedOrderReceiptPage(orderId: orderId),
           ),
-          (route) => route.isFirst,
         );
       }
     } catch (error) {
       if (mounted) {
         if (usesQuote) unawaited(refreshQuote());
+        if (error is StateError &&
+            error.message.toString().startsWith('Ordering is closed')) {
+          await showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Ordering Unavailable'),
+              content: Text(error.message.toString()),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          return;
+        }
         setState(
           () => placementError = error is StateError
               ? error.message
@@ -527,4 +559,71 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (mounted) setState(() => placing = false);
     }
   }
+}
+
+class PlacedOrderReceiptPage extends StatefulWidget {
+  const PlacedOrderReceiptPage({super.key, required this.orderId});
+  final String orderId;
+  @override
+  State<PlacedOrderReceiptPage> createState() => _PlacedOrderReceiptPageState();
+}
+
+class _PlacedOrderReceiptPageState extends State<PlacedOrderReceiptPage> {
+  late Future<StoreOrder?> order = FirestoreService.instance.getOrder(
+    widget.orderId,
+  );
+  @override
+  Widget build(BuildContext context) => FutureBuilder<StoreOrder?>(
+    future: order,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        return OrderDetailScreen(
+          order: snapshot.data!,
+          isAdmin: false,
+          openReceipt: true,
+        );
+      }
+      return InventoryTheme(
+        child: Scaffold(
+          body: SafeArea(
+            child: Column(
+              children: [
+                InventoryHeader(
+                  title: 'Order Details',
+                  back: true,
+                  onBack: () => Navigator.maybePop(context),
+                ),
+                Expanded(
+                  child: snapshot.connectionState == ConnectionState.waiting
+                      ? const Center(child: CircularProgressIndicator())
+                      : Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Your order was placed. Could not open its receipt page yet.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 16),
+                                InventoryButton(
+                                  label: 'Retry',
+                                  onPressed: () => setState(
+                                    () => order = FirestoreService.instance
+                                        .getOrder(widget.orderId),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

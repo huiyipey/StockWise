@@ -20,6 +20,7 @@ const {getStorage}=require('firebase-admin/storage');
 const {getMessaging}=require('firebase-admin/messaging');
 const {onDocumentCreated,onDocumentWritten}=require('firebase-functions/v2/firestore');
 const {notificationHandlers}=require('./notifications');
+const {orderEmailHandlers}=require('./order_email');
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 initializeApp();
@@ -31,6 +32,8 @@ const notifications=notificationHandlers({db,messaging:getMessaging(),serverTime
 exports.registerPushToken=verifiedCall({timeoutSeconds:30},notifications.registerPushToken);
 exports.unregisterPushToken=verifiedCall({timeoutSeconds:30},notifications.unregisterPushToken);
 exports.notifyNewOrder=onDocumentCreated('stores/{storeId}/orders/{orderId}',notifications.newOrder);
+exports.notifyOrderStatus=onDocumentWritten('stores/{storeId}/orders/{orderId}',notifications.orderStatus);
+exports.notifyPromotion=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.promotion);
 exports.notifyChatMessage=onDocumentCreated('stores/{storeId}/conversations/{customerId}/messages/{messageId}',notifications.chatMessage);
 exports.classifyInventory=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.inventoryWritten);
 exports.inventoryClock=onSchedule({schedule:'every 1 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},notifications.inventoryClock);
@@ -96,6 +99,9 @@ async function mailTransport() {
     connectionTimeout: 15000, socketTimeout: 30000});
   return {transport, from: config.from};
 }
+const orderEmails=orderEmailHandlers({db,auth:getAuth(),transportFactory:mailTransport,bucket:getStorage().bucket(),serverTimestamp:()=>FieldValue.serverTimestamp()});
+exports.emailOrderConfirmation=onDocumentCreated({document:'stores/{storeId}/orders/{orderId}',timeoutSeconds:120,memory:'512MiB'},orderEmails.created);
+exports.retryOrderConfirmations=onSchedule({schedule:'every 15 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},orderEmails.retry);
 async function teamEmails(store, ownerUid) {
   const members = await store.collection('members').get();
   const uids = new Set(ownerUid ? [ownerUid] : []);

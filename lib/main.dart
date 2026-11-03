@@ -5,11 +5,13 @@ import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
 import 'services/push_service.dart';
+import 'services/local_data_session.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await LocalDataSession.instance.initialize();
   runApp(const StockWiseApp());
   PushService.instance.initialize().catchError((Object _) {});
 }

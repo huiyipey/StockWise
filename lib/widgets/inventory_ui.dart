@@ -365,6 +365,7 @@ class InventoryHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.storeName,
+    this.storeIcon,
     this.back = false,
     this.onBack,
     this.trailing,
@@ -372,6 +373,7 @@ class InventoryHeader extends StatelessWidget {
   });
   final String title;
   final String? storeName;
+  final Widget? storeIcon;
   final bool back;
   final VoidCallback? onBack;
   final Widget? trailing;
@@ -401,11 +403,12 @@ class InventoryHeader extends StatelessWidget {
               if (storeName != null) ...[
                 Row(
                   children: [
-                    const Icon(
-                      Icons.storefront_outlined,
-                      size: 15,
-                      color: InventoryColors.green,
-                    ),
+                    storeIcon ??
+                        const Icon(
+                          Icons.storefront_outlined,
+                          size: 15,
+                          color: InventoryColors.green,
+                        ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -601,14 +604,19 @@ class InventoryBottomNav extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              i == currentIndex
-                                  ? items[i].activeIcon
-                                  : items[i].icon,
-                              size: 22,
-                              color: i == currentIndex
-                                  ? InventoryColors.green
-                                  : InventoryColors.muted,
+                            Badge(
+                              isLabelVisible: (items[i].badgeCount ?? 0) > 0,
+                              label: Text('${items[i].badgeCount ?? 0}'),
+                              backgroundColor: InventoryColors.ink,
+                              child: Icon(
+                                i == currentIndex
+                                    ? items[i].activeIcon
+                                    : items[i].icon,
+                                size: 22,
+                                color: i == currentIndex
+                                    ? InventoryColors.green
+                                    : InventoryColors.muted,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -939,7 +947,9 @@ class InventoryFilters extends StatelessWidget {
     required this.ascending,
     required this.onSort,
     this.compact = false,
+    this.customerStyle = false,
   });
+  final bool customerStyle;
   final List<String> ids;
   final List<StoreCategory> records;
   final String category;
@@ -972,7 +982,7 @@ class InventoryFilters extends StatelessWidget {
     }
 
     final dateText = range == null
-        ? (compact ? 'Any expiry date' : 'Filter expiry date')
+        ? 'Filter expiry date'
         : '${DateFormat('dd MMM').format(range!.start)} - ${DateFormat('dd MMM').format(range!.end)}';
     final sort = _InventoryFilterPill(
       key: const ValueKey('inventory-sort-filter'),
@@ -982,6 +992,7 @@ class InventoryFilters extends StatelessWidget {
       compact: compact,
       bold: true,
       white: compact,
+      outlined: customerStyle,
       minWidth: compact ? 64 : 94,
       fontSize: 12,
     );
@@ -994,8 +1005,13 @@ class InventoryFilters extends StatelessWidget {
             onPressed: onDate!,
             compact: compact,
             muted: true,
-            outlined: !compact,
-            fontSize: compact ? 11.5 : 11,
+            outlined: !compact || customerStyle,
+            startAligned: customerStyle,
+            fontSize: customerStyle
+                ? 13
+                : compact
+                ? 11.5
+                : 11,
             trailing: range == null
                 ? null
                 : IconButton(
@@ -1019,6 +1035,7 @@ class InventoryFilters extends StatelessWidget {
         onPressed: selectCategory,
         compact: true,
         bold: true,
+        outlined: customerStyle,
         fontSize: 13,
         fontWeight: FontWeight.w800,
       );
@@ -1129,8 +1146,10 @@ class _InventoryFilterPill extends StatelessWidget {
     this.fontSize = 11,
     this.fontWeight,
     this.minWidth = 0,
+    this.startAligned = false,
   });
   final String label;
+  final bool startAligned;
   final VoidCallback onPressed;
   final IconData? icon;
   final bool compact, muted, bold, outlined;
@@ -1146,7 +1165,10 @@ class _InventoryFilterPill extends StatelessWidget {
       backgroundColor: outlined || white ? Colors.white : InventoryColors.soft,
       foregroundColor: muted ? InventoryColors.muted : InventoryColors.green,
       minimumSize: Size(minWidth, 44),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: startAligned ? 15 : 10,
+        vertical: 10,
+      ),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(outlined || !compact ? 12 : 22),
@@ -1156,8 +1178,10 @@ class _InventoryFilterPill extends StatelessWidget {
       ),
     ),
     child: Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: startAligned ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: startAligned
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.center,
       children: [
         if (icon != null) ...[
           Icon(icon, size: compact ? 14 : 17),

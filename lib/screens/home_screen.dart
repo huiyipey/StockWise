@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
+import '../services/local_data_session.dart';
+import '../widgets/catalogue_cache_notice.dart';
+import '../widgets/local_database_shortcut.dart';
+import 'local_database_screen.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/store_chat_button.dart';
@@ -23,6 +27,24 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String category = 'all';
   bool expiryAscending = true;
+  final savedView = SavedCatalogueView('overview');
+  @override
+  void initState() {
+    super.initState();
+    _restoreView();
+  }
+
+  Future<void> _restoreView() async {
+    final value = await savedView.restore();
+    if (mounted && value != null) {
+      setState(() {
+        category = value.category;
+        expiryAscending = value.ascending;
+      });
+    }
+  }
+
+  void _saveView() => savedView.save(category, expiryAscending);
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   late final categories =
@@ -40,10 +62,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: 'Overview',
                 enlarged: true,
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
+                storeIcon: LocalDatabaseShortcut(
+                  onOpen: () async {
+                    await Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) => const LocalDatabaseScreen(),
+                      ),
+                    );
+                  },
+                ),
                 trailing: StoreSession.instance.canManageMembers
                     ? const StoreChatButton(inventoryStyle: true)
                     : null,
               ),
+              const CatalogueCacheNotice(),
               Expanded(
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
@@ -81,13 +113,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .toList()
                                 ..sort();
                           final now = DateTime.now();
+                          final effectiveCategory = ids.contains(category)
+                              ? category
+                              : 'all';
                           final expiring =
                               active.where((item) {
                                 final days = item.daysUntilExpiryFrom(now);
                                 return days >= 0 &&
                                     days <= 30 &&
-                                    (category == 'all' ||
-                                        item.categoryId == category);
+                                    (effectiveCategory == 'all' ||
+                                        item.categoryId == effectiveCategory);
                               }).toList()..sort(
                                 (a, b) => expiryAscending
                                     ? a.expiryAt.compareTo(b.expiryAt)
@@ -131,13 +166,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                 compact: true,
                                 ids: ids,
                                 records: records.data ?? [],
-                                category: category,
-                                onCategory: (value) =>
-                                    setState(() => category = value),
+                                category: effectiveCategory,
+                                onCategory: (value) {
+                                  setState(() => category = value);
+                                  _saveView();
+                                },
                                 ascending: expiryAscending,
-                                onSort: () => setState(
-                                  () => expiryAscending = !expiryAscending,
-                                ),
+                                onSort: () {
+                                  setState(
+                                    () => expiryAscending = !expiryAscending,
+                                  );
+                                  _saveView();
+                                },
                               ),
                               const SizedBox(height: 18),
                               if (expiring.isEmpty)

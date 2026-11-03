@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
+import 'customer_ui.dart';
 
 class ShopAssistantBanner extends StatelessWidget {
   const ShopAssistantBanner({super.key, required this.onTap});
@@ -56,14 +57,9 @@ class ShopAssistantBanner extends StatelessWidget {
 }
 
 class ShopSectionTitle extends StatelessWidget {
-  const ShopSectionTitle(
-    this.title, {
-    super.key,
-    required this.count,
-    this.subtitle,
-  });
+  const ShopSectionTitle(this.title, {super.key, this.count, this.subtitle});
   final String title;
-  final int count;
+  final int? count;
   final String? subtitle;
   @override
   Widget build(BuildContext context) => Column(
@@ -77,11 +73,15 @@ class ShopSectionTitle extends StatelessWidget {
               style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
             ),
           ),
-          const SizedBox(width: 10),
-          Text(
-            '$count',
-            style: const TextStyle(fontSize: 13, color: InventoryColors.muted),
-          ),
+          if (count != null) const SizedBox(width: 10),
+          if (count != null)
+            Text(
+              '$count',
+              style: const TextStyle(
+                fontSize: 13,
+                color: InventoryColors.muted,
+              ),
+            ),
         ],
       ),
       if (subtitle != null) ...[
@@ -189,39 +189,48 @@ class ShopProductCard extends StatelessWidget {
     ),
   );
 
-  Widget _featured(BuildContext context) => Column(
+  Widget _featured(BuildContext context) => _layout(context, large: true);
+  Widget _grid(BuildContext context) => _layout(context, large: false);
+  Widget _layout(BuildContext context, {required bool large}) => Column(
+    mainAxisSize: large ? MainAxisSize.max : MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Expanded(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ShopProductPhoto(item: item, image: image),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFAECD5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'PROMOTION',
-                  style: TextStyle(
-                    fontSize: 9,
-                    color: InventoryColors.amber,
-                    fontWeight: FontWeight.w800,
+      if (large)
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ShopProductPhoto(item: item, image: image),
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAECD5),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'PROMOTION',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: InventoryColors.amber,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
+        )
+      else
+        AspectRatio(
+          aspectRatio: 1.1,
+          child: ShopProductPhoto(item: item, image: image),
         ),
-      ),
       const SizedBox(height: 12),
       Text(
         category,
@@ -234,82 +243,15 @@ class ShopProductCard extends StatelessWidget {
         item.productName,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 17,
-          height: 1.2,
+        style: TextStyle(
+          fontSize: large ? 17 : 15,
+          height: 1.3,
           fontWeight: FontWeight.w700,
         ),
       ),
       const SizedBox(height: 8),
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(child: _price()),
-          _addButton(),
-        ],
-      ),
-      const SizedBox(height: 8),
-      _expiry(),
-      const SizedBox(height: 4),
-      Text(
-        '${item.availableQuantity} ${item.unitLabel} available',
-        style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
-      ),
-      if (item.bundlePromotion)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            item.promotionLabel,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10,
-              color: InventoryColors.green,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-    ],
-  );
-
-  Widget _grid(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      AspectRatio(
-        aspectRatio: 1.1,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ShopProductPhoto(item: item, image: image),
-            Positioned(right: 4, bottom: 4, child: _addButton()),
-          ],
-        ),
-      ),
-      const SizedBox(height: 12),
-      Text(
-        category,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
-      ),
-      const SizedBox(height: 4),
-      SizedBox(
-        height: MediaQuery.textScalerOf(context).scale(15) * 1.3 * 2,
-        child: Text(
-          item.productName,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 15,
-            height: 1.3,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-      const SizedBox(height: 8),
       _price(),
-      const SizedBox(height: 9),
+      const SizedBox(height: 8),
       _expiry(),
       const SizedBox(height: 6),
       Text(
@@ -319,17 +261,11 @@ class ShopProductCard extends StatelessWidget {
       if (item.bundlePromotion)
         Padding(
           padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            item.promotionLabel,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 10,
-              color: InventoryColors.green,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          child: PromotionDescription(item.promotionLabel, fontSize: 10),
         ),
+      const SizedBox(height: 6),
+      if (!large) const Spacer(),
+      Align(alignment: Alignment.bottomRight, child: _addButton()),
     ],
   );
 
@@ -385,20 +321,20 @@ class ShopProductCard extends StatelessWidget {
     tooltip: 'Add ${item.productName} to cart',
     onPressed: busy ? null : onAdd,
     style: IconButton.styleFrom(
-      backgroundColor: InventoryColors.green,
-      foregroundColor: Colors.white,
-      disabledBackgroundColor: InventoryColors.soft,
       minimumSize: const Size.square(44),
+      maximumSize: const Size.square(44),
+      padding: const EdgeInsets.all(6),
     ),
-    icon: busy
-        ? const SizedBox.square(
-            dimension: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: InventoryColors.green,
-            ),
-          )
-        : const Icon(Icons.add_rounded, size: 23),
+    icon: CircleAvatar(
+      radius: 16,
+      backgroundColor: busy ? InventoryColors.soft : InventoryColors.green,
+      child: busy
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+    ),
   );
 }
 
@@ -460,10 +396,6 @@ class _ShopProductPhotoState extends State<ShopProductPhoto> {
     ),
   );
   Widget placeholder() => const Center(
-    child: Icon(
-      Icons.shopping_bag_outlined,
-      size: 37,
-      color: Color(0xFFA3B39F),
-    ),
+    child: Icon(Icons.image_outlined, size: 37, color: Color(0xFFA3B39F)),
   );
 }

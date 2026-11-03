@@ -38,7 +38,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         const data=await readQuote(tx,store,request.auth.uid), fee=deliveryFee(data.settings,request.data.postcode);
         const open=orderingOpen(data.shop,now());
         return {...data.quote,lines:data.quote.lines.map(l=>({...l,expiryAt:l.expiryAt.toISOString()})),deliveryFeeCents:fee,
-          totalCents:fee===null?null:data.quote.subtotalCents+fee,canOrder:open&&fee!==null,
+          totalCents:fee===null?null:data.quote.subtotalCents+fee,canOrder:open&&fee!==null,orderingOpen:open,deliveryAvailable:fee!==null,
           message:!open?'Ordering is closed. Orders close 30 minutes before the store closes.':fee===null?'Delivery is not configured for this postcode. Please contact the store.':null};
       });
     }),

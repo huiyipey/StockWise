@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
+import '../services/local_data_session.dart';
+import '../widgets/catalogue_cache_notice.dart';
+import '../widgets/local_database_shortcut.dart';
+import 'local_database_screen.dart';
 import '../widgets/glass_bottom_nav.dart' show NavItem;
 import '../widgets/inventory_expiry_range.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/shop_ui.dart';
+import '../widgets/customer_ui.dart';
 import '../widgets/store_chat_button.dart';
 import 'cart_screen.dart';
 import 'item_detail_screen.dart';
@@ -44,6 +49,19 @@ class ShopScreen extends StatefulWidget {
 
 class _ShopScreenState extends State<ShopScreen> {
   final search = TextEditingController();
+  final scroll = ScrollController();
+  bool showTop = false;
+  final savedView = SavedCatalogueView('shop');
+  @override
+  void initState() {
+    super.initState();
+    _restoreView();
+    scroll.addListener(() {
+      final next = scroll.offset > 380;
+      if (next != showTop && mounted) setState(() => showTop = next);
+    });
+  }
+
   final adding = <String>{};
   late var inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
@@ -51,15 +69,31 @@ class _ShopScreenState extends State<ShopScreen> {
       widget.categoriesStream ??
       FirestoreService.instance.watchCategoryRecords();
   late final cartCount =
-      widget.cartCountStream ??
-      FirestoreService.instance.watchCart().map((lines) => lines.length);
+      (widget.cartCountStream ??
+              FirestoreService.instance.watchCart().map(
+                (lines) =>
+                    lines.fold<int>(0, (sum, line) => sum + line.quantity),
+              ))
+          .asBroadcastStream(onCancel: (subscription) => subscription.cancel());
   String category = 'all';
   DateTimeRange? expiryRange;
   bool ascending = true;
+  Future<void> _restoreView() async {
+    final value = await savedView.restore();
+    if (mounted && value != null) {
+      setState(() {
+        category = value.category;
+        ascending = value.ascending;
+      });
+    }
+  }
+
+  void _saveView() => savedView.save(category, ascending);
   DateTime get now => widget.now?.call() ?? DateTime.now();
   @override
   void dispose() {
     search.dispose();
+    scroll.dispose();
     super.dispose();
   }
 
@@ -115,6 +149,20 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
           ),
         ),
+        floatingActionButton: showTop
+            ? FloatingActionButton.small(
+                key: const ValueKey('shop-jump-top'),
+                tooltip: 'Jump to top',
+                backgroundColor: InventoryColors.green,
+                foregroundColor: Colors.white,
+                onPressed: () => scroll.animateTo(
+                  0,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOut,
+                ),
+                child: const Icon(Icons.keyboard_arrow_up_rounded),
+              )
+            : null,
         bottomNavigationBar: SafeArea(top: false, child: _bottomNav()),
       ),
     ),
@@ -155,8 +203,10 @@ class _ShopScreenState extends State<ShopScreen> {
     final regular = filtered
         .where((item) => !promotions.contains(item))
         .toList();
+    final columns = MediaQuery.textScalerOf(context).scale(15) > 20 ? 1 : 2;
     return CustomScrollView(
       key: const ValueKey('shop-scroll'),
+      controller: scroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
         SliverPadding(
@@ -173,10 +223,15 @@ class _ShopScreenState extends State<ShopScreen> {
                         children: [
                           Row(
                             children: [
-                              const Icon(
-                                Icons.storefront_outlined,
-                                size: 15,
-                                color: InventoryColors.green,
+                              LocalDatabaseShortcut(
+                                onOpen: () async {
+                                  await Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const LocalDatabaseScreen(),
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(width: 6),
                               Expanded(
@@ -262,7 +317,7 @@ class _ShopScreenState extends State<ShopScreen> {
                           width: 1.4,
                         ),
                       ),
-                      hintText: 'Search name or barcode',
+                      hintText: 'Search name',
                       prefixIcon: const Icon(
                         Icons.search_rounded,
                         size: 22,
@@ -283,14 +338,22 @@ class _ShopScreenState extends State<ShopScreen> {
                   ids: ids,
                   records: records,
                   category: effectiveCategory,
-                  onCategory: (value) => setState(() => category = value),
+                  onCategory: (value) {
+                    setState(() => category = value);
+                    _saveView();
+                  },
                   range: expiryRange,
                   onDate: () => _pickExpiryRange(context),
                   onClearDate: () => setState(() => expiryRange = null),
                   ascending: ascending,
-                  onSort: () => setState(() => ascending = !ascending),
+                  onSort: () {
+                    setState(() => ascending = !ascending);
+                    _saveView();
+                  },
                   compact: true,
+                  customerStyle: true,
                 ),
+                const CatalogueCacheNotice(horizontalMargin: 0),
                 const SizedBox(height: 16),
                 ShopAssistantBanner(onTap: openAssistant),
                 const SizedBox(height: 24),
@@ -308,7 +371,12 @@ class _ShopScreenState extends State<ShopScreen> {
                       ),
                       TextButton(
                         onPressed: resetFilters,
-                        child: const Text('Clear filters'),
+                        child: const Text(
+                          'Clear Filters',
+                          style: TextStyle(
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -346,21 +414,19 @@ class _ShopScreenState extends State<ShopScreen> {
                   ShopStateCard(
                     icon: Icons.search_off_rounded,
                     title: 'No products found',
-                    message: 'Try another search or clear your filters.',
-                    actionLabel: 'Clear filters',
+                    actionLabel: 'Clear Filters',
                     onAction: resetFilters,
                   )
                 else ...[
                   if (promotions.isNotEmpty) ...[
                     ShopSectionTitle(
                       'On Promotion',
-                      count: promotions.length,
                       subtitle: 'Good finds at a better price',
                     ),
                     const SizedBox(height: 12),
                     SizedBox(
                       height:
-                          302 +
+                          350 +
                           (MediaQuery.textScalerOf(context).scale(14) - 14)
                                   .clamp(0, 28) *
                               12,
@@ -386,10 +452,7 @@ class _ShopScreenState extends State<ShopScreen> {
                     const SizedBox(height: 26),
                   ],
                   if (regular.isNotEmpty) ...[
-                    ShopSectionTitle(
-                      'Everyday Products',
-                      count: regular.length,
-                    ),
+                    ShopSectionTitle('Everyday Products'),
                     const SizedBox(height: 12),
                   ],
                 ],
@@ -401,21 +464,23 @@ class _ShopScreenState extends State<ShopScreen> {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             sliver: SliverList.separated(
-              itemCount: (regular.length / 2).ceil(),
+              itemCount: (regular.length / columns).ceil(),
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, row) => IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(child: _product(regular[row * 2], records)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: row * 2 + 1 < regular.length
-                          ? _product(regular[row * 2 + 1], records)
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                ),
+                child: columns == 1
+                    ? _product(regular[row], records)
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _product(regular[row * 2], records)),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: row * 2 + 1 < regular.length
+                                ? _product(regular[row * 2 + 1], records)
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
               ),
             ),
           ),
@@ -442,8 +507,7 @@ class _ShopScreenState extends State<ShopScreen> {
 
   bool _matches(InventoryBatch item, String effectiveCategory) {
     final query = search.text.trim().toLowerCase();
-    if (!item.productName.toLowerCase().contains(query) &&
-        !(item.barcode ?? '').toLowerCase().contains(query)) {
+    if (!item.productName.toLowerCase().contains(query)) {
       return false;
     }
     if (effectiveCategory != 'all' && item.categoryId != effectiveCategory) {
@@ -460,6 +524,7 @@ class _ShopScreenState extends State<ShopScreen> {
     search.clear();
     category = 'all';
     expiryRange = null;
+    _saveView();
   });
   Future<void> _pickExpiryRange(BuildContext context) async {
     FocusScope.of(context).unfocus();
@@ -483,32 +548,28 @@ class _ShopScreenState extends State<ShopScreen> {
         await FirestoreService.instance.addToCart(item);
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          inventoryFeedback(
-            '${item.productName} added to cart',
-            action: SnackBarAction(
-              label: 'View cart',
-              textColor: Colors.white,
-              onPressed: openCart,
-            ),
-          ),
-        );
+      showCustomerFeedback(
+        context,
+        '${item.productName} added to cart',
+        action: SnackBarAction(
+          label: 'View cart',
+          textColor: Colors.white,
+          onPressed: openCart,
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       final message = error is StateError
           ? error.message
           : 'Could not add this item. Please try again.';
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(inventoryFeedback(message, error: true));
+      showCustomerFeedback(context, message.toString(), error: true);
     } finally {
       if (mounted) setState(() => adding.remove(item.id));
     }
   }
 
-  Widget _bottomNav() => InventoryBottomNav(
+  Widget _bottomNav() => CustomerBottomNav(
+    cartCountStream: cartCount,
     currentIndex: 0,
     items: [
       const NavItem(

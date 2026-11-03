@@ -18,6 +18,8 @@ import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
 import 'store_session.dart';
+import 'local_database.dart';
+import 'catalogue_cache.dart';
 
 class FirestoreService {
   FirestoreService._();
@@ -83,6 +85,7 @@ class FirestoreService {
             ),
           )
           .call({'storeId': store.id, 'confirmName': store.name});
+      await LocalDatabase.instance.removeStore(LocalScope(_user.uid, store.id));
     } on FirebaseFunctionsException catch (e) {
       throw StateError(e.message ?? 'Could not delete this store.');
     }
@@ -352,18 +355,42 @@ class FirestoreService {
         categories.where((c) => c.active).map((c) => c.name).toList(),
   );
 
-  Stream<List<InventoryBatch>> watchInventory() => _storeRef
-      .collection('inventoryBatches')
-      .orderBy('expiryAt')
-      .snapshots()
-      .map((snapshot) => snapshot.docs.map(InventoryBatch.fromDoc).toList());
+  Stream<List<InventoryBatch>> watchInventory() {
+    final scope = LocalScope(_user.uid, _storeId);
+    final remote = _db
+        .collection('stores')
+        .doc(scope.storeId)
+        .collection('inventoryBatches')
+        .orderBy('expiryAt')
+        .snapshots(includeMetadataChanges: true)
+        .map(
+          (snapshot) => RemoteCatalogue(
+            snapshot.docs.map(InventoryBatch.fromDoc).toList(),
+            fromServer: !snapshot.metadata.isFromCache,
+            pending: snapshot.metadata.hasPendingWrites,
+          ),
+        );
+    return CatalogueCache.instance.inventory(scope, remote);
+  }
 
-  Stream<List<StoreCategory>> watchCategoryRecords() =>
-      _storeRef.collection('categories').snapshots().map((s) {
-        final result = s.docs.map(StoreCategory.fromDoc).toList();
-        result.sort(StoreCategory.compare);
-        return result;
-      });
+  Stream<List<StoreCategory>> watchCategoryRecords() {
+    final scope = LocalScope(_user.uid, _storeId);
+    final remote = _db
+        .collection('stores')
+        .doc(scope.storeId)
+        .collection('categories')
+        .snapshots(includeMetadataChanges: true)
+        .map((s) {
+          final result = s.docs.map(StoreCategory.fromDoc).toList();
+          result.sort(StoreCategory.compare);
+          return RemoteCatalogue(
+            result,
+            fromServer: !s.metadata.isFromCache,
+            pending: s.metadata.hasPendingWrites,
+          );
+        });
+    return CatalogueCache.instance.categories(scope, remote);
+  }
 
   Future<void> saveCategory(
     String name, {
@@ -764,6 +791,14 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
 
+  Future<StoreOrder?> getOrder(String orderId) async {
+    final doc = await _storeRef
+        .collection('orders')
+        .doc(orderId)
+        .get(const GetOptions(source: Source.server));
+    return doc.exists ? StoreOrder.fromDoc(doc) : null;
+  }
+
   Stream<StoreOrder?> watchOrder(String orderId) => _storeRef
       .collection('orders')
       .doc(orderId)
@@ -886,6 +921,7 @@ class FirestoreService {
     if (nameError != null || phoneError != null) {
       throw ArgumentError(nameError ?? phoneError);
     }
+    final formattedName = capitalizeProductName(displayName.trim());
     final user = _user;
     final userRef = _db.collection('users').doc(user.uid);
     final previous = await userRef.get();
@@ -916,10 +952,10 @@ class FirestoreService {
           SettableMetadata(contentType: contentType),
         );
       }
-      await user.updateDisplayName(displayName.trim());
+      await user.updateDisplayName(formattedName);
       authUpdated = true;
       await userRef.set({
-        'displayName': displayName.trim(),
+        'displayName': formattedName,
         'phoneNumber': phoneNumber.trim(),
         if (uploaded != null) 'photoPath': uploaded.fullPath,
         'updatedAt': FieldValue.serverTimestamp(),

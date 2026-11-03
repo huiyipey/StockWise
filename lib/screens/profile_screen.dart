@@ -9,6 +9,7 @@ import '../services/address_book_service.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/store_chat_button.dart';
 import '../widgets/inventory_ui.dart';
+import '../widgets/customer_ui.dart';
 import '../widgets/profile_ui.dart';
 import '../services/store_chat_service.dart';
 import '../services/password_change_service.dart';
@@ -193,7 +194,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        const ProfileSection('Store And Preferences'),
+        ProfileSection(
+          session.canManage ? 'Store And Preferences' : 'Store and Preferences',
+        ),
         ProfilePanel(
           padding: 0,
           child: Column(
@@ -215,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
               if (!session.canManage) ...[
                 ProfileAction(
-                  label: 'Address book',
+                  label: 'Address Book',
                   subtitle: 'Saved delivery addresses',
                   icon: Icons.contact_mail_outlined,
                   onTap: loggingOut
@@ -281,7 +284,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: InventoryColors.green,
                     ),
                     const SizedBox(width: 14),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -294,7 +297,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           SizedBox(height: 5),
                           Text(
-                            'Expiry and order updates',
+                            session.canManage
+                                ? 'Expiry and order updates'
+                                : 'Promotion and order updates',
                             style: TextStyle(
                               fontSize: 11,
                               height: 1.4,
@@ -684,7 +689,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
-    return InventoryBottomNav(
+    return CustomerBottomNav(
       currentIndex: 3,
       items: [
         NavItem(

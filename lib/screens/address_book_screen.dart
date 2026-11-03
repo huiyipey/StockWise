@@ -106,7 +106,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
             child: Column(
               children: [
                 InventoryHeader(
-                  title: 'Address book',
+                  title: 'Address Book',
                   back: true,
                   onBack: busy ? null : () => Navigator.maybePop(context),
                 ),
@@ -131,17 +131,8 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                       return ListView(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                         children: [
-                          const Text(
-                            'Your default address fills delivery details at checkout. Your first saved address becomes the default.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              height: 1.5,
-                              color: InventoryColors.muted,
-                            ),
-                          ),
-                          const SizedBox(height: 22),
                           InventoryButton(
-                            label: 'Add address',
+                            label: 'Add Address',
                             icon: Icons.add_rounded,
                             onPressed: busy ? null : () => edit(data),
                           ),

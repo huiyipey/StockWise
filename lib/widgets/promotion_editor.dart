@@ -269,7 +269,7 @@ class _PromotionEditorState extends State<PromotionEditor> {
             percent: reward == 'percentage',
           ),
         const Text(
-          'Qualifying purchases add the bundle item automatically. Existing percentage or fixed discounts on that item are applied first.',
+          'For same-product offers, the cart quantity includes reward units (Buy 2 Get 1 means select 3). Different bundle products are added automatically. Existing percentage or fixed discounts on those products apply first.',
           style: TextStyle(
             fontSize: 11.5,
             height: 1.5,

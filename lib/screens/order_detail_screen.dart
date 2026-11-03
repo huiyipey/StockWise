@@ -30,9 +30,10 @@ class OrderDetailScreen extends StatefulWidget {
     this.uploadReceipt,
     this.receiptImage,
     this.saveCancellation,
+    this.openReceipt = false,
   });
   final StoreOrder order;
-  final bool isAdmin, liveUpdates;
+  final bool isAdmin, liveUpdates, openReceipt;
   final Stream<List<OrderLine>>? orderLinesStream;
   final Stream<StoreOrder?>? orderUpdates;
   final Future<InventoryBatch?> Function(OrderLine)? productLookup;
@@ -56,8 +57,27 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       receiptError,
       updateNotice,
       savedCancellationReason;
+  final scroll = ScrollController();
+  bool receiptRevealed = false;
   StreamSubscription<StoreOrder?>? subscription;
-  late Stream<List<OrderLine>> lines = watchLines();
+  late Stream<List<OrderLine>> lines = watchLines().map((value) {
+    if (widget.openReceipt && !receiptRevealed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || !scroll.hasClients || receiptRevealed) return;
+        receiptRevealed = true;
+        scroll.jumpTo(scroll.position.maxScrollExtent);
+        await WidgetsBinding.instance.endOfFrame;
+        if (mounted && scroll.hasClients) {
+          scroll.animateTo(
+            scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+    return value;
+  });
   bool get dirty => widget.isAdmin && status != order.status;
   bool get busy => saving || uploadingReceipt || pickingReceipt;
   bool get hasReceipt => receiptPath?.trim().isNotEmpty == true;
@@ -104,6 +124,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   void dispose() {
     subscription?.cancel();
+    scroll.dispose();
     super.dispose();
   }
 
@@ -130,6 +151,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     stream: lines,
                     builder: (context, snapshot) => ListView(
                       key: const ValueKey('order-details-scroll'),
+                      controller: scroll,
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
                       children: [
                         if (missing)
@@ -333,14 +355,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 'Cancellation Reason: ${order.cancellationReason}',
                               ),
                             ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Status updates appear in your order history.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: InventoryColors.muted,
-                            ),
-                          ),
                         ],
                       ],
                     ),

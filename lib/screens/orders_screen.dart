@@ -6,6 +6,7 @@ import '../services/store_session.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
+import '../widgets/customer_ui.dart';
 import 'cart_screen.dart';
 import 'home_screen.dart';
 import 'items_screen.dart';
@@ -55,7 +56,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: Column(
             children: [
               InventoryHeader(
-                title: widget.isAdmin ? 'Orders' : 'Order history',
+                title: widget.isAdmin ? 'Orders' : 'Order History',
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
               ),
               Padding(
@@ -264,7 +265,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ],
       );
     }
-    return InventoryBottomNav(
+    return CustomerBottomNav(
       currentIndex: 2,
       items: [
         NavItem(

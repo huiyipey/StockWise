@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../services/firestore_service.dart';
 import '../services/profile_fields.dart';
+import '../models/product_name.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
@@ -215,7 +216,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
     try {
       await (widget.onSave ?? FirestoreService.instance.updateUserProfile)(
-        displayName: name.text.trim(),
+        displayName: capitalizeProductName(name.text.trim()),
         phoneNumber: phone.text.trim(),
         photo: photo,
       );

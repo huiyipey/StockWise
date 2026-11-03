@@ -7,6 +7,8 @@ import '../models/shelf_life.dart';
 import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
+import '../widgets/customer_ui.dart';
+import '../widgets/catalogue_cache_notice.dart';
 import 'edit_item_screen.dart';
 import 'product_image_screen.dart';
 
@@ -129,6 +131,7 @@ class _InventoryDetails extends StatelessWidget {
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
+              const CatalogueCacheNotice(),
               Expanded(
                 child: ListView(
                   key: const ValueKey('item-details-scroll'),
@@ -406,86 +409,7 @@ class _InventoryDetails extends StatelessWidget {
     );
   }
 
-  Widget _pricing() {
-    final promotion = item.promotionEnabled && item.promotionPriceCents != null;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Pricing',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                if (promotion)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: InventoryColors.soft,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Promotion',
-                      style: TextStyle(
-                        color: InventoryColors.green,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 16,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  money(item.sellingPriceCents),
-                  style: TextStyle(
-                    fontSize: 25,
-                    fontWeight: FontWeight.w700,
-                    color: promotion
-                        ? InventoryColors.green
-                        : InventoryColors.ink,
-                  ),
-                ),
-                if (promotion)
-                  Text(
-                    money(item.basePriceCents),
-                    style: const TextStyle(
-                      color: InventoryColors.muted,
-                      fontSize: 12,
-                      decoration: TextDecoration.lineThrough,
-                    ),
-                  ),
-              ],
-            ),
-            if (item.bundlePromotion)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  item.promotionLabel,
-                  style: const TextStyle(
-                    color: InventoryColors.green,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _pricing() => ProductPricingCard(item: item);
 
   Widget _details() => Card(
     child: Padding(
@@ -670,7 +594,7 @@ class _ItemPhotoState extends State<_ItemPhoto> {
       color: InventoryColors.background,
       child: SizedBox(
         key: const ValueKey('item-details-photo'),
-        height: 166,
+        height: 204,
         width: double.infinity,
         child: FutureBuilder<ImageProvider?>(
           future: image,

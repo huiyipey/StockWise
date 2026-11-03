@@ -3,6 +3,8 @@ import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../services/inventory_list.dart';
+import '../services/local_data_session.dart';
+import '../widgets/catalogue_cache_notice.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/inventory_expiry_range.dart';
@@ -28,6 +30,24 @@ class _ItemsScreenState extends State<ItemsScreen> {
   String query = '', category = 'all';
   DateTimeRange? expiryRange;
   bool expiryAscending = true;
+  final savedView = SavedCatalogueView('inventory');
+  @override
+  void initState() {
+    super.initState();
+    _restoreView();
+  }
+
+  Future<void> _restoreView() async {
+    final value = await savedView.restore();
+    if (mounted && value != null) {
+      setState(() {
+        category = value.category;
+        expiryAscending = value.ascending;
+      });
+    }
+  }
+
+  void _saveView() => savedView.save(category, expiryAscending);
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   late final categories =
@@ -64,6 +84,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                 title: 'Inventory',
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
               ),
+              const CatalogueCacheNotice(),
               Expanded(
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
@@ -89,13 +110,16 @@ class _ItemsScreenState extends State<ItemsScreen> {
                               .toList()
                             ..sort();
                       final today = DateTime.now();
+                      final effectiveCategory = ids.contains(category)
+                          ? category
+                          : 'all';
                       final items =
                           snapshot.data!
                               .where(
                                 (item) =>
                                     matchesInventorySearch(item, query) &&
-                                    (category == 'all' ||
-                                        item.categoryId == category) &&
+                                    (effectiveCategory == 'all' ||
+                                        item.categoryId == effectiveCategory) &&
                                     _inRange(item.expiryAt),
                               )
                               .toList()
@@ -151,17 +175,22 @@ class _ItemsScreenState extends State<ItemsScreen> {
                           InventoryFilters(
                             ids: ids,
                             records: records.data ?? [],
-                            category: category,
-                            onCategory: (value) =>
-                                setState(() => category = value),
+                            category: effectiveCategory,
+                            onCategory: (value) {
+                              setState(() => category = value);
+                              _saveView();
+                            },
                             range: expiryRange,
                             onDate: () => _pickExpiryRange(context),
                             onClearDate: () =>
                                 setState(() => expiryRange = null),
                             ascending: expiryAscending,
-                            onSort: () => setState(
-                              () => expiryAscending = !expiryAscending,
-                            ),
+                            onSort: () {
+                              setState(
+                                () => expiryAscending = !expiryAscending,
+                              );
+                              _saveView();
+                            },
                           ),
                           const SizedBox(height: 14),
                           LayoutBuilder(
