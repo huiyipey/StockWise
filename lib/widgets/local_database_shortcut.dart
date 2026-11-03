@@ -5,8 +5,13 @@ import 'package:flutter/material.dart';
 import 'inventory_ui.dart';
 
 class LocalDatabaseShortcut extends StatefulWidget {
-  const LocalDatabaseShortcut({super.key, required this.onOpen});
+  const LocalDatabaseShortcut({
+    super.key,
+    required this.onOpen,
+    this.compact = false,
+  });
   final Future<void> Function() onOpen;
+  final bool compact;
   @override
   State<LocalDatabaseShortcut> createState() => _LocalDatabaseShortcutState();
 }
@@ -46,8 +51,12 @@ class _LocalDatabaseShortcutState extends State<LocalDatabaseShortcut> {
       tooltip: 'Store',
       onPressed: tap,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+      constraints: BoxConstraints.tightFor(
+        width: widget.compact ? 15 : 32,
+        height: widget.compact ? 15 : 32,
+      ),
       style: IconButton.styleFrom(
+        minimumSize: widget.compact ? const Size.square(15) : null,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
       icon: const Icon(

@@ -62,54 +62,7 @@ function deliveryFee(settings, postcode) {
   return cents(fee)?fee:null;
 }
 function quoteCart(cart, inventory, {now=new Date()}={}) {
-  const byId=new Map(inventory.map(b=>[b.id,b])), stock=new Map(), lines=[];
-  const sellable=b=>b&&b.status==='active'&&date(b.expiryAt)>now&&b.quantityOnHand-(b.quantityReserved||0)>0;
-  function reserve(b, quantity) {
-    if (!sellable(b)||!positive(quantity)) throw Error('A product is no longer available. Refresh your cart.');
-    const used=(stock.get(b.id)||0)+quantity;
-    if (used>b.quantityOnHand-(b.quantityReserved||0)) throw Error(`Not enough ${titleCase(b.productName)} available for this order and its bundles.`);
-    stock.set(b.id,used);
-  }
-  function line(b,quantity,price,extra={}) {
-    reserve(b,quantity);
-    const full=sellingPrice(b);
-    lines.push({batchId:b.id,productId:b.productId,productName:b.productName,categoryId:b.categoryId||'others',imagePath:b.imagePath||null,
-      regularUnitPriceCents:b.basePriceCents,expiryAt:date(b.expiryAt),unitLabel:b.unitLabel||'unit',quantity,unitPriceCents:price,lineTotalCents:price*quantity,
-      discountCents:Math.max(0,(full-price)*quantity),...extra});
-  }
-  const rewardPrice=(full,p)=>p.reward==='free'?0:p.reward==='percentage'?Math.max(1,Math.round(full*(100-p.rewardPercentage)/100)):Math.max(0,full-p.rewardAmountCents);
-  for (const item of cart) {
-    const b=byId.get(item.batchId);
-    if(!b)throw Error('A product is no longer available.');
-    const p=b.promotion, self=b.promotionEnabled&&p?.type==='bundle'&&p.targetProductId===b.productId;
-    const label=b.promotionEnabled&&p?.type==='bundle'?p.label||'Buy X Get Y offer':'';
-    if(self) {
-      validatePromotion(p,b.basePriceCents);
-      // For a same-product offer the selected quantity includes the reward units.
-      // Gifts cannot qualify for another gift or inflate stock reservations.
-      const groups=p.requirement==='spend'?Math.floor(item.quantity*sellingPrice(b)/(p.thresholdSpendCents+p.giftQuantity*sellingPrice(b))):Math.floor(item.quantity/(p.thresholdQuantity+p.giftQuantity));
-      const gifts=groups*p.giftQuantity, purchased=item.quantity-gifts;
-      if(purchased>0)line(b,purchased,sellingPrice(b),{kind:'purchase',promotionLabel:label});
-      if(gifts>0)line(b,gifts,rewardPrice(sellingPrice(b),p),{kind:'bundle',sourceBatchId:b.id,promotionLabel:label});
-    } else line(b,item.quantity,sellingPrice(b),{kind:'purchase',promotionLabel:label});
-  }
-  for (const item of cart) {
-    const b=byId.get(item.batchId), p=b.promotion;
-    if (!b.promotionEnabled||p?.type!=='bundle'||p.targetProductId===b.productId) continue;
-    validatePromotion(p,b.basePriceCents);
-    const groups=p.requirement==='spend'?Math.floor(sellingPrice(b)*item.quantity/p.thresholdSpendCents):Math.floor(item.quantity/p.thresholdQuantity);
-    if (!groups) continue;
-    const targets=inventory.filter(t=>t.productId===p.targetProductId&&sellable(t)).sort((a,b)=>date(a.expiryAt)-date(b.expiryAt)||a.id.localeCompare(b.id));
-    let remaining=groups*p.giftQuantity;
-    for(const target of targets) {
-      const quantity=Math.min(remaining,target.quantityOnHand-(target.quantityReserved||0)-(stock.get(target.id)||0));
-      if(quantity<=0)continue;
-      const full=sellingPrice(target), price=rewardPrice(full,p);
-      line(target,quantity,price,{kind:'bundle',sourceBatchId:b.id,promotionLabel:p.label||'Buy X Get Y offer'});remaining-=quantity;
-      if(!remaining)break;
-    }
-    if(remaining)throw Error('The bundle product does not have enough stock. Please contact the store.');
-  }
-  return {lines,stock:[...stock].map(([id,quantity])=>({id,quantity})),subtotalCents:lines.reduce((a,l)=>a+l.lineTotalCents,0),discountCents:lines.reduce((a,l)=>a+l.discountCents,0)};
+  return require('./bundle_quote').bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, titleCase, shelfLife});
 }
+
 module.exports={titleCase,operatingHours,orderingOpen,shelfLife,expiryStage,validatePromotion,sellingPrice,deliveryFee,quoteCart};

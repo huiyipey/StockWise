@@ -752,6 +752,7 @@ class FirestoreService {
     required Map<String, dynamic> receiver,
     required String paymentMethod,
     int? expectedTotalCents,
+    String? acceptedPromotionReviewToken,
   }) async {
     if (fulfillmentType != 'delivery') {
       throw ArgumentError('Only delivery orders are supported.');
@@ -769,6 +770,7 @@ class FirestoreService {
       'paymentMethod': paymentMethod,
       'requestId': _pendingCheckoutId,
       'expectedTotalCents': total,
+      'acceptedPromotionReviewToken': acceptedPromotionReviewToken,
     });
     _pendingCheckoutId = null;
     return result['id'] as String;

@@ -1,6 +1,8 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/app_models.dart';
+import '../models/assistant_image.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
 import '../services/shopping_assistant_service.dart';
@@ -12,7 +14,13 @@ import 'item_detail_screen.dart';
 class ShoppingAssistantScreen extends StatefulWidget {
   final Stream<List<InventoryBatch>>? inventoryStream;
   final AssistantRequester? onAsk;
-  const ShoppingAssistantScreen({super.key, this.inventoryStream, this.onAsk});
+  final Future<XFile?> Function(ImageSource)? pickImage;
+  const ShoppingAssistantScreen({
+    super.key,
+    this.inventoryStream,
+    this.onAsk,
+    this.pickImage,
+  });
   @override
   State<ShoppingAssistantScreen> createState() =>
       _ShoppingAssistantScreenState();
@@ -24,6 +32,10 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
   final latestMessage = GlobalKey();
   final List<Map<String, String>> messages = [];
   final List<Map<String, String>> conversation = [];
+  final messageImages = <Map<String, String>, AssistantImage>{};
+  AssistantImage? attachment;
+  String? attachmentError;
+  bool pickingImage = false;
   final selected = <String>{};
   List<Map<String, dynamic>> picks = [];
   late final inventory =
@@ -37,14 +49,22 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
   }
 
   Future<void> _ask([String? prompt]) async {
-    if (busy) return;
+    if (busy || pickingImage) return;
     final text = prompt ?? question.text.trim();
+    final image = prompt == null ? attachment : null;
     FocusScope.of(context).unfocus();
     if (scroll.hasClients) scroll.jumpTo(0);
     setState(() {
       busy = true;
       started = true;
-      if (text.isNotEmpty) messages.add({'role': 'You', 'text': text});
+      if (text.isNotEmpty || image != null) {
+        final message = {
+          'role': 'You',
+          'text': text.isEmpty ? 'Image attached' : text,
+        };
+        messages.add(message);
+        if (image != null) messageImages[message] = image;
+      }
     });
     try {
       final previous = recentAssistantConversation(conversation);
@@ -54,6 +74,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
           question: text,
           productIds: selected.toList(),
           conversation: previous,
+          image: image,
         );
       } else {
         final storeId = StoreSession.instance.storeId;
@@ -63,6 +84,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
           question: text,
           productIds: selected.toList(),
           conversation: previous,
+          image: image,
         );
       }
       if (!mounted) return;
@@ -71,12 +93,17 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
             .map((v) => Map<String, dynamic>.from(v as Map))
             .toList();
         messages.add({'role': 'StockWise', 'text': data['answer'] as String});
-        if (text.isNotEmpty && data['aiAvailable'] == true) {
+        if ((text.isNotEmpty || image != null) && data['aiAvailable'] == true) {
           conversation.addAll([
-            {'role': 'user', 'text': text},
+            {
+              'role': 'user',
+              'text': text.isEmpty ? 'Describe the attached image.' : text,
+            },
             {'role': 'model', 'text': data['answer'] as String},
           ]);
           if (prompt == null && question.text.trim() == text) question.clear();
+          if (prompt == null && identical(attachment, image)) attachment = null;
+          attachmentError = null;
         }
       });
     } on FirebaseFunctionsException catch (error) {
@@ -115,6 +142,74 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
           }
         });
       }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    if (busy || pickingImage) return;
+    FocusScope.of(context).unfocus();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      builder: (context) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'Attach an Image',
+                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const Text(
+              'JPG, PNG or WebP · Up to 2 MB',
+              style: TextStyle(fontSize: 12, color: InventoryColors.muted),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Photo Library'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take Photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || source == null) return;
+    setState(() {
+      pickingImage = true;
+      attachmentError = null;
+    });
+    try {
+      final file =
+          await (widget.pickImage ??
+              (source) => ImagePicker().pickImage(
+                source: source,
+                maxWidth: 1600,
+                maxHeight: 1600,
+                imageQuality: 80,
+              ))(source);
+      if (file == null) return;
+      final image = await AssistantImage.fromFile(file);
+      if (mounted) setState(() => attachment = image);
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => attachmentError = error is FormatException
+              ? error.message
+              : 'Could not open this image. Please try another photo.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => pickingImage = false);
     }
   }
 
@@ -449,38 +544,135 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
               Container(
                 color: Colors.white,
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: question,
-                        maxLength: 1000,
-                        minLines: 1,
-                        maxLines: 3,
-                        enabled: !busy,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: const InputDecoration(
-                          hintText: 'Ask StockWise anything...',
-                          counterText: '',
+                    if (attachment != null) ...[
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(
+                              attachment!.bytes,
+                              key: const ValueKey('assistant-image-preview'),
+                              width: MediaQuery.viewInsetsOf(context).bottom > 0
+                                  ? 56
+                                  : 72,
+                              height:
+                                  MediaQuery.viewInsetsOf(context).bottom > 0
+                                  ? 48
+                                  : 64,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const SizedBox(
+                                width: 72,
+                                height: 64,
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              attachment!.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove image',
+                            onPressed: busy
+                                ? null
+                                : () => setState(() => attachment = null),
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      if (MediaQuery.viewInsetsOf(context).bottom == 0)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'Images you send are shared with Google AI.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: InventoryColors.muted,
+                            ),
+                          ),
+                        ),
+                    ],
+                    if (attachmentError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          attachmentError!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: InventoryColors.error,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      tooltip: 'Send question',
-                      onPressed: busy
-                          ? null
-                          : () {
-                              if (question.text.trim().isNotEmpty) _ask();
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          tooltip: 'Attach image',
+                          onPressed: busy || pickingImage ? null : _pickImage,
+                          icon: pickingImage
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.add_photo_alternate_outlined,
+                                  color: InventoryColors.green,
+                                ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: TextField(
+                            controller: question,
+                            onChanged: (_) {
+                              if (attachmentError != null) {
+                                setState(() => attachmentError = null);
+                              }
                             },
-                      style: IconButton.styleFrom(
-                        backgroundColor: InventoryColors.green,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: InventoryColors.soft,
-                        minimumSize: const Size.square(46),
-                      ),
-                      icon: const Icon(Icons.send_rounded, size: 21),
+                            maxLength: 1000,
+                            minLines: 1,
+                            maxLines:
+                                attachment != null &&
+                                    MediaQuery.viewInsetsOf(context).bottom > 0
+                                ? 2
+                                : 3,
+                            enabled: !busy,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: const InputDecoration(
+                              hintText: 'Ask StockWise anything...',
+                              counterText: '',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'Send question',
+                          onPressed: busy || pickingImage
+                              ? null
+                              : () {
+                                  if (question.text.trim().isNotEmpty ||
+                                      attachment != null) {
+                                    _ask();
+                                  }
+                                },
+                          style: IconButton.styleFrom(
+                            backgroundColor: InventoryColors.green,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: InventoryColors.soft,
+                            minimumSize: const Size.square(46),
+                          ),
+                          icon: const Icon(Icons.send_rounded, size: 21),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -523,7 +715,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
             ),
             const SizedBox(height: 14),
             const Text(
-              'Your questions, recent conversation, store product details and purchased product names are sent to Google’s AI service. Your account email, delivery address and receipts are not included automatically. Answers may be inaccurate; check product labels for ingredients and allergens.',
+              'Your questions, images you choose to send, recent conversation, store product details and purchased product names are sent to Google’s AI service. Attached images are not saved in the StockWise database. Your account email, delivery address and receipts are not included automatically. Answers may be inaccurate; check product labels for ingredients and allergens.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.6,
@@ -573,6 +765,19 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
               ),
             ),
             const SizedBox(height: 7),
+            if (messageImages[message] case final image?) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(
+                  image.bytes,
+                  height: 160,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) =>
+                      const Icon(Icons.broken_image_outlined),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             SelectableText(
               message['text']!,
               style: TextStyle(

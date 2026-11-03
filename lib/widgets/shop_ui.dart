@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/app_models.dart';
+import '../models/shelf_life.dart';
 import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'customer_ui.dart';
@@ -167,14 +168,40 @@ class ShopProductCard extends StatelessWidget {
     required this.now,
     this.busy = false,
     this.featured = false,
+    this.footerHeight = 56,
     this.image,
   });
   final InventoryBatch item;
   final String category;
   final VoidCallback onOpen, onAdd;
   final bool busy, featured;
+  final double footerHeight;
   final DateTime now;
   final ImageProvider? image;
+
+  static double promotionFooterHeight(
+    BuildContext context,
+    double cardWidth,
+    Iterable<InventoryBatch> items,
+  ) {
+    var height = 56.0;
+    for (final item in items.where((item) => item.bundlePromotion)) {
+      final text = TextPainter(
+        text: TextSpan(
+          text: item.promotionLabel,
+          style: DefaultTextStyle.of(
+            context,
+          ).style.copyWith(fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: cardWidth - 28 - 56 - 8 - 20);
+      if (text.height + 14 > height) height = text.height + 14;
+      text.dispose();
+    }
+    return height;
+  }
+
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
@@ -228,10 +255,10 @@ class ShopProductCard extends StatelessWidget {
         )
       else
         AspectRatio(
-          aspectRatio: 1.1,
+          aspectRatio: 1.5,
           child: ShopProductPhoto(item: item, image: image),
         ),
-      const SizedBox(height: 12),
+      SizedBox(height: large ? 12 : 10),
       Text(
         category,
         maxLines: 1,
@@ -249,23 +276,33 @@ class ShopProductCard extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-      const SizedBox(height: 8),
+      SizedBox(height: large ? 8 : 5),
       _price(),
-      const SizedBox(height: 8),
+      SizedBox(height: large ? 8 : 5),
       _expiry(),
       const SizedBox(height: 6),
       Text(
         '${item.availableQuantity} ${item.unitLabel} available',
         style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
       ),
-      if (item.bundlePromotion)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: PromotionDescription(item.promotionLabel, fontSize: 10),
-        ),
       const SizedBox(height: 6),
       if (!large) const Spacer(),
-      Align(alignment: Alignment.bottomRight, child: _addButton()),
+      SizedBox(
+        height: large ? footerHeight : null,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (item.bundlePromotion) ...[
+              Expanded(
+                child: PromotionDescription(item.promotionLabel, fontSize: 11),
+              ),
+              const SizedBox(width: 8),
+            ] else
+              const Spacer(),
+            _addButton(),
+          ],
+        ),
+      ),
     ],
   );
 
@@ -295,21 +332,19 @@ class ShopProductCard extends StatelessWidget {
   );
   Widget _expiry() {
     final days = item.daysUntilExpiryFrom(now);
+    final color = item.expiryColourAt(now) == ShelfLifeColour.red
+        ? InventoryColors.error
+        : days <= 7
+        ? InventoryColors.amber
+        : InventoryColors.muted;
     return Row(
       children: [
-        Icon(
-          Icons.schedule_rounded,
-          size: 13,
-          color: days <= 7 ? InventoryColors.amber : InventoryColors.muted,
-        ),
+        Icon(Icons.schedule_rounded, size: 13, color: color),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
             'Exp: ${DateFormat('d MMM yyyy').format(item.expiryAt)}',
-            style: TextStyle(
-              fontSize: 11,
-              color: days <= 7 ? InventoryColors.amber : InventoryColors.muted,
-            ),
+            style: TextStyle(fontSize: 11, color: color),
           ),
         ),
       ],
@@ -321,19 +356,23 @@ class ShopProductCard extends StatelessWidget {
     tooltip: 'Add ${item.productName} to cart',
     onPressed: busy ? null : onAdd,
     style: IconButton.styleFrom(
-      minimumSize: const Size.square(44),
-      maximumSize: const Size.square(44),
-      padding: const EdgeInsets.all(6),
+      minimumSize: Size.square(featured ? 50 : 44),
+      maximumSize: Size.square(featured ? 50 : 44),
+      padding: EdgeInsets.all(featured ? 4 : 6),
     ),
     icon: CircleAvatar(
-      radius: 16,
+      radius: featured ? 20 : 16,
       backgroundColor: busy ? InventoryColors.soft : InventoryColors.green,
       child: busy
           ? const SizedBox.square(
               dimension: 16,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+          : Icon(
+              Icons.add_rounded,
+              color: Colors.white,
+              size: featured ? 24 : 20,
+            ),
     ),
   );
 }

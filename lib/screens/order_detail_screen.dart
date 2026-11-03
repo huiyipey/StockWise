@@ -6,12 +6,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
+import '../models/shelf_life.dart';
 import '../models/order_status.dart';
 import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_receipt.dart';
 import '../widgets/order_ui.dart';
+import '../widgets/customer_ui.dart' show PromotionDescription;
 import '../widgets/stockwise_ui.dart' show ProductArtwork;
 import 'item_detail_screen.dart';
 import 'admin_item_detail_screen.dart';
@@ -138,7 +140,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         },
         child: Scaffold(
           body: SafeArea(
-            bottom: false,
+            bottom: !widget.isAdmin,
             child: Column(
               children: [
                 InventoryHeader(
@@ -430,8 +432,27 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    Text(
-                      '${line.quantity} ${line.unitLabel} · ${categoryTitleCase(line.categoryId.replaceAll('_', ' '))}\nExp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text:
+                                '${line.quantity} ${line.unitLabel} · ${categoryTitleCase(line.categoryId.replaceAll('_', ' '))}\n',
+                          ),
+                          TextSpan(
+                            text:
+                                'Exp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
+                            style: TextStyle(
+                              color:
+                                  !widget.isAdmin &&
+                                      line.expiryColourAt(DateTime.now()) ==
+                                          ShelfLifeColour.red
+                                  ? InventoryColors.error
+                                  : InventoryColors.muted,
+                            ),
+                          ),
+                        ],
+                      ),
                       style: const TextStyle(
                         fontSize: 12,
                         height: 1.5,
@@ -489,14 +510,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     if (line.promotionLabel.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 7),
-                        child: Text(
-                          line.promotionLabel,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: InventoryColors.green,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        child: widget.isAdmin
+                            ? Text(
+                                line.promotionLabel,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: InventoryColors.green,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                            : PromotionDescription(
+                                line.promotionLabel,
+                                fontSize: 11,
+                              ),
                       ),
                   ],
                 ),

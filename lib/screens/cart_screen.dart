@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/app_models.dart';
+import '../models/shelf_life.dart';
 import '../services/firestore_service.dart';
 import '../services/cart_availability.dart';
 import '../services/store_session.dart';
@@ -119,7 +120,7 @@ class _CartScreenState extends State<CartScreen> {
                           return _list(context, lines, batches, unavailable);
                         }
                         final revision =
-                            '${lines.map((l) => '${l.id}:${l.quantity}').join(',')}/${batches.values.map((b) => '${b.id}:${b.quantityOnHand}:${b.sellingPriceCents}:${b.promotion}').join(',')}';
+                            '${lines.map((l) => '${l.id}:${l.quantity}').join(',')}/${batches.values.map((b) => '${b.id}:${b.availableQuantity}:${b.expiryAt}:${b.sellingPriceCents}:${b.promotionEnabled}:${b.promotion}').join(',')}';
                         if (quoteKey != revision) {
                           quoteKey = revision;
                           quote =
@@ -161,11 +162,14 @@ class _CartScreenState extends State<CartScreen> {
     bool failed = false,
   }) {
     int lineTotal(CartLine line) {
+      final summary = cartQuoteSummary(pricing, line.batchId);
+      if (summary != null) return (summary['totalCents'] as num).toInt();
       if (pricing != null) {
         return (pricing['lines'] as List)
             .where(
               (raw) =>
                   raw['batchId'] == line.batchId &&
+                  raw['automaticReward'] != true &&
                   (raw['kind'] == 'purchase' ||
                       raw['sourceBatchId'] == line.batchId),
             )
@@ -203,6 +207,10 @@ class _CartScreenState extends State<CartScreen> {
             batches[line.batchId],
             unavailable[line.id],
             lineTotal(line),
+            originalTotal:
+                (cartQuoteSummary(pricing, line.batchId)?['originalTotalCents']
+                        as num?)
+                    ?.toInt(),
           ),
         if (pricing != null) QuoteLines(quote: pricing),
         if (loading)
@@ -268,20 +276,47 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        if (promotionWarnings(pricing).isNotEmpty)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Some offers are unavailable. Review them before checkout.',
+              style: TextStyle(color: InventoryColors.amber, fontSize: 13),
+            ),
+          ),
         InventoryButton(
           label: 'Checkout',
           onPressed:
               unavailable.isNotEmpty || pending.isNotEmpty || loading || failed
               ? null
-              : () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CheckoutScreen(lines: lines),
-                  ),
-                ),
+              : () => _checkout(context, lines, pricing),
         ),
       ],
     );
+  }
+
+  Future<void> _checkout(
+    BuildContext context,
+    List<CartLine> lines,
+    Map<String, dynamic>? pricing,
+  ) async {
+    String? acceptedToken;
+    if (pricing != null && promotionWarnings(pricing).isNotEmpty) {
+      final accepted = await confirmUnavailablePromotions(context, pricing);
+      if (!context.mounted || !accepted) return;
+      acceptedToken = pricing['promotionReviewToken'] as String?;
+    }
+    if (!context.mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CheckoutScreen(
+          lines: lines,
+          acceptedPromotionReviewToken: acceptedToken,
+        ),
+      ),
+    );
+    if (mounted) setState(() => quoteKey = null);
   }
 
   Widget _line(
@@ -289,11 +324,19 @@ class _CartScreenState extends State<CartScreen> {
     CartLine line,
     InventoryBatch? item,
     String? unavailable,
-    int total,
-  ) {
+    int total, {
+    int? originalTotal,
+  }) {
     final blocked = unavailable != null;
     final price = item?.sellingPriceCents ?? line.unitPriceCents;
     final unit = item?.unitLabel ?? 'unit';
+    final discountedItem =
+        item?.promotionEnabled == true &&
+        item?.promotion?['type'] != 'bundle' &&
+        price < item!.basePriceCents;
+    final original = discountedItem
+        ? item.basePriceCents * line.quantity
+        : originalTotal ?? price * line.quantity;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -323,7 +366,7 @@ class _CartScreenState extends State<CartScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ProductArtwork(
-                      size: 72,
+                      size: 88,
                       imagePath: item?.imagePath ?? line.imagePath,
                     ),
                     const SizedBox(width: 12),
@@ -348,10 +391,14 @@ class _CartScreenState extends State<CartScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Exp: ${DateFormat('dd MMM yyyy').format(line.expiryAt)}',
-                            style: const TextStyle(
+                            'Exp: ${DateFormat('dd MMM yyyy').format(item?.expiryAt ?? line.expiryAt)}',
+                            style: TextStyle(
                               fontSize: 11.5,
-                              color: InventoryColors.amber,
+                              color:
+                                  item?.expiryColourAt(DateTime.now()) ==
+                                      ShelfLifeColour.red
+                                  ? InventoryColors.error
+                                  : InventoryColors.amber,
                             ),
                           ),
                           if (blocked)
@@ -383,14 +430,17 @@ class _CartScreenState extends State<CartScreen> {
                 ),
                 if (item?.bundlePromotion == true)
                   Padding(
-                    padding: const EdgeInsets.only(top: 9, left: 84),
-                    child: PromotionDescription(
-                      item!.promotionLabel,
-                      fontSize: 11,
+                    padding: const EdgeInsets.only(top: 9, left: 100),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: PromotionDescription(
+                        item!.promotionLabel,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 10),
-                _controls(context, line, item, blocked, total),
+                _controls(context, line, item, blocked, total, original),
               ],
             ),
           ),
@@ -405,42 +455,25 @@ class _CartScreenState extends State<CartScreen> {
     InventoryBatch? item,
     bool blocked,
     int total,
+    int originalTotal,
   ) {
-    final remove = SizedBox(
-      width:
-          70 * (MediaQuery.textScalerOf(context).scale(11) / 11).clamp(1, 1.8),
-      child: Tooltip(
-        message: 'Remove',
-        child: TextButton(
-          onPressed: pending.contains(line.id)
-              ? null
-              : () => _remove(context, line),
-          style: TextButton.styleFrom(
-            padding: EdgeInsets.zero,
-            foregroundColor: InventoryColors.error,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              pending.contains(line.id)
-                  ? const SizedBox.square(
-                      dimension: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.delete_outline_rounded, size: 18),
-              const SizedBox(width: 3),
-              const Flexible(
-                child: Text(
-                  'Remove',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-        ),
+    final remove = IconButton(
+      key: ValueKey('cart-remove-${line.id}'),
+      tooltip: 'Remove ${line.productName}',
+      onPressed: pending.contains(line.id)
+          ? null
+          : () => _remove(context, line),
+      style: IconButton.styleFrom(
+        minimumSize: const Size.square(36),
+        padding: const EdgeInsets.all(6),
+        foregroundColor: InventoryColors.error,
       ),
+      icon: pending.contains(line.id)
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.delete_outline_rounded, size: 20),
     );
     final quantity = SizedBox(
       width: 112,
@@ -454,7 +487,11 @@ class _CartScreenState extends State<CartScreen> {
           children: [
             IconButton(
               tooltip: 'Decrease quantity',
-              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+              constraints: const BoxConstraints.tightFor(width: 32, height: 30),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(32, 30),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               padding: EdgeInsets.zero,
               onPressed: pending.contains(line.id) || line.quantity <= 1
                   ? null
@@ -473,7 +510,11 @@ class _CartScreenState extends State<CartScreen> {
             ),
             IconButton(
               tooltip: 'Increase quantity',
-              constraints: const BoxConstraints.tightFor(width: 32, height: 36),
+              constraints: const BoxConstraints.tightFor(width: 32, height: 30),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(32, 30),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
               padding: EdgeInsets.zero,
               onPressed:
                   pending.contains(line.id) ||
@@ -486,10 +527,33 @@ class _CartScreenState extends State<CartScreen> {
         ),
       ),
     );
-    final price = Text(
-      orderMoney(total),
-      textAlign: TextAlign.right,
-      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+    final price = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (total < originalTotal) ...[
+          Text(
+            orderMoney(originalTotal),
+            style: const TextStyle(
+              fontSize: 15,
+              color: InventoryColors.muted,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+          const SizedBox(height: 3),
+        ],
+        Text(
+          orderMoney(total),
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w800,
+            color: total < originalTotal
+                ? InventoryColors.green
+                : InventoryColors.ink,
+          ),
+        ),
+      ],
     );
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -500,19 +564,31 @@ class _CartScreenState extends State<CartScreen> {
             crossAxisAlignment: WrapCrossAlignment.center,
             spacing: 8,
             runSpacing: 8,
-            children: [remove, if (!blocked) quantity, price],
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!blocked) quantity,
+                  const SizedBox(width: 6),
+                  remove,
+                ],
+              ),
+              price,
+            ],
           );
         }
         return Row(
           children: [
-            remove,
-            const SizedBox(width: 12),
             if (!blocked)
               Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: quantity),
+                child: Row(
+                  children: [quantity, const SizedBox(width: 6), remove],
+                ),
               )
             else
-              const Spacer(),
+              Expanded(
+                child: Align(alignment: Alignment.centerLeft, child: remove),
+              ),
             const SizedBox(width: 8),
             price,
           ],

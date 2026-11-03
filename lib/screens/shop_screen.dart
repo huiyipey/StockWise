@@ -204,90 +204,28 @@ class _ShopScreenState extends State<ShopScreen> {
         .where((item) => !promotions.contains(item))
         .toList();
     final columns = MediaQuery.textScalerOf(context).scale(15) > 20 ? 1 : 2;
+    final promotionWidth = promotions.length == 1
+        ? MediaQuery.sizeOf(context).width - 40
+        : MediaQuery.sizeOf(context).width < 350
+        ? 232.0
+        : 246.0;
+    final promotionFooterHeight = ShopProductCard.promotionFooterHeight(
+      context,
+      promotionWidth,
+      promotions,
+    );
     return CustomScrollView(
       key: const ValueKey('shop-scroll'),
       controller: scroll,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       slivers: [
+        SliverToBoxAdapter(child: _header(context)),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              LocalDatabaseShortcut(
-                                onOpen: () async {
-                                  await Navigator.of(context).push<void>(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const LocalDatabaseScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  StoreSession.instance.store?.name ??
-                                      'Your store',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: InventoryColors.muted,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 5),
-                          const Text(
-                            'Shop',
-                            style: TextStyle(
-                              fontSize: 29,
-                              height: 1.15,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    widget.chatButton ??
-                        const StoreChatButton(inventoryStyle: true),
-                    const SizedBox(width: 6),
-                    StreamBuilder<int>(
-                      stream: cartCount,
-                      builder: (context, snapshot) => Badge(
-                        isLabelVisible: (snapshot.data ?? 0) > 0,
-                        label: Text('${snapshot.data ?? 0}'),
-                        backgroundColor: InventoryColors.ink,
-                        child: IconButton(
-                          tooltip: 'Open cart',
-                          onPressed: openCart,
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: InventoryColors.green,
-                            minimumSize: const Size.square(44),
-                          ),
-                          icon: const Icon(
-                            Icons.shopping_bag_outlined,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: TextField(
@@ -429,22 +367,21 @@ class _ShopScreenState extends State<ShopScreen> {
                           350 +
                           (MediaQuery.textScalerOf(context).scale(14) - 14)
                                   .clamp(0, 28) *
-                              12,
+                              12 +
+                          promotionFooterHeight -
+                          56,
                       child: ListView.separated(
                         key: const ValueKey('shop-promotions'),
                         scrollDirection: Axis.horizontal,
                         itemCount: promotions.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 12),
                         itemBuilder: (_, index) => SizedBox(
-                          width: promotions.length == 1
-                              ? MediaQuery.sizeOf(context).width - 40
-                              : MediaQuery.sizeOf(context).width < 350
-                              ? 232
-                              : 246,
+                          width: promotionWidth,
                           child: _product(
                             promotions[index],
                             records,
                             featured: true,
+                            footerHeight: promotionFooterHeight,
                           ),
                         ),
                       ),
@@ -489,15 +426,55 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  Widget _header(BuildContext context) => InventoryHeader(
+    title: 'Shop',
+    storeName: StoreSession.instance.store?.name ?? 'Your store',
+    storeIcon: LocalDatabaseShortcut(
+      compact: true,
+      onOpen: () async {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(builder: (_) => const LocalDatabaseScreen()),
+        );
+      },
+    ),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        widget.chatButton ?? const StoreChatButton(inventoryStyle: true),
+        const SizedBox(width: 6),
+        StreamBuilder<int>(
+          stream: cartCount,
+          builder: (context, snapshot) => Badge(
+            isLabelVisible: (snapshot.data ?? 0) > 0,
+            label: Text('${snapshot.data ?? 0}'),
+            backgroundColor: InventoryColors.ink,
+            child: IconButton(
+              tooltip: 'Open cart',
+              onPressed: openCart,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: InventoryColors.green,
+                minimumSize: const Size.square(44),
+              ),
+              icon: const Icon(Icons.shopping_bag_outlined, size: 22),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _product(
     InventoryBatch item,
     List<StoreCategory> records, {
     bool featured = false,
+    double footerHeight = 56,
   }) => ShopProductCard(
     key: ValueKey('shop-product-${item.id}'),
     item: item,
     category: inventoryCategoryName(item.categoryId, records),
     featured: featured,
+    footerHeight: footerHeight,
     busy: adding.contains(item.id),
     now: now,
     image: widget.imageProvider?.call(item),
@@ -551,10 +528,26 @@ class _ShopScreenState extends State<ShopScreen> {
       showCustomerFeedback(
         context,
         '${item.productName} added to cart',
-        action: SnackBarAction(
-          label: 'View cart',
-          textColor: Colors.white,
-          onPressed: openCart,
+        bottomMargin: 6,
+        action: TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            minimumSize: Size.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          onPressed: () {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            openCart();
+          },
+          child: const Text(
+            'View cart',
+            style: TextStyle(
+              fontSize: 13,
+              decoration: TextDecoration.underline,
+              decorationColor: Colors.white,
+            ),
+          ),
         ),
       );
     } catch (error) {
@@ -562,7 +555,12 @@ class _ShopScreenState extends State<ShopScreen> {
       final message = error is StateError
           ? error.message
           : 'Could not add this item. Please try again.';
-      showCustomerFeedback(context, message.toString(), error: true);
+      showCustomerFeedback(
+        context,
+        message.toString(),
+        error: true,
+        bottomMargin: 6,
+      );
     } finally {
       if (mounted) setState(() => adding.remove(item.id));
     }

@@ -162,12 +162,13 @@ class InventoryBatch {
   int get sellingPriceCents => promotionEnabled && promotionPriceCents != null
       ? promotionPriceCents!
       : basePriceCents;
-  ShelfLifeType get shelfLife => shelfLifeType(
-    totalShelfLifeDays ??
-        calendarDaysBetween(receivedAt ?? DateTime.now(), expiryAt),
+  ShelfLifeType get shelfLife => shelfLifeAt(DateTime.now());
+  ShelfLifeType shelfLifeAt(DateTime now) => shelfLifeType(
+    totalShelfLifeDays ?? calendarDaysBetween(receivedAt ?? now, expiryAt),
   );
-  ShelfLifeColour get expiryColour =>
-      shelfLifeColour(shelfLife, daysUntilExpiry);
+  ShelfLifeColour get expiryColour => expiryColourAt(DateTime.now());
+  ShelfLifeColour expiryColourAt(DateTime now) =>
+      shelfLifeColour(shelfLifeAt(now), daysUntilExpiryFrom(now));
   String get promotionLabel =>
       promotionEnabled ? Promotion.fromMap(promotion).label : '';
   bool get bundlePromotion =>
@@ -330,6 +331,8 @@ class OrderLine {
   final String promotionLabel;
   final String categoryId;
   final int? regularUnitPriceCents;
+  final DateTime? receivedAt;
+  final int? totalShelfLifeDays;
 
   const OrderLine({
     required this.id,
@@ -345,7 +348,17 @@ class OrderLine {
     this.promotionLabel = '',
     this.categoryId = 'Others',
     this.regularUnitPriceCents,
+    this.receivedAt,
+    this.totalShelfLifeDays,
   });
+
+  ShelfLifeColour expiryColourAt(DateTime now) => shelfLifeColour(
+    shelfLifeType(
+      totalShelfLifeDays ??
+          (receivedAt == null ? 0 : calendarDaysBetween(receivedAt!, expiryAt)),
+    ),
+    calendarDaysBetween(now, expiryAt),
+  );
 
   factory OrderLine.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     return OrderLine.fromData(doc.id, doc.data() ?? const <String, dynamic>{});
@@ -368,6 +381,8 @@ class OrderLine {
       promotionLabel: data['promotionLabel'] as String? ?? '',
       categoryId: data['categoryId'] as String? ?? 'Others',
       regularUnitPriceCents: (data['regularUnitPriceCents'] as num?)?.toInt(),
+      receivedAt: data['receivedAt'] == null ? null : _date(data['receivedAt']),
+      totalShelfLifeDays: (data['totalShelfLifeDays'] as num?)?.toInt(),
     );
   }
 }

@@ -32,20 +32,21 @@ void showCustomerFeedback(
   BuildContext context,
   String message, {
   bool error = false,
-  SnackBarAction? action,
+  Widget? action,
+  double bottomMargin = 18,
 }) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 3),
+        persist: false,
         behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+        margin: EdgeInsets.fromLTRB(20, 12, 20, bottomMargin),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         elevation: 0,
         backgroundColor: error ? const Color(0xFFFAE7E0) : InventoryColors.ink,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        action: action,
         content: Row(
           children: [
             Icon(
@@ -64,6 +65,7 @@ void showCustomerFeedback(
                 ),
               ),
             ),
+            if (action != null) ...[const SizedBox(width: 8), action],
           ],
         ),
       ),

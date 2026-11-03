@@ -24,6 +24,7 @@ class CheckoutScreen extends StatefulWidget {
     this.placeOrder,
     this.onPlaced,
     this.quoteLoader,
+    this.acceptedPromotionReviewToken,
   });
   final List<CartLine> lines;
   final AddressBookRepository? addressRepository;
@@ -31,6 +32,7 @@ class CheckoutScreen extends StatefulWidget {
   final Future<String> Function(Map<String, dynamic>, String)? placeOrder;
   final VoidCallback? onPlaced;
   final Future<Map<String, dynamic>> Function(String)? quoteLoader;
+  final String? acceptedPromotionReviewToken;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
@@ -52,6 +54,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool quoting = false;
   Timer? quoteDebounce;
   int quoteRevision = 0;
+  String? acceptedPromotionReviewToken;
   bool get usesQuote => widget.quoteLoader != null || widget.placeOrder == null;
   Future<void> refreshQuote() async {
     if (!usesQuote) return;
@@ -101,6 +104,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    acceptedPromotionReviewToken = widget.acceptedPromotionReviewToken;
     name = TextEditingController(
       text:
           widget.initialName ??
@@ -364,6 +368,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         const SizedBox(height: 18),
                         if (usesQuote && quoting)
                           const Center(child: CircularProgressIndicator()),
+                        if (usesQuote) QuoteLines(quote: quote),
                         if (!usesQuote || quote != null)
                           OrderTotals(
                             subtotal: subtotal,
@@ -385,7 +390,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         if (quoteError != null)
                           OrderNotice(quoteError!, error: true),
                         if (usesQuote) ...[
-                          QuoteLines(quote: quote),
                           TextButton.icon(
                             onPressed: quoting || placing ? null : refreshQuote,
                             icon: const Icon(Icons.refresh),
@@ -500,6 +504,44 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'countryCode': 'MY',
     };
     try {
+      if (usesQuote) {
+        await refreshQuote();
+        if (!mounted) return;
+        if (quote == null ||
+            quoteError != null ||
+            quote?['deliveryFeeCents'] == null) {
+          throw StateError(
+            quoteError ?? 'Refresh your order and check the delivery postcode.',
+          );
+        }
+        if (promotionWarnings(quote).isNotEmpty &&
+            (acceptedPromotionReviewToken == null ||
+                acceptedPromotionReviewToken !=
+                    quote?['promotionReviewToken'])) {
+          final reviewedQuote = quote!;
+          final reviewedToken = reviewedQuote['promotionReviewToken'];
+          final reviewedTotal = reviewedQuote['totalCents'];
+          setState(() => placing = false);
+          final accepted = await confirmUnavailablePromotions(
+            context,
+            reviewedQuote,
+            includesDelivery: true,
+          );
+          if (!mounted) return;
+          if (!accepted) {
+            if (Navigator.canPop(context)) Navigator.pop(context);
+            return;
+          }
+          if (quote?['promotionReviewToken'] != reviewedToken ||
+              quote?['totalCents'] != reviewedTotal) {
+            throw StateError(
+              'Your order changed while you were reviewing it. Please review the latest total and try again.',
+            );
+          }
+          acceptedPromotionReviewToken = reviewedToken as String?;
+          setState(() => placing = true);
+        }
+      }
       final orderId =
           await (widget.placeOrder ??
               (receiver, payment) => FirestoreService.instance.placeOrder(
@@ -507,6 +549,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 paymentMethod: payment,
                 receiver: receiver,
                 expectedTotalCents: (quote?['totalCents'] as num?)?.toInt(),
+                acceptedPromotionReviewToken: acceptedPromotionReviewToken,
               ))(receiver, payment);
       if (!mounted) return;
       showCustomerFeedback(context, 'Order placed successfully');

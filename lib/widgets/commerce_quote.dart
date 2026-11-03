@@ -3,6 +3,77 @@ import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'order_ui.dart';
 
+List<Map<String, dynamic>> promotionWarnings(Map<String, dynamic>? quote) => [
+  for (final value in quote?['promotionWarnings'] as List? ?? const [])
+    if (value is Map) Map<String, dynamic>.from(value),
+];
+
+Map? cartQuoteSummary(Map<String, dynamic>? quote, String batchId) {
+  for (final value in quote?['cartSummaries'] as List? ?? const []) {
+    if (value is Map && value['batchId'] == batchId) return value;
+  }
+  return null;
+}
+
+Future<bool> confirmUnavailablePromotions(
+  BuildContext context,
+  Map<String, dynamic> quote, {
+  bool includesDelivery = false,
+}) async {
+  final warnings = promotionWarnings(quote);
+  if (warnings.isEmpty) return true;
+  return await showDialog<bool>(
+        context: context,
+        builder: (context) => InventoryTheme(
+          child: AlertDialog(
+            title: Text(
+              warnings.length == 1
+                  ? 'Promotion Unavailable'
+                  : 'Promotions Unavailable',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final warning in warnings) ...[
+                    Text(
+                      '${warning['message'] ?? warning['promotionLabel']}',
+                      style: const TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const Text(
+                    'Continue without these offers? Selected items will use their prices without the unavailable offers. Unavailable extra free items will be left out.',
+                    style: TextStyle(fontSize: 14, height: 1.5),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '${includesDelivery ? 'Revised total' : 'Revised subtotal'}: ${orderMoney(((quote[includesDelivery ? 'totalCents' : 'subtotalCents'] as num?) ?? 0).toInt())}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Back to Edit Cart'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Continue Without Offer'),
+              ),
+            ],
+          ),
+        ),
+      ) ??
+      false;
+}
+
 class QuoteLines extends StatelessWidget {
   const QuoteLines({super.key, this.quote});
   final Map<String, dynamic>? quote;
@@ -13,7 +84,10 @@ class QuoteLines extends StatelessWidget {
       for (final raw in (quote?['lines'] as List? ?? const []))
         if (raw is Map &&
             raw['kind'] == 'bundle' &&
-            raw['sourceBatchId'] != raw['batchId'])
+            (raw['automaticReward'] == true ||
+                raw['automaticReward'] == null &&
+                    raw['sourceBatchId'] != raw['batchId']) &&
+            (raw['unitPriceCents'] ?? raw['lineTotalCents'] ?? 0) == 0)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: OrderPanel(

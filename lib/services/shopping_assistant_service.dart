@@ -1,10 +1,12 @@
 import 'package:cloud_functions/cloud_functions.dart';
+import '../models/assistant_image.dart';
 
 typedef AssistantRequester =
     Future<Map<String, dynamic>> Function({
       required String question,
       required List<String> productIds,
       required List<Map<String, String>> conversation,
+      AssistantImage? image,
     });
 
 /// Four recent exchanges, bounded to the backend's message and total limits.
@@ -41,6 +43,7 @@ Future<Map<String, dynamic>> askShoppingAssistant({
   required String question,
   required List<String> productIds,
   required List<Map<String, String>> conversation,
+  AssistantImage? image,
 }) async {
   final response =
       await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
@@ -55,6 +58,7 @@ Future<Map<String, dynamic>> askShoppingAssistant({
             'question': question,
             'productIds': productIds,
             'conversation': conversation,
+            if (image != null) 'image': image.toRequestData(),
           });
   return Map<String, dynamic>.from(response.data as Map);
 }

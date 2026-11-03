@@ -37,7 +37,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
       return db.runTransaction(async tx=>{
         const data=await readQuote(tx,store,request.auth.uid), fee=deliveryFee(data.settings,request.data.postcode);
         const open=orderingOpen(data.shop,now());
-        return {...data.quote,lines:data.quote.lines.map(l=>({...l,expiryAt:l.expiryAt.toISOString()})),deliveryFeeCents:fee,
+        return {...data.quote,lines:data.quote.lines.map(l=>({...l,expiryAt:l.expiryAt.toISOString(),receivedAt:l.receivedAt.toISOString()})),deliveryFeeCents:fee,
           totalCents:fee===null?null:data.quote.subtotalCents+fee,canOrder:open&&fee!==null,orderingOpen:open,deliveryAvailable:fee!==null,
           message:!open?'Ordering is closed. Orders close 30 minutes before the store closes.':fee===null?'Delivery is not configured for this postcode. Please contact the store.':null};
       });
@@ -55,6 +55,8 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         if(!orderingOpen(data.shop,now()))throw new HttpsError('failed-precondition','Ordering is closed. Orders close 30 minutes before the store closes.');
         const fee=deliveryFee(data.settings,receiver.postalCode);
         if(fee===null)throw new HttpsError('failed-precondition','Delivery is not configured for this postcode. Please contact the store.');
+        if(data.quote.promotionWarnings.length && request.data.acceptedPromotionReviewToken!==data.quote.promotionReviewToken)
+          throw new HttpsError('failed-precondition','Promotion availability changed. Review the unavailable offers before placing your order.');
         const total=data.quote.subtotalCents+fee;
         if(request.data.expectedTotalCents!==total)throw new HttpsError('failed-precondition','Your order total changed. Refresh checkout and review the new total.');
         const timestamp=serverTimestamp(), orderNumber=`SW-${now().getTime().toString().slice(-10)}`;
@@ -68,6 +70,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         data.cart.docs.forEach(doc=>tx.delete(doc.ref));
         tx.set(order,{storeId:store.id,orderNumber,userId:uid,status:'to_pay',paymentStatus:'unpaid',fulfillmentType:'delivery',receiver,
           payment:{methodLabel:payment},subtotalCents:data.quote.subtotalCents,shippingFeeCents:fee,totalCents:total,discountCents:data.quote.discountCents,
+          unavailablePromotionsAccepted:data.quote.promotionWarnings,
           currency:'MYR',placedAt:timestamp,updatedAt:timestamp});
         return {id,orderNumber};
       });
