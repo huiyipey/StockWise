@@ -45,6 +45,8 @@ dependencies:
   flutter_file_dialog: ^3.3.2
   mime: ^2.1.0
   open_filex: ^4.7.0
+  firebase_messaging: ^16.7.1
+  flutter_local_notifications: ^22.3.3
 
 dev_dependencies:
   flutter_test:

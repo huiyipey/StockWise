@@ -51,6 +51,9 @@ service cloud.firestore {
         && request.resource.data.batchId == batchId
         && request.resource.data.productId == batch.productId
         && request.resource.data.productName == batch.productName
+        && request.resource.data.imagePath == batch.get('imagePath', null)
+        && request.resource.data.expiryAt == batch.expiryAt
+        && batch.status == 'active' && batch.expiryAt > request.time
         && request.resource.data.quantity is int
         && request.resource.data.quantity > 0
         && request.resource.data.quantity
@@ -131,7 +134,8 @@ service cloud.firestore {
       }
 
       match /devices/{deviceId} {
-        allow read, write: if owns(uid);
+        allow read: if owns(uid);
+        allow write: if false;
       }
     }
 
@@ -158,10 +162,10 @@ service cloud.firestore {
       // Creation is server-only to require an address and reserve a unique name atomically.
       allow create: if false;
       allow update: if managesStore(storeId)
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['name', 'nameLowercase', 'nameKey', 'shopAddress', 'address', 'ownerUid'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['name', 'nameLowercase', 'nameKey', 'shopAddress', 'address', 'ownerUid', 'operatingHours', 'status'])
         && ((!resource.data.keys().hasAny(['shopAddress']) && !request.resource.data.keys().hasAny(['shopAddress']))
           || validShopAddress(request.resource.data));
-      allow delete: if hasStoreRole(storeId, ['owner']);
+      allow delete: if false;
 
       match /members/{uid} {
         allow get: if owns(uid) || isActiveMember(storeId);
@@ -180,7 +184,10 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.emailLowercase
               == request.auth.token.email.lower())
         );
-        allow update: if (hasStoreRole(storeId, ['owner'])
+        allow update: if (owns(uid) && isActiveMember(storeId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportsByEmail', 'updatedAt'])
+            && request.resource.data.reportsByEmail is bool)
+          || (hasStoreRole(storeId, ['owner'])
             && request.resource.data.role == resource.data.role)
           || (hasStoreRole(storeId, ['admin'])
             && resource.data.role != 'owner'
@@ -231,34 +238,26 @@ service cloud.firestore {
         allow write: if managesInventory(storeId);
       }
 
+      match /inventoryArchive/{batchId} {
+        allow read: if managesInventory(storeId);
+        allow write: if false;
+      }
+      match /expiryNotifications/{notificationId} {
+        allow read, write: if false;
+      }
       match /inventoryBatches/{batchId} {
         allow read: if signedIn();
-        allow create, delete: if managesInventory(storeId);
-        allow update: if managesInventory(storeId) || (
-          signedIn()
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['quantityOnHand', 'status', 'updatedAt'])
-          && exists(/databases/$(database)/documents/stores/$(storeId)/carts/$(request.auth.uid)/items/$(batchId))
-          && request.resource.data.quantityOnHand
-            == resource.data.quantityOnHand
-              - get(/databases/$(database)/documents/stores/$(storeId)/carts/$(request.auth.uid)/items/$(batchId)).data.quantity
-          && request.resource.data.quantityOnHand >= 0
-          && ((request.resource.data.quantityOnHand == 0
-              && request.resource.data.status == 'depleted')
-            || (request.resource.data.quantityOnHand > 0
-              && request.resource.data.status == 'active'))
-        );
+        allow create: if managesInventory(storeId)
+          && request.resource.data.quantityOnHand is int && request.resource.data.quantityOnHand > 0
+          && request.resource.data.basePriceCents is int && request.resource.data.basePriceCents > 0;
+        allow update: if managesInventory(storeId) && resource.data.expiryAt > request.time
+          && request.resource.data.quantityOnHand is int && request.resource.data.quantityOnHand >= 0
+          && request.resource.data.basePriceCents is int && request.resource.data.basePriceCents > 0;
+        allow delete: if false;
       }
-
       match /inventoryEvents/{eventId} {
         allow read: if managesInventory(storeId);
-        allow create: if managesInventory(storeId) || (
-          signedIn()
-          && request.resource.data.eventType == 'sold'
-          && request.resource.data.actorUid == request.auth.uid
-          && getAfter(/databases/$(database)/documents/stores/$(storeId)/orders/$(request.resource.data.orderId)).data.userId
-            == request.auth.uid
-        );
+        allow create: if managesInventory(storeId) && request.resource.data.eventType in ['received', 'adjusted'];
         allow update, delete: if false;
       }
 
@@ -275,30 +274,17 @@ service cloud.firestore {
           allow update: if owns(uid)
             && validCartItem(storeId, batchId)
             && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['quantity', 'updatedAt']);
+              .hasOnly(['quantity', 'updatedAt', 'unitPriceCents', 'productName', 'imagePath', 'expiryAt']);
         }
       }
 
       match /orders/{orderId} {
-        allow create: if signedIn()
-          && request.resource.data.userId == request.auth.uid
-          && request.resource.data.storeId == storeId
-          && request.resource.data.status == 'to_pay'
-          && request.resource.data.paymentStatus == 'unpaid'
-          && request.resource.data.fulfillmentType == 'delivery'
-          && request.resource.data.payment.methodLabel
-            in ['Bank transfer', 'Touch n Go']
-          && request.resource.data.subtotalCents is int
-          && request.resource.data.subtotalCents >= 0
-          && request.resource.data.shippingFeeCents is int
-          && request.resource.data.shippingFeeCents >= 0
-          && request.resource.data.totalCents
-            == request.resource.data.subtotalCents
-              + request.resource.data.shippingFeeCents;
+        allow create: if false;
         allow read: if signedIn()
           && (resource.data.userId == request.auth.uid || managesInventory(storeId));
-        allow update: if managesInventory(storeId) || (
+        allow update: if (
           signedIn()
+          && resource.data.status == 'to_pay'
           && resource.data.userId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['receiptPath', 'receiptUploadedAt', 'updatedAt'])
@@ -310,22 +296,7 @@ service cloud.firestore {
         allow delete: if false;
 
         match /items/{itemId} {
-          allow create: if signedIn()
-            && getAfter(/databases/$(database)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
-              == request.auth.uid
-            && request.resource.data.storeId == storeId
-            && request.resource.data.quantity is int
-            && request.resource.data.quantity > 0
-            && request.resource.data.batchId is string
-            && request.resource.data.productId
-              == getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.productId
-            && request.resource.data.unitPriceCents
-              == (getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionEnabled == true
-                && getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionPriceCents != null
-                  ? getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.promotionPriceCents
-                  : getAfter(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(request.resource.data.batchId)).data.basePriceCents)
-            && request.resource.data.lineTotalCents
-              == request.resource.data.quantity * request.resource.data.unitPriceCents;
+          allow create: if false;
           allow read: if signedIn()
             && (get(/databases/$(database)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
               == request.auth.uid || managesInventory(storeId));
@@ -389,9 +360,7 @@ service cloud.firestore {
 
       match /settings/{settingId} {
         allow read: if signedIn();
-        allow write: if managesStore(storeId)
-          || (settingId in ['inventory', 'commerce']
-            && isBootstrapOwner(storeId));
+        allow write: if settingId != 'commerce' && managesStore(storeId);
       }
     }
   }

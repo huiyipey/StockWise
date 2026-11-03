@@ -4,12 +4,14 @@ import 'package:flutter/services.dart';
 import 'firebase_options.dart';
 import 'screens/auth_gate.dart';
 import 'theme/app_theme.dart';
+import 'services/push_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const StockWiseApp());
+  PushService.instance.initialize().catchError((Object _) {});
 }
 
 class StockWiseApp extends StatelessWidget {

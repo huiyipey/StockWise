@@ -105,7 +105,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
   Widget build(BuildContext context) {
     final help = MaterialLocalizations.of(context).dateHelpText.toUpperCase();
     return Dialog(
-      alignment: const Alignment(0, .35),
+      alignment: Alignment.center,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: SizedBox(
         key: const ValueKey('expiry-range-surface'),
@@ -120,7 +120,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const Text(
-                      'Enter expiry range',
+                      'Enter Expiry Range',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,

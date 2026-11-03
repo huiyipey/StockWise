@@ -13,6 +13,8 @@ import 'inventory_expiry_date.dart';
 import 'product_name_formatter.dart';
 import '../screens/barcode_scanner_screen.dart';
 import 'stockwise_ui.dart';
+import 'promotion_editor.dart';
+import 'profile_ui.dart' show showProfileConfirmation;
 
 class ItemEditor extends StatefulWidget {
   final InventoryBatch? item;
@@ -62,11 +64,12 @@ class _ItemEditorState extends State<ItemEditor> {
   int lookupVersion = 0;
   String? category;
   XFile? image;
-  bool saving = false;
+  bool saving = false, allowExit = false;
+  late Map<String, dynamic> promotionData;
   late final categoriesStream =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
   bool get busy => saving || lookingUp || scanning;
-  String? get imagePath => widget.item?.imagePath ?? reusedProduct?.imagePath;
+  String? get imagePath => reusedProduct?.imagePath ?? widget.item?.imagePath;
 
   @override
   void initState() {
@@ -87,6 +90,16 @@ class _ItemEditorState extends State<ItemEditor> {
     );
     quantity = TextEditingController(text: '${item?.quantityOnHand ?? 1}');
     promotion = item?.promotionEnabled ?? false;
+    promotionData =
+        item?.promotion ??
+        (promotion
+            ? {
+                'type': 'fixed',
+                'amountCents':
+                    item!.basePriceCents -
+                    (item.promotionPriceCents ?? item.basePriceCents),
+              }
+            : {'type': 'percentage'});
     notifications = item?.notifyOnExpiry ?? true;
     expiryAt = item?.expiryAt;
     category = item?.categoryId;
@@ -109,15 +122,18 @@ class _ItemEditorState extends State<ItemEditor> {
     enlargedFields: true,
     child: Builder(
       builder: (context) => PopScope(
-        canPop: !saving,
+        canPop: allowExit && !saving,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && !saving) _leave();
+        },
         child: Scaffold(
           body: SafeArea(
             child: Column(
               children: [
                 InventoryHeader(
-                  title: widget.editing ? 'Edit item' : 'Add item',
+                  title: widget.editing ? 'Edit Inventory' : 'Add Inventory',
                   back: true,
-                  onBack: saving ? null : () => Navigator.maybePop(context),
+                  onBack: saving ? null : _leave,
                 ),
                 Expanded(
                   child: StreamBuilder<List<StoreCategory>>(
@@ -142,6 +158,9 @@ class _ItemEditorState extends State<ItemEditor> {
                           .toList();
                       availableCategories = categories;
                       return Form(
+                        onChanged: () {
+                          if (mounted) setState(() {});
+                        },
                         key: formKey,
                         child: ListView(
                           keyboardDismissBehavior:
@@ -178,7 +197,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                           key: barcodeAnchor,
                                           child: _barcodeField(),
                                         ),
-                                        if (!widget.editing) ...[
+                                        ...[
                                           const SizedBox(height: 12),
                                           InventoryButton(
                                             label: lookingUp
@@ -381,30 +400,15 @@ class _ItemEditorState extends State<ItemEditor> {
                                         ),
                                         if (promotion) ...[
                                           const SizedBox(height: 6),
-                                          TextFormField(
-                                            key: const ValueKey(
-                                              'item-promotion-price',
+                                          PromotionEditor(
+                                            initial: promotionData,
+                                            basePriceCents: _safeCents(
+                                              basePrice.text,
                                             ),
-                                            controller: promotionPrice,
                                             enabled: !busy,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: InventoryColors.muted,
+                                            onChanged: (value) => setState(
+                                              () => promotionData = value,
                                             ),
-                                            keyboardType:
-                                                const TextInputType.numberWithOptions(
-                                                  decimal: true,
-                                                ),
-                                            decoration: const InputDecoration(
-                                              labelText: 'Promotion Price',
-                                              prefixText: 'RM ',
-                                              prefixStyle: TextStyle(
-                                                fontSize: 14,
-                                                color: InventoryColors.muted,
-                                              ),
-                                              hintText: '0.00',
-                                            ),
-                                            validator: _priceValidator,
                                           ),
                                           const SizedBox(height: 14),
                                         ],
@@ -442,7 +446,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                       ? 'Saving...'
                                       : widget.editing
                                       ? 'Save Changes'
-                                      : 'Save Item',
+                                      : 'Save Inventory',
                                   busy: saving,
                                   onPressed: busy ? null : _save,
                                 ),
@@ -534,7 +538,7 @@ class _ItemEditorState extends State<ItemEditor> {
     initialValue: quantity.text,
     validator: (value) {
       final number = int.tryParse(value ?? '');
-      return number == null || number < 0 ? 'Enter a valid quantity' : null;
+      return number == null || number < 1 ? 'Enter a valid quantity' : null;
     },
     builder: (field) => Focus(
       onFocusChange: (value) => setState(() => quantityFocused = value),
@@ -557,7 +561,7 @@ class _ItemEditorState extends State<ItemEditor> {
                 minimumSize: const Size.square(40),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              onPressed: !busy && (int.tryParse(quantity.text) ?? 0) > 0
+              onPressed: !busy && (int.tryParse(quantity.text) ?? 0) > 1
                   ? () => _changeQuantity(-1)
                   : null,
               icon: const Icon(Icons.remove_circle_outline_rounded),
@@ -661,7 +665,10 @@ class _ItemEditorState extends State<ItemEditor> {
   }
 
   void _changeQuantity(int delta) {
-    final number = (int.tryParse(quantity.text) ?? 0) + delta;
+    final number = ((int.tryParse(quantity.text) ?? 1) + delta).clamp(
+      1,
+      1000000000,
+    );
     setState(() {
       quantity.value = TextEditingValue(
         text: '$number',
@@ -724,7 +731,7 @@ class _ItemEditorState extends State<ItemEditor> {
     }
     if (value != null && mounted) {
       barcode.text = value.trim();
-      if (!widget.editing) await _lookupBarcode();
+      await _lookupBarcode();
     }
   }
 
@@ -735,7 +742,7 @@ class _ItemEditorState extends State<ItemEditor> {
     keyboardType: TextInputType.number,
     style: const TextStyle(fontSize: 14, color: InventoryColors.muted),
     autovalidateMode: AutovalidateMode.onUserInteraction,
-    onFieldSubmitted: widget.editing ? null : (_) => _lookupBarcode(),
+    onFieldSubmitted: (_) => _lookupBarcode(),
     validator: (value) => !widget.editing && (value?.trim().isEmpty ?? true)
         ? 'Scan or enter a barcode.'
         : null,
@@ -751,7 +758,6 @@ class _ItemEditorState extends State<ItemEditor> {
   );
 
   void _barcodeChanged() {
-    if (widget.editing) return;
     lookupVersion++;
     final hadProduct = reusedProduct != null;
     setState(() {
@@ -766,7 +772,7 @@ class _ItemEditorState extends State<ItemEditor> {
   }
 
   Future<void> _lookupBarcode() async {
-    if (busy || widget.editing) return;
+    if (busy) return;
     FocusScope.of(context).unfocus();
     final code = barcode.text.trim();
     if (code.isEmpty) {
@@ -782,9 +788,9 @@ class _ItemEditorState extends State<ItemEditor> {
       lookupMessage = null;
       lookupFailed = false;
       reusedProduct = null;
-      expiryAt = null;
+      if (!widget.editing) expiryAt = null;
     });
-    expiryField.currentState?.didChange(null);
+    if (!widget.editing) expiryField.currentState?.didChange(null);
     try {
       final product =
           await (widget.barcodeLookup ??
@@ -813,6 +819,7 @@ class _ItemEditorState extends State<ItemEditor> {
         image = null;
         promotion = false;
         promotionPrice.clear();
+        promotionData = {'type': 'percentage'};
         lookupMessage = category == null
             ? 'Product details filled. Choose a category and a new expiry date.'
             : 'Product details filled. Review them and choose a new expiry date.';
@@ -830,11 +837,34 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  Future<void> _leave() async {
+    if (busy) return;
+    final discard = await showProfileConfirmation(
+      context: context,
+      title: 'Discard inventory changes?',
+      message: 'Your changes have not been saved.',
+      action: 'Discard and leave',
+      danger: true,
+    );
+    if (discard && mounted) {
+      setState(() => allowExit = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) Navigator.maybePop(context);
+    }
+  }
+
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'Required' : null;
   String? _priceValidator(String? value) {
     final amount = double.tryParse(value?.trim() ?? '');
-    return amount == null || amount < 0 ? 'Enter a valid price' : null;
+    return amount == null || !amount.isFinite || (amount * 100).round() <= 0
+        ? 'Enter a price greater than zero'
+        : null;
+  }
+
+  int _safeCents(String value) {
+    final amount = double.tryParse(value);
+    return amount == null || !amount.isFinite ? 0 : (amount * 100).round();
   }
 
   int _cents(String value) => (double.parse(value.trim()) * 100).round();
@@ -865,7 +895,17 @@ class _ItemEditorState extends State<ItemEditor> {
         quantity: int.parse(quantity.text),
         basePriceCents: _cents(basePrice.text),
         promotionEnabled: promotion,
-        promotionPriceCents: promotion ? _cents(promotionPrice.text) : null,
+        promotion: promotion ? promotionData : null,
+        promotionPriceCents: !promotion || promotionData['type'] == 'bundle'
+            ? null
+            : promotionData['type'] == 'percentage'
+            ? (_cents(basePrice.text) *
+                      (100 - (promotionData['percentage'] as num? ?? 0)) /
+                      100)
+                  .round()
+                  .clamp(1, 9007199254740991)
+            : _cents(basePrice.text) -
+                  (promotionData['amountCents'] as int? ?? 0),
         notifyOnExpiry: notifications,
         image: image,
       );
@@ -873,10 +913,13 @@ class _ItemEditorState extends State<ItemEditor> {
         input,
       );
       if (!mounted) return;
-      setState(() => saving = false);
+      setState(() {
+        saving = false;
+        allowExit = true;
+      });
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      final message = widget.editing ? 'Item updated' : 'Item saved';
+      final message = widget.editing ? 'Inventory updated' : 'Inventory saved';
       final onSaved = widget.onSaved;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);

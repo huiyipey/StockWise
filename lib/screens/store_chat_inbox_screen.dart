@@ -24,7 +24,7 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
           child: Column(
             children: [
               InventoryHeader(
-                title: 'Customer messages',
+                title: 'Customer Messages',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
@@ -82,6 +82,7 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(14),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   ProfilePhoto(
                                     name: row.customerName,
@@ -96,7 +97,7 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
                                         Text(
                                           row.customerName,
                                           style: TextStyle(
-                                            fontSize: 13,
+                                            fontSize: 15,
                                             fontWeight: unread
                                                 ? FontWeight.w700
                                                 : FontWeight.w500,
@@ -108,7 +109,7 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                           style: const TextStyle(
-                                            fontSize: 11,
+                                            fontSize: 13,
                                             height: 1.4,
                                             color: InventoryColors.muted,
                                           ),
@@ -124,10 +125,11 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
                                       if (row.lastMessageAt != null)
                                         Text(
                                           DateFormat(
-                                            'd MMM, h:mm a',
+                                            'd MMM\nh:mm a',
                                           ).format(row.lastMessageAt!),
+                                          textAlign: TextAlign.end,
                                           style: const TextStyle(
-                                            fontSize: 9,
+                                            fontSize: 10.5,
                                             color: InventoryColors.muted,
                                           ),
                                         ),

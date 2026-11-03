@@ -26,6 +26,8 @@ import 'orders_screen.dart';
 import 'shop_screen.dart';
 import 'store_gate_screen.dart';
 import 'staff_management_screen.dart';
+import 'delivery_fee_screen.dart';
+import '../services/push_service.dart';
 import 'waste_analysis_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -90,7 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               bottom: false,
               child: Column(
                 children: [
-                  const InventoryHeader(title: 'Your profile'),
+                  const InventoryHeader(title: 'Your Profile', enlarged: true),
                   Expanded(
                     child: StreamBuilder<Map<String, dynamic>>(
                       stream: profile,
@@ -168,14 +170,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
           shopDetails(shopData!),
         ],
-        const ProfileSection('Your account'),
+        const ProfileSection('Your Account'),
         ProfilePanel(
           padding: 0,
           child: Column(
             children: [
               ProfileAction(
                 key: const ValueKey('profile-edit-action'),
-                label: 'Edit profile',
+                label: 'Edit Profile',
                 icon: Icons.edit_outlined,
                 onTap: loggingOut
                     ? null
@@ -184,14 +186,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const Divider(height: 1, indent: 16, endIndent: 16),
               ProfileAction(
                 key: const ValueKey('profile-password-action'),
-                label: 'Change password',
+                label: 'Change Password',
                 icon: Icons.lock_outline_rounded,
                 onTap: loggingOut ? null : () => _changePassword(context),
               ),
             ],
           ),
         ),
-        const ProfileSection('Store and preferences'),
+        const ProfileSection('Store And Preferences'),
         ProfilePanel(
           padding: 0,
           child: Column(
@@ -199,7 +201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (session.canManageMembers || !session.canManage) ...[
                 ProfileAction(
                   label: session.canManageMembers
-                      ? 'Customer messages'
+                      ? 'Customer Messages'
                       : 'Chat with admin',
                   icon: Icons.chat_bubble_outline_rounded,
                   onTap: loggingOut
@@ -232,6 +234,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
               ],
+              if (session.canManageMembers) ...[
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ProfileAction(
+                  label: 'Manage Store Admins',
+                  subtitle: 'Add staff access by email',
+                  icon: Icons.groups_2_outlined,
+                  onTap: loggingOut
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const StaffManagementScreen(),
+                          ),
+                        ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ProfileAction(
+                  label: 'Manage Delivery Fee',
+                  icon: Icons.local_shipping_outlined,
+                  onTap: loggingOut
+                      ? null
+                      : () async {
+                          final saved = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DeliveryFeeScreen(),
+                            ),
+                          );
+                          if (saved == true && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              inventoryFeedback('Delivery fees updated'),
+                            );
+                          }
+                        },
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+              ],
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
                 child: Row(
@@ -255,7 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           SizedBox(height: 5),
                           Text(
-                            'Expiry, promotion, and order updates',
+                            'Expiry and order updates',
                             style: TextStyle(
                               fontSize: 11,
                               height: 1.4,
@@ -277,27 +316,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const Divider(height: 1, indent: 16, endIndent: 16),
+              if (session.canManage) ...[
+                _ReportEmailPreference(
+                  disabled: loggingOut,
+                  stream: widget.profileStream != null
+                      ? Stream.value(true)
+                      : FirestoreService.instance.watchReportEmailPreference(),
+                  save: widget.profileStream != null
+                      ? (enabled) async {}
+                      : FirestoreService.instance.setReportEmailPreference,
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+              ],
               ProfileAction(
-                label: 'Switch store',
+                label: 'Switch Store',
                 icon: Icons.swap_horiz_rounded,
                 onTap: loggingOut ? null : () => _switchStore(context),
               ),
-              if (session.canManageMembers) ...[
-                const Divider(height: 1, indent: 16, endIndent: 16),
-                ProfileAction(
-                  label: 'Manage store admins',
-                  subtitle: 'Add staff access by email',
-                  icon: Icons.groups_2_outlined,
-                  onTap: loggingOut
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const StaffManagementScreen(),
-                          ),
-                        ),
-                ),
-              ],
             ],
           ),
         ),
@@ -333,7 +368,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Shop details',
+              'Store Details',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             SizedBox(height: 14),
@@ -363,7 +398,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               SizedBox(width: 10),
               Text(
-                'Shop details',
+                'Store Details',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
             ],
@@ -398,8 +433,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 18),
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule_outlined,
+                size: 18,
+                color: InventoryColors.muted,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'Operating hours: ${store.operatingHours.label}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: InventoryColors.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           InventoryButton(
-            label: 'Edit shop',
+            label: 'Edit Store',
             icon: Icons.edit_outlined,
             soft: true,
             onPressed: loggingOut ? null : () => _editShop(store),
@@ -437,12 +492,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       barrierDismissible: false,
       builder: (_) => CreateStoreDialog(
         initialStore: store,
-        onCreate: ({required name, required address}) =>
-            (widget.onSaveShop ?? FirestoreService.instance.updateStore)(
-              storeId: store.id,
-              name: name,
-              address: address,
-            ),
+        onCreate: widget.onSaveShop == null
+            ? null
+            : ({required name, required address}) => widget.onSaveShop!(
+                storeId: store.id,
+                name: name,
+                address: address,
+              ),
       ),
     );
     if (updated == null || !mounted) return;
@@ -555,6 +611,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     ).ignore();
     try {
+      if (widget.onSignOut == null) await PushService.instance.detach();
       await (widget.onSignOut ?? FirebaseAuth.instance.signOut)();
       if (!context.mounted) return;
       navigator.pop();
@@ -595,7 +652,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           NavItem(
             icon: Icons.inventory_2_outlined,
             activeIcon: Icons.inventory_2_rounded,
-            label: 'Items',
+            label: 'Inventory',
             onTap: () => Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const ItemsScreen()),
@@ -667,4 +724,80 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
   }
+}
+
+class _ReportEmailPreference extends StatefulWidget {
+  const _ReportEmailPreference({
+    required this.stream,
+    required this.save,
+    required this.disabled,
+  });
+  final Stream<bool> stream;
+  final Future<void> Function(bool) save;
+  final bool disabled;
+  @override
+  State<_ReportEmailPreference> createState() => _ReportEmailPreferenceState();
+}
+
+class _ReportEmailPreferenceState extends State<_ReportEmailPreference> {
+  bool saving = false;
+  bool? value;
+  String? error;
+  @override
+  Widget build(BuildContext context) => StreamBuilder<bool>(
+    stream: widget.stream,
+    builder: (context, snapshot) => Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.mail_outline_rounded,
+                size: 21,
+                color: InventoryColors.green,
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Text(
+                  'Receive Reports via Email',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+              Switch(
+                value: value ?? snapshot.data ?? true,
+                onChanged: saving || widget.disabled || snapshot.hasError
+                    ? null
+                    : (enabled) async {
+                        setState(() {
+                          value = enabled;
+                          saving = true;
+                          error = null;
+                        });
+                        try {
+                          await widget.save(enabled);
+                        } catch (_) {
+                          if (mounted) {
+                            setState(() {
+                              value = null;
+                              error =
+                                  'Could not update report email preference.';
+                            });
+                          }
+                        } finally {
+                          if (mounted) setState(() => saving = false);
+                        }
+                      },
+              ),
+            ],
+          ),
+        ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: ProfileNotice(error!, error: true),
+          ),
+      ],
+    ),
+  );
 }

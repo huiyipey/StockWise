@@ -50,7 +50,7 @@ class OrderBadge extends StatelessWidget {
     final warning = value == 'unpaid' || value == 'to_pay';
     final error = value == 'cancelled';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: error
             ? const Color(0xFFFAE7E0)
@@ -96,12 +96,14 @@ class OrderStatusFilter extends StatelessWidget {
               key: ValueKey('order-filter-$value'),
               onPressed: () => onSelected(value),
               style: TextButton.styleFrom(
-                minimumSize: const Size(72, 46),
+                minimumSize: const Size(72, 44),
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+                  horizontal: 16,
+                  vertical: 10,
                 ),
-                shape: const StadiumBorder(),
+                shape: const StadiumBorder(
+                  side: BorderSide(color: InventoryColors.line),
+                ),
                 foregroundColor: selected == value
                     ? InventoryColors.green
                     : InventoryColors.muted,
@@ -109,7 +111,7 @@ class OrderStatusFilter extends StatelessWidget {
                     ? InventoryColors.soft
                     : Colors.white,
                 textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0,
                   height: 1.2,
@@ -220,7 +222,7 @@ class OrderListCard extends StatelessWidget {
           textWidth('#${order.orderNumber}', enlarged ? 15 : 12) +
           textWidth(orderLabel(order.paymentStatus), enlarged ? 12 : 10) +
           textWidth(orderLabel(order.status), enlarged ? 12 : 10) +
-          50;
+          62;
       final badges = _badges();
       if (width > constraints.maxWidth) {
         return Column(
@@ -278,7 +280,7 @@ class OrderValueRow extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               color: bold ? InventoryColors.ink : InventoryColors.muted,
             ),
           ),
@@ -290,7 +292,7 @@ class OrderValueRow extends StatelessWidget {
             value,
             textAlign: TextAlign.end,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
             ),
           ),

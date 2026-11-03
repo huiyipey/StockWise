@@ -37,7 +37,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           child: Column(
             children: [
               InventoryHeader(
-                title: 'Store admins',
+                title: 'Store Admins',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
@@ -73,7 +73,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           children: [
                             const Text(
-                              'Admins have access to inventory, reports, and orders for this store.',
+                              '',
                               style: TextStyle(
                                 fontSize: 12,
                                 height: 1.5,
@@ -84,12 +84,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                             InventoryButton(
                               label: inviting
                                   ? 'Sending...'
-                                  : 'Add admin by email',
+                                  : 'Add Admin by Email',
                               icon: Icons.add_rounded,
                               busy: inviting,
                               onPressed: inviting ? null : invite,
                             ),
-                            const ProfileSection('Store team'),
+                            const ProfileSection('Store Team'),
                             for (final row in rows) memberCard(row),
                             if (inviteSnapshot.hasError)
                               const ProfileNotice(
@@ -97,7 +97,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                 error: true,
                               ),
                             if (invitations.isNotEmpty) ...[
-                              const ProfileSection('Pending invitations'),
+                              const ProfileSection('Pending Invitations'),
                               for (final invitation in invitations)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
@@ -199,7 +199,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 children: [
                   Text(
                     member['email'] as String? ??
-                        (owner ? 'Store owner' : 'Admin'),
+                        (owner ? 'Store Owner' : 'Admin'),
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,

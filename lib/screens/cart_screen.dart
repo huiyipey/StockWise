@@ -8,6 +8,7 @@ import '../services/store_session.dart';
 import '../widgets/glass_bottom_nav.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
+import '../widgets/commerce_quote.dart';
 import '../widgets/stockwise_ui.dart';
 import 'checkout_screen.dart';
 import 'item_detail_screen.dart';
@@ -127,7 +128,13 @@ class _CartScreenState extends State<CartScreen> {
                                 unavailable[line.id],
                               ),
                             ),
-                            OrderTotals(subtotal: subtotal),
+                            if (widget.cartStream == null)
+                              CartQuote(
+                                revision:
+                                    '${lines.map((l) => '${l.id}:${l.quantity}').join(',')}/${batches.values.map((b) => '${b.id}:${b.quantityOnHand}:${b.sellingPriceCents}:${b.promotion}').join(',')}',
+                              )
+                            else
+                              OrderTotals(subtotal: subtotal),
                             const SizedBox(height: 16),
                             InventoryButton(
                               label: 'Checkout',
@@ -278,7 +285,10 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                   Flexible(
                     child: Text(
-                      orderMoney(line.lineTotalCents),
+                      orderMoney(
+                        (item?.sellingPriceCents ?? line.unitPriceCents) *
+                            line.quantity,
+                      ),
                       textAlign: TextAlign.end,
                       style: const TextStyle(
                         fontSize: 13,
@@ -301,6 +311,18 @@ class _CartScreenState extends State<CartScreen> {
                   ),
                 ],
               ),
+              if (item?.bundlePromotion == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    item!.promotionLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: InventoryColors.green,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

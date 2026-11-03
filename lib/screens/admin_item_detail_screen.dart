@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat;
 
 import '../models/app_models.dart';
+import '../models/shelf_life.dart';
 import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
@@ -17,11 +19,84 @@ class AdminItemDetailScreen extends StatelessWidget {
     this.onDiscarded,
     this.onEdit,
     this.imageProvider,
+    this.liveUpdates = false,
+    this.inventoryStream,
+    this.onDiscardQuantity,
   });
-
   final InventoryBatch item;
   final String? categoryName;
   final Future<void> Function()? onDiscard;
+  final Future<void> Function(int)? onDiscardQuantity;
+  final ValueChanged<String>? onDiscarded;
+  final VoidCallback? onEdit;
+  final ImageProvider? imageProvider;
+  final bool liveUpdates;
+  final Stream<InventoryBatch?>? inventoryStream;
+  @override
+  Widget build(BuildContext context) {
+    Widget content(InventoryBatch value) => _InventoryDetails(
+      item: value,
+      categoryName: categoryName,
+      onDiscard: onDiscard,
+      onDiscarded: onDiscarded,
+      onEdit: onEdit,
+      imageProvider: imageProvider,
+      onDiscardQuantity: onDiscardQuantity,
+      updates: liveUpdates
+          ? (inventoryStream ??
+                FirestoreService.instance.watchInventoryBatch(item.id))
+          : inventoryStream,
+    );
+    if (!liveUpdates && inventoryStream == null) return content(item);
+    return StreamBuilder<InventoryBatch?>(
+      stream:
+          inventoryStream ??
+          FirestoreService.instance.watchInventoryBatch(item.id),
+      initialData: item,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return InventoryTheme(
+            child: Scaffold(
+              appBar: AppBar(title: const Text('Inventory Details')),
+              body: const Center(
+                child: Text('Could not refresh inventory. Reopen this page.'),
+              ),
+            ),
+          );
+        }
+        if (snapshot.data == null) {
+          return InventoryTheme(
+            child: Scaffold(
+              appBar: AppBar(title: const Text('Inventory Details')),
+              body: const Center(
+                child: Text('This inventory has been removed.'),
+              ),
+            ),
+          );
+        }
+        return content(snapshot.data!);
+      },
+    );
+  }
+}
+
+class _InventoryDetails extends StatelessWidget {
+  const _InventoryDetails({
+    required this.item,
+    this.categoryName,
+    this.onDiscard,
+    this.onDiscarded,
+    this.onEdit,
+    this.imageProvider,
+    this.onDiscardQuantity,
+    this.updates,
+  });
+
+  final Stream<InventoryBatch?>? updates;
+  final InventoryBatch item;
+  final String? categoryName;
+  final Future<void> Function()? onDiscard;
+  final Future<void> Function(int)? onDiscardQuantity;
   final ValueChanged<String>? onDiscarded;
   final VoidCallback? onEdit;
   final ImageProvider? imageProvider;
@@ -50,7 +125,7 @@ class AdminItemDetailScreen extends StatelessWidget {
           child: Column(
             children: [
               InventoryHeader(
-                title: 'Item details',
+                title: 'Inventory Details',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
@@ -151,16 +226,17 @@ class AdminItemDetailScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
               child: InventoryButton(
                 key: const ValueKey('item-details-edit'),
-                label: 'Edit Item',
+                label: 'Edit Inventory',
                 icon: Icons.edit_outlined,
-                onPressed:
-                    onEdit ??
-                    () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditItemScreen(item: item),
-                      ),
-                    ),
+                onPressed: item.expiryAt.isAfter(DateTime.now())
+                    ? (onEdit ??
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => EditItemScreen(item: item),
+                            ),
+                          ))
+                    : null,
               ),
             ),
           ),
@@ -212,7 +288,7 @@ class AdminItemDetailScreen extends StatelessWidget {
         _summaryLine(
           minHeight: 40,
           child: const Text(
-            'Quantity on Hand',
+            'Stock Available',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w800,
@@ -224,7 +300,7 @@ class AdminItemDetailScreen extends StatelessWidget {
         _summaryLine(
           minHeight: 40,
           child: Text(
-            '${item.quantityOnHand}',
+            '${item.availableQuantity}',
             key: const ValueKey('stock-on-hand'),
             style: const TextStyle(
               fontSize: 33,
@@ -253,12 +329,16 @@ class AdminItemDetailScreen extends StatelessWidget {
         : days == 0
         ? 'Today'
         : '$days ${days == 1 ? 'day' : 'days'} left';
-    final color = days <= 2 ? InventoryColors.error : InventoryColors.amber;
+    final color = item.expiryColour == ShelfLifeColour.green
+        ? InventoryColors.green
+        : item.expiryColour == ShelfLifeColour.orange
+        ? InventoryColors.amber
+        : InventoryColors.error;
     final badge = Container(
       key: const ValueKey('item-expiry-status'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: days <= 2 ? const Color(0xFFFAE7E0) : const Color(0xFFFAECD6),
+        color: color.withValues(alpha: .12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -313,7 +393,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                 DateFormat('dd MMM yyyy').format(item.expiryAt),
                 key: const ValueKey('item-expiry-date'),
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -390,6 +470,17 @@ class AdminItemDetailScreen extends StatelessWidget {
                   ),
               ],
             ),
+            if (item.bundlePromotion)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  item.promotionLabel,
+                  style: const TextStyle(
+                    color: InventoryColors.green,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -424,7 +515,7 @@ class AdminItemDetailScreen extends StatelessWidget {
   );
 
   Widget _discardCard(BuildContext context) {
-    final enabled = item.quantityOnHand > 0;
+    final enabled = item.availableQuantity > 0;
     final color = enabled ? InventoryColors.error : InventoryColors.muted;
     return Card(
       child: Padding(
@@ -438,7 +529,7 @@ class AdminItemDetailScreen extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Discard Remaining Stock',
+                    'Discard Stock',
                     style: TextStyle(
                       fontSize: 13,
                       color: color,
@@ -451,7 +542,7 @@ class AdminItemDetailScreen extends StatelessWidget {
             const SizedBox(height: 18),
             Text(
               enabled
-                  ? 'Record all $quantity as waste and close this batch.'
+                  ? 'Choose how much stock to record as waste.'
                   : 'There is no remaining stock to discard.',
               style: const TextStyle(
                 fontSize: 11.5,
@@ -475,30 +566,33 @@ class AdminItemDetailScreen extends StatelessWidget {
   }
 
   Future<void> _discard(BuildContext context) async {
-    final discarded = await showDialog<bool>(
+    final discarded = await showDialog<int>(
       context: context,
       barrierDismissible: false,
       builder: (_) => InventoryTheme(
         child: _DiscardStockDialog(
           item: item,
-          onDiscard:
-              onDiscard ??
-              () => FirestoreService.instance.discardBatch(
+          updates: updates,
+          onDiscard: (quantity) async {
+            if (onDiscardQuantity != null) {
+              await onDiscardQuantity!(quantity);
+            } else if (onDiscard != null) {
+              await onDiscard!();
+            } else {
+              await FirestoreService.instance.discardBatch(
                 item,
-                quantity: item.quantityOnHand,
-              ),
+                quantity: quantity,
+              );
+            }
+          },
         ),
       ),
     );
-    if (discarded == true && context.mounted) {
-      final messenger = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-      final message = '$quantity recorded as waste.';
-      if (onDiscarded != null) {
-        onDiscarded!(message);
-      } else {
-        messenger.showSnackBar(inventoryFeedback(message));
-      }
+    if (discarded != null && context.mounted) {
+      showInventoryOverlayFeedback(
+        context,
+        '$discarded ${item.unitLabel} recorded as waste.',
+      );
     }
   }
 }
@@ -642,31 +736,77 @@ class _ItemPhotoState extends State<_ItemPhoto> {
 }
 
 class _DiscardStockDialog extends StatefulWidget {
-  const _DiscardStockDialog({required this.item, required this.onDiscard});
+  const _DiscardStockDialog({
+    required this.item,
+    required this.onDiscard,
+    this.updates,
+  });
+  final Stream<InventoryBatch?>? updates;
   final InventoryBatch item;
-  final Future<void> Function() onDiscard;
+  final Future<void> Function(int) onDiscard;
   @override
   State<_DiscardStockDialog> createState() => _DiscardStockDialogState();
 }
 
 class _DiscardStockDialogState extends State<_DiscardStockDialog> {
+  final form = GlobalKey<FormState>();
+  final quantity = TextEditingController(text: '1');
+  StreamSubscription<InventoryBatch?>? subscription;
+  late int available = widget.item.availableQuantity;
+  @override
+  void initState() {
+    super.initState();
+    subscription = widget.updates?.listen((value) {
+      if (mounted) setState(() => available = value?.availableQuantity ?? 0);
+    });
+  }
+
   bool saving = false;
-  bool failed = false;
+  String? error;
+  @override
+  void dispose() {
+    subscription?.cancel();
+    quantity.dispose();
+    super.dispose();
+  }
 
   Future<void> discard() async {
-    if (saving) return;
+    if (saving || !(form.currentState?.validate() ?? false)) return;
+    final value = int.parse(quantity.text);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Discard'),
+        content: Text(
+          'Record $value ${widget.item.unitLabel} of ${widget.item.productName} as waste?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
     setState(() {
       saving = true;
-      failed = false;
+      error = null;
     });
     try {
-      await widget.onDiscard();
-      if (mounted) Navigator.pop(context, true);
-    } catch (_) {
+      await widget.onDiscard(value);
+      if (mounted) Navigator.pop(context, value);
+    } catch (e) {
       if (mounted) {
         setState(() {
           saving = false;
-          failed = true;
+          error = e is StateError
+              ? e.message.toString()
+              : 'Could not discard stock. Refresh and try again.';
         });
       }
     }
@@ -677,96 +817,70 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
     canPop: !saving,
     child: AlertDialog(
       scrollable: true,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFAE7E0),
-              borderRadius: BorderRadius.circular(13),
-            ),
-            child: const Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: InventoryColors.error,
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Discard Remaining Stock?',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
+      title: const Text('Discard Stock'),
       content: SizedBox(
         width: 350,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'This records all remaining stock as waste and closes this batch.',
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.5,
-                color: InventoryColors.muted,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: InventoryColors.background,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  Text(
-                    widget.item.productName,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    '${widget.item.quantityOnHand} ${widget.item.unitLabel}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (failed) ...[
+        child: Form(
+          key: form,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(widget.item.productName),
               const SizedBox(height: 16),
-              const Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: 17,
-                    color: InventoryColors.error,
+                  IconButton(
+                    onPressed: saving
+                        ? null
+                        : () {
+                            final n = int.tryParse(quantity.text) ?? 1;
+                            if (n > 1) {
+                              setState(() => quantity.text = '${n - 1}');
+                            }
+                          },
+                    icon: const Icon(Icons.remove_circle_outline),
                   ),
-                  SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Could not discard stock. Please try again.',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: InventoryColors.error,
-                      ),
+                    child: TextFormField(
+                      key: const ValueKey('discard-quantity'),
+                      controller: quantity,
+                      enabled: !saving,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      decoration: const InputDecoration(labelText: 'Quantity'),
+                      validator: (v) {
+                        final n = int.tryParse(v ?? '');
+                        return n == null || n < 1 || n > available
+                            ? 'Enter 1–$available'
+                            : null;
+                      },
                     ),
+                  ),
+                  IconButton(
+                    onPressed: saving
+                        ? null
+                        : () {
+                            final n = int.tryParse(quantity.text) ?? 0;
+                            if (n < available) {
+                              setState(() => quantity.text = '${n + 1}');
+                            }
+                          },
+                    icon: const Icon(Icons.add_circle_outline),
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              Text(
+                '$available ${widget.item.unitLabel} available. Availability is checked again when saving.',
+              ),
+              if (error != null)
+                Text(
+                  error!,
+                  style: const TextStyle(color: InventoryColors.error),
+                ),
             ],
-          ],
+          ),
         ),
       ),
       actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 22),
@@ -777,7 +891,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
               child: InventoryButton(
                 label: 'Cancel',
                 soft: true,
-                onPressed: saving ? null : () => Navigator.pop(context, false),
+                onPressed: saving ? null : () => Navigator.pop(context),
               ),
             ),
             const SizedBox(width: 14),

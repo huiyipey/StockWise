@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../models/app_models.dart';
 import '../models/category_label.dart';
+import '../models/shelf_life.dart';
 import 'stockwise_ui.dart';
 import 'auth_ui.dart' show AuthColors;
 import 'glass_bottom_nav.dart' show NavItem;
@@ -122,8 +123,8 @@ class _InventoryOverlayFeedbackState extends State<_InventoryOverlayFeedback> {
       color: InventoryColors.ink,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 64),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
             const Icon(Icons.check_rounded, size: 20, color: Colors.white),
@@ -398,20 +399,34 @@ class InventoryHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (storeName != null) ...[
-                Text(
-                  storeName!.toUpperCase(),
-                  style: TextStyle(
-                    color: InventoryColors.muted,
-                    fontSize: enlarged ? 10 : 9,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.storefront_outlined,
+                      size: 15,
+                      color: InventoryColors.green,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        storeName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: InventoryColors.muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 5),
               ],
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: enlarged ? 26 : 24,
+                  fontSize: storeName != null || enlarged ? 29 : 24,
                   height: 1.2,
                   fontWeight: FontWeight.w700,
                   color: InventoryColors.ink,
@@ -698,7 +713,17 @@ class InventoryBatchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final days = item.daysUntilExpiry;
-    final urgent = days <= 2;
+    final colour = item.expiryColour;
+    final colourInk = colour == ShelfLifeColour.green
+        ? InventoryColors.green
+        : colour == ShelfLifeColour.orange
+        ? InventoryColors.amber
+        : InventoryColors.error;
+    final colourFill = colour == ShelfLifeColour.green
+        ? InventoryColors.soft
+        : colour == ShelfLifeColour.orange
+        ? const Color(0xFFFAECD6)
+        : const Color(0xFFFAE7E0);
     return Card(
       child: InkWell(
         onTap: onTap,
@@ -709,7 +734,7 @@ class InventoryBatchTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ProductArtwork(
-                size: enlarged ? 64 : 52,
+                size: enlarged ? 72 : 60,
                 imagePath: item.imagePath,
               ),
               const SizedBox(width: 12),
@@ -726,7 +751,7 @@ class InventoryBatchTile extends StatelessWidget {
                             : FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       '${categoryTitleCase(categoryName)} / ${item.quantityOnHand} ${item.unitLabel}',
                       style: TextStyle(
@@ -734,7 +759,7 @@ class InventoryBatchTile extends StatelessWidget {
                         fontSize: enlarged ? 11.5 : 10.5,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 3),
                     Text(
                       'Exp: ${DateFormat('dd MMM yyyy').format(item.expiryAt)}',
                       style: TextStyle(
@@ -750,15 +775,22 @@ class InventoryBatchTile extends StatelessWidget {
                 key: ValueKey('expiry-badge-${item.id}'),
                 width: 68 * MediaQuery.textScalerOf(context).scale(11) / 11,
                 alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
                 decoration: BoxDecoration(
-                  color: urgent
-                      ? const Color(0xFFFAE7E0)
-                      : const Color(0xFFFAECD6),
+                  color: item.quantityOnHand == 0 && days >= 0
+                      ? InventoryColors.background
+                      : colourFill,
+                  border: Border.all(
+                    color: item.quantityOnHand == 0 && days >= 0
+                        ? InventoryColors.line
+                        : colourInk.withValues(alpha: .3),
+                  ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  days < 0
+                  item.quantityOnHand == 0 && days >= 0
+                      ? 'Out of stock'
+                      : days < 0
                       ? 'Expired'
                       : days == 0
                       ? 'Today'
@@ -767,9 +799,9 @@ class InventoryBatchTile extends StatelessWidget {
                   style: TextStyle(
                     fontSize: enlarged ? 11 : 10,
                     fontWeight: FontWeight.w700,
-                    color: urgent
-                        ? InventoryColors.error
-                        : InventoryColors.amber,
+                    color: item.quantityOnHand == 0 && days >= 0
+                        ? InventoryColors.muted
+                        : colourInk,
                   ),
                 ),
               ),
@@ -785,7 +817,7 @@ Future<String?> showInventoryCategorySheet({
   required BuildContext context,
   required Map<String, String> choices,
   required String selected,
-  String title = 'Filter by category',
+  String title = 'Filter by Category',
 }) => showModalBottomSheet<String>(
   context: context,
   isScrollControlled: true,

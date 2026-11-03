@@ -9,6 +9,8 @@ import '../services/store_fields.dart';
 import '../services/store_session.dart';
 import '../widgets/auth_ui.dart';
 import '../widgets/store_ui.dart';
+import '../widgets/profile_ui.dart' show showProfileConfirmation;
+import '../widgets/inventory_ui.dart';
 import 'create_store_dialog.dart';
 import 'home_screen.dart';
 import 'shop_screen.dart';
@@ -36,6 +38,7 @@ class StoreGateScreen extends StatefulWidget {
 
 class _StoreGateScreenState extends State<StoreGateScreen> {
   bool creating = false, checkingInvites = false, selecting = false;
+  String? deleting;
   late Stream<List<StoreInfo>> stores;
   late Stream<List<StoreMembership>> memberships;
 
@@ -150,7 +153,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
-                        'Choose a store',
+                        'Choose a Store',
                         style: TextStyle(
                           color: AuthColors.ink,
                           fontSize: 28,
@@ -212,7 +215,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                       ),
                       const SizedBox(height: 24),
                       StorePrimaryButton(
-                        label: 'Create a store',
+                        label: 'Create a Store',
                         busy: creating,
                         onPressed: failed || loading || selecting
                             ? null
@@ -254,15 +257,6 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  'Signed in as ${widget.accountEmail ?? FirebaseAuth.instance.currentUser?.email ?? ''}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: AuthColors.muted,
-                  ),
-                ),
               ],
             ),
           ),
@@ -271,7 +265,62 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     },
   );
 
-  Widget _storeTile(StoreInfo store, String role) => Material(
+  Widget _storeTile(StoreInfo store, String role) => role != 'owner'
+      ? _storeCard(store, role)
+      : Dismissible(
+          key: ValueKey('delete-store-${store.id}'),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: InventoryColors.error,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: Colors.white,
+            ),
+          ),
+          confirmDismiss: (_) async {
+            if (deleting != null) return false;
+            final confirmed = await showProfileConfirmation(
+              context: context,
+              title: 'Delete ${store.name}?',
+              message:
+                  'This permanently removes the store, inventory, orders and conversations. Other stores and user accounts are kept.',
+              action: 'Delete Store',
+              cancel: 'Keep Store',
+              danger: true,
+            );
+            if (!confirmed || !mounted) return false;
+            setState(() => deleting = store.id);
+            try {
+              await FirestoreService.instance.deleteStore(store);
+              if (mounted) {
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(inventoryFeedback('Store deleted.'));
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  inventoryFeedback(
+                    e is StateError
+                        ? e.message
+                        : 'Could not delete the store. Please try again.',
+                    error: true,
+                  ),
+                );
+              }
+            } finally {
+              if (mounted) setState(() => deleting = null);
+            }
+            return false;
+          },
+          child: _storeCard(store, role),
+        );
+  Widget _storeCard(StoreInfo store, String role) => Material(
     color: AuthColors.background,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
@@ -279,11 +328,13 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
-      onTap: selecting || creating ? null : () => _selectStore(store, role),
+      onTap: selecting || creating || deleting != null
+          ? null
+          : () => _selectStore(store, role),
       child: Padding(
         padding: const EdgeInsets.all(15),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             CircleAvatar(
               radius: 21,

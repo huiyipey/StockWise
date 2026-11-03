@@ -78,7 +78,7 @@ class _OrderReceiptState extends State<OrderReceipt> {
                   'No payment receipt uploaded yet.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     height: 1.5,
                     color: InventoryColors.muted,
                   ),
@@ -129,15 +129,20 @@ class _OrderReceiptState extends State<OrderReceipt> {
                                     : const _ReceiptLoading(),
                             errorBuilder: (_, _, _) => failure(),
                           ),
-                          const Positioned(
+                          Positioned(
                             right: 10,
                             bottom: 10,
-                            child: CircleAvatar(
-                              radius: 17,
-                              backgroundColor: Colors.white,
+                            child: Container(
+                              padding: EdgeInsets.all(5),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.all(
+                                  Radius.circular(9),
+                                ),
+                              ),
                               child: Icon(
-                                Icons.open_in_full_rounded,
-                                size: 18,
+                                Icons.fullscreen_rounded,
+                                size: 20,
                                 color: InventoryColors.green,
                               ),
                             ),
@@ -151,7 +156,7 @@ class _OrderReceiptState extends State<OrderReceipt> {
             ),
           ),
           const SizedBox(height: 14),
-          const Center(child: OrderBadge('Receipt uploaded')),
+          const Center(child: OrderBadge('Receipt Uploaded', fontSize: 12)),
         ],
         if (!widget.isAdmin) ...[
           const SizedBox(height: 16),
@@ -183,7 +188,7 @@ class _OrderReceiptState extends State<OrderReceipt> {
         const SizedBox(height: 10),
         const Text(
           'Could not load receipt',
-          style: TextStyle(fontSize: 12, color: InventoryColors.muted),
+          style: TextStyle(fontSize: 14, color: InventoryColors.muted),
         ),
         TextButton(onPressed: retry, child: const Text('Retry')),
       ],
@@ -205,7 +210,7 @@ class _ReceiptLoading extends StatelessWidget {
         SizedBox(height: 14),
         Text(
           'Loading receipt...',
-          style: TextStyle(fontSize: 12, color: InventoryColors.muted),
+          style: TextStyle(fontSize: 14, color: InventoryColors.muted),
         ),
       ],
     ),

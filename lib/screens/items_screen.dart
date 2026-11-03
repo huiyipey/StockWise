@@ -67,189 +67,236 @@ class _ItemsScreenState extends State<ItemsScreen> {
               Expanded(
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
-                  builder: (context, records) =>
-                      StreamBuilder<List<InventoryBatch>>(
-                        stream: inventory,
-                        builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return const Center(
-                              child: InventoryEmpty(
-                                icon: Icons.error_outline_rounded,
-                                title: 'Could not load inventory',
-                                body:
-                                    'Check your connection and reopen this page.',
-                              ),
-                            );
-                          }
-                          if (!snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
-                          final ids =
-                              snapshot.data!
-                                  .map((item) => item.categoryId)
-                                  .toSet()
-                                  .toList()
-                                ..sort();
-                          final today = DateTime.now();
-                          final items =
-                              snapshot.data!
-                                  .where(
-                                    (item) =>
-                                        matchesInventorySearch(item, query) &&
-                                        (category == 'all' ||
-                                            item.categoryId == category) &&
-                                        _inRange(item.expiryAt),
-                                  )
-                                  .toList()
-                                ..sort(
-                                  (a, b) => compareAdminInventory(
-                                    a,
-                                    b,
-                                    ascending: expiryAscending,
-                                    today: today,
-                                  ),
-                                );
-                          return ListView(
-                            padding: const EdgeInsets.fromLTRB(20, 6, 20, 92),
-                            children: [
-                              ClipRRect(
-                                key: const ValueKey('inventory-search-outline'),
-                                borderRadius: BorderRadius.circular(12),
-                                child: TextField(
-                                  controller: searchController,
-                                  textAlignVertical: TextAlignVertical.center,
-                                  style: const TextStyle(fontSize: 13),
-                                  decoration: InputDecoration(
-                                    floatingLabelBehavior:
-                                        FloatingLabelBehavior.never,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 12,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minHeight: 46,
-                                    ),
-                                    hintText: 'Search name or barcode',
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                      size: 18,
-                                      color: InventoryColors.muted,
-                                    ),
-                                    suffixIcon: IconButton(
-                                      tooltip: 'Scan barcode to search',
-                                      onPressed: _scanBarcode,
-                                      icon: const Icon(
-                                        Icons.qr_code_scanner_rounded,
-                                        color: InventoryColors.green,
-                                        size: 20,
-                                      ),
-                                    ),
-                                  ),
-                                  onChanged: (value) =>
-                                      setState(() => query = value),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              InventoryFilters(
-                                ids: ids,
-                                records: records.data ?? [],
-                                category: category,
-                                onCategory: (value) =>
-                                    setState(() => category = value),
-                                range: expiryRange,
-                                onDate: () => _pickExpiryRange(context),
-                                onClearDate: () =>
-                                    setState(() => expiryRange = null),
+                  builder: (context, records) => StreamBuilder<List<InventoryBatch>>(
+                    stream: inventory,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const Center(
+                          child: InventoryEmpty(
+                            icon: Icons.error_outline_rounded,
+                            title: 'Could not load inventory',
+                            body: 'Check your connection and reopen this page.',
+                          ),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final ids =
+                          snapshot.data!
+                              .map((item) => item.categoryId)
+                              .toSet()
+                              .toList()
+                            ..sort();
+                      final today = DateTime.now();
+                      final items =
+                          snapshot.data!
+                              .where(
+                                (item) =>
+                                    matchesInventorySearch(item, query) &&
+                                    (category == 'all' ||
+                                        item.categoryId == category) &&
+                                    _inRange(item.expiryAt),
+                              )
+                              .toList()
+                            ..sort(
+                              (a, b) => compareAdminInventory(
+                                a,
+                                b,
                                 ascending: expiryAscending,
-                                onSort: () => setState(
-                                  () => expiryAscending = !expiryAscending,
+                                today: today,
+                              ),
+                            );
+                      return ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 6, 20, 92),
+                        children: [
+                          ClipRRect(
+                            key: const ValueKey('inventory-search-outline'),
+                            borderRadius: BorderRadius.circular(12),
+                            child: TextField(
+                              controller: searchController,
+                              textAlignVertical: TextAlignVertical.center,
+                              style: const TextStyle(fontSize: 13),
+                              decoration: InputDecoration(
+                                floatingLabelBehavior:
+                                    FloatingLabelBehavior.never,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minHeight: 46,
+                                ),
+                                hintText: 'Search name or barcode',
+                                prefixIcon: const Icon(
+                                  Icons.search_rounded,
+                                  size: 18,
+                                  color: InventoryColors.muted,
+                                ),
+                                suffixIcon: IconButton(
+                                  tooltip: 'Scan barcode to search',
+                                  onPressed: _scanBarcode,
+                                  icon: const Icon(
+                                    Icons.qr_code_scanner_rounded,
+                                    color: InventoryColors.green,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 14),
-                              LayoutBuilder(
-                                builder: (context, constraints) {
-                                  const heading = Text(
-                                    'All Inventory',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
+                              onChanged: (value) =>
+                                  setState(() => query = value),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          InventoryFilters(
+                            ids: ids,
+                            records: records.data ?? [],
+                            category: category,
+                            onCategory: (value) =>
+                                setState(() => category = value),
+                            range: expiryRange,
+                            onDate: () => _pickExpiryRange(context),
+                            onClearDate: () =>
+                                setState(() => expiryRange = null),
+                            ascending: expiryAscending,
+                            onSort: () => setState(
+                              () => expiryAscending = !expiryAscending,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              const heading = Text(
+                                'All Inventory',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              );
+                              final manage = TextButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const CategoryManagementScreen(),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Manage categories',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    decoration: TextDecoration.underline,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              );
+                              if (constraints.maxWidth < 300 ||
+                                  MediaQuery.textScalerOf(context).scale(12) >
+                                      16) {
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [heading, manage],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  const Expanded(child: heading),
+                                  manage,
+                                ],
+                              );
+                            },
+                          ),
+                          if (items.isEmpty)
+                            const InventoryEmpty(title: 'No inventory found')
+                          else
+                            for (final item in items)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Dismissible(
+                                  key: ValueKey("inventory-${item.id}"),
+                                  direction: DismissDirection.startToEnd,
+                                  background: Container(
+                                    alignment: Alignment.centerLeft,
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: InventoryColors.error,
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
-                                  );
-                                  final manage = TextButton(
-                                    onPressed: () => Navigator.push(
+                                    child: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  confirmDismiss: (_) async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text("Delete Inventory?"),
+                                        content: const Text(
+                                          "This removes the inventory batch. Waste is recorded only if the inventory is expired and still has remaining stock.",
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, false),
+                                            child: const Text("Cancel"),
+                                          ),
+                                          FilledButton(
+                                            onPressed: () =>
+                                                Navigator.pop(context, true),
+                                            child: const Text("Delete"),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirmed == true) {
+                                      try {
+                                        await FirestoreService.instance
+                                            .removeInventory(item);
+                                      } catch (_) {
+                                        if (context.mounted) {
+                                          showInventoryOverlayFeedback(
+                                            context,
+                                            "Could not delete inventory. Try again.",
+                                          );
+                                        }
+                                      }
+                                    }
+                                    return false;
+                                  },
+                                  child: InventoryBatchTile(
+                                    enlarged: true,
+                                    item: item,
+                                    categoryName: inventoryCategoryName(
+                                      item.categoryId,
+                                      records.data ?? [],
+                                    ),
+                                    onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (_) =>
-                                            const CategoryManagementScreen(),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      'Manage categories',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  );
-                                  if (constraints.maxWidth < 300 ||
-                                      MediaQuery.textScalerOf(
-                                            context,
-                                          ).scale(12) >
-                                          16) {
-                                    return Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [heading, manage],
-                                    );
-                                  }
-                                  return Row(
-                                    children: [
-                                      const Expanded(child: heading),
-                                      manage,
-                                    ],
-                                  );
-                                },
-                              ),
-                              if (items.isEmpty)
-                                const InventoryEmpty(
-                                  title: 'No inventory found',
-                                )
-                              else
-                                for (final item in items)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 10),
-                                    child: InventoryBatchTile(
-                                      enlarged: true,
-                                      item: item,
-                                      categoryName: inventoryCategoryName(
-                                        item.categoryId,
-                                        records.data ?? [],
-                                      ),
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => AdminItemDetailScreen(
-                                            item: item,
-                                            categoryName: inventoryCategoryName(
-                                              item.categoryId,
-                                              records.data ?? [],
-                                            ),
-                                            onDiscarded: (message) =>
-                                                showInventoryOverlayFeedback(
-                                                  context,
-                                                  message,
-                                                ),
+                                        builder: (_) => AdminItemDetailScreen(
+                                          liveUpdates:
+                                              widget.inventoryStream == null,
+                                          item: item,
+                                          categoryName: inventoryCategoryName(
+                                            item.categoryId,
+                                            records.data ?? [],
                                           ),
+                                          onDiscarded: (message) =>
+                                              showInventoryOverlayFeedback(
+                                                context,
+                                                message,
+                                              ),
                                         ),
                                       ),
                                     ),
                                   ),
-                            ],
-                          );
-                        },
-                      ),
+                                ),
+                              ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ],
@@ -257,7 +304,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
         ),
         bottomNavigationBar: SafeArea(top: false, child: _bottomNav(context)),
         floatingActionButton: FloatingActionButton(
-          tooltip: 'Add item',
+          tooltip: 'Add Inventory',
           backgroundColor: InventoryColors.green,
           foregroundColor: Colors.white,
           elevation: 0,
@@ -314,7 +361,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
       const NavItem(
         icon: Icons.inventory_2_outlined,
         activeIcon: Icons.inventory_2_rounded,
-        label: 'Items',
+        label: 'Inventory',
       ),
       NavItem(
         icon: Icons.bar_chart_outlined,

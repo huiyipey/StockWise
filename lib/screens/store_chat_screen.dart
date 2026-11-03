@@ -295,13 +295,14 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                   color: InventoryColors.ink,
                 ),
               ),
-              Text(
-                widget.repository.storeName,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: InventoryColors.muted,
+              if (!widget.repository.isAdmin)
+                Text(
+                  widget.repository.storeName,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: InventoryColors.muted,
+                  ),
                 ),
-              ),
             ],
           ),
         ),

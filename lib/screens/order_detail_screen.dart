@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
 import '../models/order_status.dart';
+import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_receipt.dart';
@@ -28,6 +29,7 @@ class OrderDetailScreen extends StatefulWidget {
     this.pickReceipt,
     this.uploadReceipt,
     this.receiptImage,
+    this.saveCancellation,
   });
   final StoreOrder order;
   final bool isAdmin, liveUpdates;
@@ -35,6 +37,7 @@ class OrderDetailScreen extends StatefulWidget {
   final Stream<StoreOrder?>? orderUpdates;
   final Future<InventoryBatch?> Function(OrderLine)? productLookup;
   final Future<void> Function(StoreOrder, String)? saveStatus;
+  final Future<void> Function(StoreOrder, String)? saveCancellation;
   final Future<XFile?> Function()? pickReceipt;
   final Future<String> Function(XFile, String)? uploadReceipt;
   final Future<ImageProvider> Function(String)? receiptImage;
@@ -48,7 +51,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late String? receiptPath = order.receiptPath;
   bool saving = false, uploadingReceipt = false, pickingReceipt = false;
   bool allowPop = false, missing = false;
-  String? openingLineId, saveError, receiptError, updateNotice;
+  String? openingLineId,
+      saveError,
+      receiptError,
+      updateNotice,
+      savedCancellationReason;
   StreamSubscription<StoreOrder?>? subscription;
   late Stream<List<OrderLine>> lines = watchLines();
   bool get dirty => widget.isAdmin && status != order.status;
@@ -114,7 +121,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             child: Column(
               children: [
                 InventoryHeader(
-                  title: 'Order details',
+                  title: 'Order Details',
                   back: true,
                   onBack: leave,
                 ),
@@ -153,10 +160,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                   OrderBadge(
                                     orderLabel(order.paymentStatus),
                                     value: order.paymentStatus,
+                                    fontSize: 12,
                                   ),
                                   OrderBadge(
                                     orderLabel(order.status),
                                     value: order.status,
+                                    fontSize: 12,
                                   ),
                                 ],
                               ),
@@ -172,7 +181,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 orderLabel(order.fulfillmentType),
                               ),
                               OrderValueRow(
-                                'Payment method',
+                                'Payment Method',
                                 order.payment['methodLabel'] as String? ?? '-',
                               ),
                             ],
@@ -302,11 +311,28 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             value: orderLabel(status),
                             onTap: busy || missing ? null : chooseStatus,
                           ),
+                          if ((savedCancellationReason ??
+                                      order.cancellationReason)
+                                  ?.isNotEmpty ==
+                              true)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: OrderNotice(
+                                'Cancellation Reason: ${savedCancellationReason ?? order.cancellationReason}',
+                              ),
+                            ),
                           if (saveError != null) ...[
                             const SizedBox(height: 16),
                             OrderNotice(saveError!, error: true),
                           ],
                         ] else ...[
+                          if (order.cancellationReason?.isNotEmpty == true)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 14),
+                              child: OrderNotice(
+                                'Cancellation Reason: ${order.cancellationReason}',
+                              ),
+                            ),
                           const SizedBox(height: 20),
                           const Text(
                             'Status updates appear in your order history.',
@@ -376,7 +402,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ProductArtwork(size: 57, imagePath: line.imagePath),
+              ProductArtwork(size: 72, imagePath: line.imagePath),
               const SizedBox(width: 13),
               Expanded(
                 child: Column(
@@ -385,15 +411,15 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     Text(
                       line.productName,
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 16,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${line.quantity} ${line.unitLabel} / Exp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
+                      '${line.quantity} ${line.unitLabel} · ${categoryTitleCase(line.categoryId.replaceAll('_', ' '))}\nExp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
                       style: const TextStyle(
-                        fontSize: 10.5,
+                        fontSize: 12,
                         height: 1.5,
                         color: InventoryColors.muted,
                       ),
@@ -402,13 +428,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            orderMoney(line.lineTotalCents),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: InventoryColors.green,
-                            ),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                orderMoney(line.lineTotalCents),
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: InventoryColors.green,
+                                ),
+                              ),
+                              if ((line.regularUnitPriceCents ??
+                                      line.unitPriceCents) >
+                                  line.unitPriceCents)
+                                Text(
+                                  orderMoney(
+                                    line.regularUnitPriceCents! * line.quantity,
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: InventoryColors.muted,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -426,6 +472,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               ),
                       ],
                     ),
+                    if (line.promotionLabel.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 7),
+                        child: Text(
+                          line.promotionLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: InventoryColors.green,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -494,11 +552,55 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return;
     }
     final cancel = next == 'cancelled';
+    String? cancellationReason;
+    if (cancel) {
+      final reasonController = TextEditingController();
+      final key = GlobalKey<FormState>();
+      cancellationReason = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          scrollable: true,
+          title: const Text('Cancellation Reason'),
+          content: Form(
+            key: key,
+            child: TextFormField(
+              key: const ValueKey('cancellation-reason'),
+              controller: reasonController,
+              maxLength: 500,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Why is this order being cancelled?',
+              ),
+              validator: (value) => (value ?? '').trim().isEmpty
+                  ? 'Enter a cancellation reason.'
+                  : null,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Keep Order'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (key.currentState!.validate()) {
+                  Navigator.pop(context, reasonController.text.trim());
+                }
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      reasonController.dispose();
+      if (cancellationReason == null || !mounted) return;
+    }
     if (!await showOrderConfirmation(
       context: context,
       title: cancel ? 'Cancel this order?' : 'Save order status?',
       message: cancel
-          ? 'Change #${order.orderNumber} to Cancelled?'
+          ? 'Cancel #${order.orderNumber}? Its ordered quantities will be returned to inventory.\nReason: $cancellationReason'
           : 'Update #${order.orderNumber} from ${orderLabel(order.status)} to ${orderLabel(next)}.',
       action: cancel ? 'Cancel order' : 'Save status',
       cancel: cancel ? 'Keep order' : 'Keep editing',
@@ -519,13 +621,40 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       saveError = null;
     });
     try {
-      await (widget.saveStatus ?? FirestoreService.instance.updateOrderStatus)(
-        current,
-        next,
-      );
+      if (cancel && widget.saveCancellation != null) {
+        await widget.saveCancellation!(current, cancellationReason!);
+      } else if (widget.saveStatus != null) {
+        await widget.saveStatus!(current, next);
+      } else {
+        await FirestoreService.instance.updateOrderStatus(
+          current,
+          next,
+          reason: cancellationReason,
+        );
+      }
       if (mounted) {
-        setState(() => allowPop = true);
-        Navigator.pop(context, true);
+        setState(() {
+          order = StoreOrder(
+            id: order.id,
+            orderNumber: order.orderNumber,
+            userId: order.userId,
+            status: next,
+            paymentStatus: cancel ? order.paymentStatus : 'paid',
+            fulfillmentType: order.fulfillmentType,
+            receiver: order.receiver,
+            payment: order.payment,
+            subtotalCents: order.subtotalCents,
+            shippingFeeCents: order.shippingFeeCents,
+            totalCents: order.totalCents,
+            placedAt: order.placedAt,
+            receiptPath: receiptPath,
+            cancellationReason: cancellationReason,
+          );
+          status = next;
+          savedCancellationReason = cancellationReason;
+          updateNotice = 'Order updated successfully.';
+        });
+        showInventoryOverlayFeedback(context, 'Order updated successfully.');
       }
     } catch (error) {
       if (mounted) {
@@ -567,7 +696,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           context,
           MaterialPageRoute(
             builder: (_) => widget.isAdmin
-                ? AdminItemDetailScreen(item: item)
+                ? AdminItemDetailScreen(
+                    item: item,
+                    liveUpdates: widget.liveUpdates,
+                  )
                 : ItemDetailScreen(item: item),
           ),
         );

@@ -1,9 +1,10 @@
 const {createHash} = require('node:crypto');
 const {HttpsError} = require('firebase-functions/v2/https');
 const postcodes = require('./data/malaysia_postcodes.json');
+const {titleCase,operatingHours}=require('./commerce_logic');
 
 function displayStoreName(value) {
-  return typeof value === 'string' ? value.trim().replace(/\s+/gu, ' ') : '';
+  return typeof value === 'string' ? titleCase(value) : '';
 }
 function normalizedStoreName(value) {
   return displayStoreName(value).normalize('NFKC').toLowerCase();
@@ -48,6 +49,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
     const {name, shopAddress, address} = storeDetails(request.data);
+    let hours;try{hours=operatingHours(request.data?.operatingHours);}catch(e){throw new HttpsError('invalid-argument',e.message);}
     const owner = await auth.getUser(request.auth.uid);
     if (owner.disabled) throw new HttpsError('permission-denied', 'This account is unavailable.');
     const stores = db.collection('stores');
@@ -74,7 +76,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
         name, nameLowercase: normalized, nameKey, code, shopAddress,
         ...(address ? {address} : {}),
         ownerUid: owner.uid, email: owner.email ?? null,
-        timezone: 'Asia/Kuala_Lumpur', currency: 'MYR', status: 'active',
+        timezone: 'Asia/Kuala_Lumpur', currency: 'MYR', status: 'active', operatingHours:hours,
         createdAt: timestamp, updatedAt: timestamp,
       });
       tx.set(store.collection('members').doc(owner.uid), {
@@ -92,11 +94,11 @@ function createStoreHandler({db, auth, serverTimestamp}) {
         storeId: store.id, expiryWarningDays: [2, 3, 7], updatedAt: timestamp,
       });
       tx.set(store.collection('settings').doc('commerce'), {
-        storeId: store.id, currency: 'MYR', deliveryFeeCents: 500, minimumOrderCents: 0, updatedAt: timestamp,
+        storeId: store.id, currency: 'MYR', deliveryFeeMode:'fixed', deliveryFeeCents: 500, postcodeFees:{}, minimumOrderCents: 0, updatedAt: timestamp,
       });
       tx.set(db.collection('users').doc(owner.uid), {activeStoreId: store.id, updatedAt: timestamp}, {merge: true});
     });
-    return {id: store.id, name, code, shopAddress, address, status: 'active', currency: 'MYR'};
+    return {id: store.id, name, code, shopAddress, address, operatingHours:hours, status: 'active', currency: 'MYR'};
   };
 }
 
@@ -152,10 +154,11 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
       if (oldReservation?.exists && oldReservation.data().storeId === storeId) tx.delete(oldRef);
       // Older app releases still send a single address. Never leave stale structured fields.
       const savedAddress = address ?? (shopAddress === data.shopAddress ? data.address ?? null : null);
-      tx.update(store, {name, shopAddress, address: savedAddress, nameLowercase: normalized, nameKey, updatedAt: timestamp});
+      let hours;try{hours=operatingHours(request.data?.operatingHours??data.operatingHours);}catch(e){throw new HttpsError('invalid-argument',e.message);}
+      tx.update(store, {name, shopAddress, address: savedAddress, operatingHours:hours, nameLowercase: normalized, nameKey, updatedAt: timestamp});
       return {
         id: storeId, name, shopAddress, address: savedAddress, code: data.code ?? storeId.slice(0, 6).toUpperCase(),
-        status: data.status ?? 'active', currency: data.currency ?? 'MYR', logoPath: data.logoPath ?? null,
+        status: data.status ?? 'active', currency: data.currency ?? 'MYR', logoPath: data.logoPath ?? null, operatingHours:hours,
       };
     });
   };

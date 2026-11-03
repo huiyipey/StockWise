@@ -49,7 +49,7 @@ class _StoreChatButtonState extends State<StoreChatButton> {
         isLabelVisible: unread > 0,
         label: Text('$unread'),
         child: IconButton(
-          tooltip: repository.isAdmin ? 'Customer messages' : 'Chat with admin',
+          tooltip: repository.isAdmin ? 'Customer Messages' : 'Chat with admin',
           onPressed: () => openStoreChat(context, repository: repository),
           style: widget.inventoryStyle
               ? IconButton.styleFrom(

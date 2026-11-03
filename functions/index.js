@@ -15,12 +15,28 @@ const {createEmailRegistrationHandler} = require('./auth_registration');
 const {createVerificationHandler, identityEmailSender, withVerifiedAccount} = require('./email_verification');
 const {createStoreHandler, updateStoreHandler} = require('./store_creation');
 const {normalizeAssistantRequest, assistantReply} = require('./shopping_assistant');
+const {commerceHandlers}=require('./commerce');
+const {getStorage}=require('firebase-admin/storage');
+const {getMessaging}=require('firebase-admin/messaging');
+const {onDocumentCreated,onDocumentWritten}=require('firebase-functions/v2/firestore');
+const {notificationHandlers}=require('./notifications');
 const geminiApiKey = defineSecret('GEMINI_API_KEY');
 
 initializeApp();
 setGlobalOptions({region: 'asia-southeast1', maxInstances: 5});
 const db = getFirestore();
 const verifiedCall = (options, handler) => onCall(options, withVerifiedAccount(getAuth(), handler));
+const commerce=commerceHandlers({db,serverTimestamp:()=>FieldValue.serverTimestamp(),Timestamp,bucket:getStorage().bucket()});
+const notifications=notificationHandlers({db,messaging:getMessaging(),serverTimestamp:()=>FieldValue.serverTimestamp(),Timestamp});
+exports.registerPushToken=verifiedCall({timeoutSeconds:30},notifications.registerPushToken);
+exports.unregisterPushToken=verifiedCall({timeoutSeconds:30},notifications.unregisterPushToken);
+exports.notifyNewOrder=onDocumentCreated('stores/{storeId}/orders/{orderId}',notifications.newOrder);
+exports.notifyChatMessage=onDocumentCreated('stores/{storeId}/conversations/{customerId}/messages/{messageId}',notifications.chatMessage);
+exports.classifyInventory=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.inventoryWritten);
+exports.inventoryClock=onSchedule({schedule:'every 1 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},notifications.inventoryClock);
+for(const name of ['quoteCart','placeOrder','updateOrderStatus','discardInventory','removeInventory','saveDeliveryFees','deleteStore']) {
+  exports[name]=verifiedCall({timeoutSeconds:name==='deleteStore'?540:120,memory:'512MiB'},commerce[name]);
+}
 exports.manageEmailVerification = onCall({timeoutSeconds: 45, maxInstances: 3},
   createVerificationHandler({db, auth: getAuth(),
     sendEmail: identityEmailSender(require('./auth_web_config.json'))}));
@@ -83,7 +99,10 @@ async function mailTransport() {
 async function teamEmails(store, ownerUid) {
   const members = await store.collection('members').get();
   const uids = new Set(ownerUid ? [ownerUid] : []);
-  for (const member of members.docs) if (member.data().isActive === true && roles.includes(member.data().role)) uids.add(member.id);
+  for (const member of members.docs) {
+    if(member.data().reportsByEmail===false)uids.delete(member.id);
+    else if (member.data().isActive === true && roles.includes(member.data().role)) uids.add(member.id);
+  }
   const result = new Set();
   // Auth is the authoritative source, not client-editable profile/member email fields.
   for (const uid of uids) {

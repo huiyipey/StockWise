@@ -77,6 +77,7 @@ class InventoryItemInput {
   final int basePriceCents;
   final bool promotionEnabled;
   final int? promotionPriceCents;
+  final Map<String, dynamic>? promotion;
   final bool notifyOnExpiry;
   final XFile? image;
 
@@ -92,6 +93,7 @@ class InventoryItemInput {
     required this.basePriceCents,
     required this.promotionEnabled,
     this.promotionPriceCents,
+    this.promotion,
     required this.notifyOnExpiry,
     this.image,
   });

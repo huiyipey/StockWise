@@ -85,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               active.where((item) {
                                 final days = item.daysUntilExpiryFrom(now);
                                 return days >= 0 &&
-                                    days <= 7 &&
+                                    days <= 30 &&
                                     (category == 'all' ||
                                         item.categoryId == category);
                               }).toList()..sort(
@@ -120,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       'View all',
                                       style: TextStyle(
                                         fontSize: 12,
+                                        decoration: TextDecoration.underline,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -143,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 const Card(
                                   child: InventoryEmpty(
                                     enlarged: true,
-                                    title: 'All clear for the next 7 days',
+                                    title: 'All clear for the next 30 days',
                                     body:
                                         'No stock expires in the next 7 days.',
                                     icon: Icons.check_rounded,
@@ -164,6 +165,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => AdminItemDetailScreen(
+                                            liveUpdates:
+                                                widget.inventoryStream == null,
                                             item: item,
                                             categoryName: inventoryCategoryName(
                                               item.categoryId,
@@ -325,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
       NavItem(
         icon: Icons.inventory_2_outlined,
         activeIcon: Icons.inventory_2_rounded,
-        label: 'Items',
+        label: 'Inventory',
         onTap: () => Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const ItemsScreen()),

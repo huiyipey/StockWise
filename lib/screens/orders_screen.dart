@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../services/firestore_service.dart';
 import '../services/store_session.dart';
@@ -75,7 +76,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                             horizontal: 14,
                             vertical: 12,
                           ),
-                          hintText: 'Search order number',
+                          hintText: 'Search order number and date',
                           prefixIcon: const Icon(
                             Icons.search_rounded,
                             size: 21,
@@ -153,7 +154,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         .where(
                           (order) =>
                               (status == 'all' || order.status == status) &&
-                              order.orderNumber.toLowerCase().contains(needle),
+                              [
+                                order.orderNumber,
+                                DateFormat('d MMM yyyy').format(order.placedAt),
+                                DateFormat('dd/MM/yyyy').format(order.placedAt),
+                                DateFormat('yyyy-MM-dd').format(order.placedAt),
+                                DateFormat(
+                                  'd MMMM yyyy',
+                                ).format(order.placedAt),
+                              ].any(
+                                (value) => value.toLowerCase().contains(needle),
+                              ),
                         )
                         .toList();
                     return ListView(
@@ -180,7 +191,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         for (final order in filtered)
                           OrderListCard(
                             order: order,
-                            enlarged: widget.isAdmin,
+                            enlarged: true,
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -221,7 +232,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           NavItem(
             icon: Icons.inventory_2_outlined,
             activeIcon: Icons.inventory_2_rounded,
-            label: 'Items',
+            label: 'Inventory',
             onTap: () => Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const ItemsScreen()),

@@ -9,6 +9,7 @@ import '../services/address_book_service.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
+import '../widgets/commerce_quote.dart';
 import 'orders_screen.dart';
 import 'address_book_screen.dart';
 
@@ -21,12 +22,14 @@ class CheckoutScreen extends StatefulWidget {
     this.accountEmail,
     this.placeOrder,
     this.onPlaced,
+    this.quoteLoader,
   });
   final List<CartLine> lines;
   final AddressBookRepository? addressRepository;
   final String? initialName, accountEmail;
   final Future<String> Function(Map<String, dynamic>, String)? placeOrder;
   final VoidCallback? onPlaced;
+  final Future<Map<String, dynamic>> Function(String)? quoteLoader;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
@@ -43,6 +46,48 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final postalCode = TextEditingController();
   String payment = 'Bank transfer';
   bool placing = false;
+  Map<String, dynamic>? quote;
+  String? quoteError;
+  bool quoting = false;
+  Timer? quoteDebounce;
+  int quoteRevision = 0;
+  bool get usesQuote => widget.quoteLoader != null || widget.placeOrder == null;
+  Future<void> refreshQuote() async {
+    if (!usesQuote) return;
+    final revision = ++quoteRevision;
+    setState(() {
+      quoting = true;
+      quoteError = null;
+    });
+    try {
+      final value =
+          await (widget.quoteLoader ??
+              (code) => FirestoreService.instance.quoteCart(code))(
+            postalCode.text.trim(),
+          );
+      if (mounted && revision == quoteRevision) setState(() => quote = value);
+    } catch (e) {
+      if (mounted && revision == quoteRevision) {
+        setState(() {
+          quote = null;
+          quoteError = e is StateError
+              ? e.message.toString()
+              : 'Could not calculate your order. Please refresh.';
+        });
+      }
+    } finally {
+      if (mounted && revision == quoteRevision) setState(() => quoting = false);
+    }
+  }
+
+  void scheduleQuote() {
+    if (!usesQuote) return;
+    quoteDebounce?.cancel();
+    quoteRevision++;
+    quoting = true;
+    quoteDebounce = Timer(const Duration(milliseconds: 350), refreshQuote);
+  }
+
   late final repository =
       widget.addressRepository ?? AddressBookService.instance;
   StreamSubscription<AddressBook>? addressSubscription;
@@ -65,6 +110,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       text:
           widget.accountEmail ?? FirebaseAuth.instance.currentUser?.email ?? '',
     );
+    if (usesQuote) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) refreshQuote();
+      });
+    }
     addressSubscription = repository.watch().listen(
       (value) {
         if (!mounted) return;
@@ -100,6 +150,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void dispose() {
     addressSubscription?.cancel();
+    quoteDebounce?.cancel();
     scroll.dispose();
     for (final controller in [
       name,
@@ -124,12 +175,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     city.text = saved.city;
     state.text = saved.state;
     postalCode.text = saved.postalCode;
+    scheduleQuote();
   }
 
   void deliveryEdited(String _) => setState(() {
     userSelectedAddress = true;
     manualDetails = true;
     selectedAddressId = null;
+    scheduleQuote();
   });
 
   Future<void> manageAddresses() async {
@@ -180,6 +233,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         city.clear();
         state.clear();
         postalCode.clear();
+        scheduleQuote();
       }
     });
   }
@@ -198,8 +252,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   int get subtotal =>
+      (quote?['subtotalCents'] as num?)?.toInt() ??
       widget.lines.fold<int>(0, (sum, line) => sum + line.lineTotalCents);
-  int get shipping => 500;
+  int get shipping =>
+      (quote?['deliveryFeeCents'] as num?)?.toInt() ?? (usesQuote ? 0 : 500);
+  bool get canPlace =>
+      !usesQuote ||
+      (!quoting && quoteError == null && quote?['canOrder'] == true);
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
@@ -298,7 +357,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        OrderTotals(subtotal: subtotal, delivery: shipping),
+                        if (usesQuote && quoting)
+                          const Center(child: CircularProgressIndicator()),
+                        if (!usesQuote || quote != null)
+                          OrderTotals(subtotal: subtotal, delivery: shipping),
+                        if (quote?['deliveryFeeCents'] == null && usesQuote)
+                          const Text(
+                            'Delivery fee: unavailable until a supported postcode is entered.',
+                          ),
+                        if (quote?['message'] != null)
+                          OrderNotice('${quote!['message']}', error: true),
+                        if (quoteError != null)
+                          OrderNotice(quoteError!, error: true),
+                        if (usesQuote) ...[
+                          QuoteLines(quote: quote),
+                          TextButton.icon(
+                            onPressed: quoting || placing ? null : refreshQuote,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh Order Total'),
+                          ),
+                        ],
                         if (placementError != null) ...[
                           const SizedBox(height: 18),
                           OrderNotice(placementError!, error: true),
@@ -322,7 +400,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 key: const ValueKey('place-order'),
                 label: placing ? 'Placing order...' : 'Place order',
                 busy: placing,
-                onPressed: place,
+                onPressed: canPlace ? place : null,
               ),
             ),
           ),
@@ -361,7 +439,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   );
 
   Future<void> place() async {
-    if (placing) return;
+    if (placing || !canPlace) return;
     if (!(formKey.currentState?.validate() ?? false)) {
       final invalid =
           {
@@ -412,6 +490,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             fulfillmentType: 'delivery',
             paymentMethod: payment,
             receiver: receiver,
+            expectedTotalCents: (quote?['totalCents'] as num?)?.toInt(),
           ))(receiver, payment);
       if (!mounted) return;
       if (widget.onPlaced != null) {
@@ -428,6 +507,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     } catch (error) {
       if (mounted) {
+        if (usesQuote) unawaited(refreshQuote());
         setState(
           () => placementError = error is StateError
               ? error.message

@@ -147,7 +147,9 @@ class _ShopScreenState extends State<ShopScreen> {
           });
     final promotions = filtered
         .where(
-          (item) => item.promotionEnabled && item.promotionPriceCents != null,
+          (item) =>
+              item.promotionEnabled &&
+              (item.promotionPriceCents != null || item.bundlePromotion),
         )
         .toList();
     final regular = filtered

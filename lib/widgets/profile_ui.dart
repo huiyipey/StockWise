@@ -28,7 +28,7 @@ class ProfileSection extends StatelessWidget {
     child: Text(
       title,
       style: const TextStyle(
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: FontWeight.w700,
         color: InventoryColors.ink,
       ),

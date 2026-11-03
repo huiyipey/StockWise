@@ -3,6 +3,12 @@ import 'package:intl/intl.dart';
 import 'category_label.dart';
 import 'product_name.dart';
 
+int calendarWeekDays(DateTime a, DateTime b) => DateTime.utc(
+  b.year,
+  b.month,
+  b.day,
+).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+
 DateTime reportDay(DateTime value) =>
     DateTime(value.year, value.month, value.day);
 int reportDayCount(DateTime first, DateTime last) =>
@@ -80,12 +86,15 @@ class ReportWindow {
             : DateTime(firstYear);
         end = DateTime(today.year, 12, 31);
       case ReportPeriod.weekly:
-        start = DateTime(
+        final isoYear = DateTime(
           today.year,
           today.month,
-          today.day - today.weekday + 1,
-        );
-        end = DateTime(start.year, start.month, start.day + 6);
+          today.day + 4 - today.weekday,
+        ).year;
+        final jan4 = DateTime(isoYear, 1, 4),
+            nextJan4 = DateTime(isoYear + 1, 1, 4);
+        start = DateTime(isoYear, 1, 4 - jan4.weekday + 1);
+        end = DateTime(isoYear + 1, 1, 4 - nextJan4.weekday);
       case ReportPeriod.custom:
         if (customStart == null || customEnd == null) {
           throw ArgumentError('Choose a date range.');
@@ -108,6 +117,16 @@ class ReportWindow {
         last = DateTime(cursor.year, cursor.month + 1, 0);
         next = DateTime(cursor.year, cursor.month + 1);
         label = axis = DateFormat('MMMM yyyy').format(cursor);
+      } else if (period == ReportPeriod.weekly) {
+        last = DateTime(cursor.year, cursor.month, cursor.day + 6);
+        next = DateTime(cursor.year, cursor.month, cursor.day + 7);
+        final year = DateTime(cursor.year, cursor.month, cursor.day + 3).year;
+        final jan4 = DateTime(year, 1, 4);
+        final first = DateTime(year, 1, 4 - jan4.weekday + 1);
+        final week = calendarWeekDays(first, cursor) ~/ 7 + 1;
+        axis = 'W${week.toString().padLeft(2, "0")} $year';
+        label =
+            '$axis / ${DateFormat("d MMM").format(cursor)} - ${DateFormat("d MMM yyyy").format(last)}';
       } else {
         last = cursor;
         next = DateTime(cursor.year, cursor.month, cursor.day + 1);
@@ -131,6 +150,7 @@ class ReportWindow {
   String get granularity => switch (period) {
     ReportPeriod.monthly => 'Monthly',
     ReportPeriod.yearly => 'Yearly',
+    ReportPeriod.weekly => 'Weekly',
     _ => 'Daily',
   };
 }

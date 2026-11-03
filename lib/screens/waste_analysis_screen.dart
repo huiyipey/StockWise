@@ -50,7 +50,7 @@ class WasteAnalysisScreen extends StatelessWidget {
       NavItem(
         icon: Icons.inventory_2_outlined,
         activeIcon: Icons.inventory_2_rounded,
-        label: 'Items',
+        label: 'Inventory',
         onTap: () => Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const ItemsScreen()),

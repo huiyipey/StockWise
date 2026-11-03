@@ -228,7 +228,7 @@ class _SignupScreenState extends State<SignupScreen> {
       child: AutofillGroup(
         onDisposeAction: AutofillContextAction.cancel,
         child: AuthCard(
-          title: 'Create account',
+          title: 'Create Account',
           subtitle: 'Start with your email and password.',
           children: [
             AuthField(
@@ -295,7 +295,7 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
             const SizedBox(height: 16),
             AuthButton(
-              label: 'Create account',
+              label: 'Create Account',
               busyLabel: 'Creating account...',
               busy: _creating,
               onPressed: _register,

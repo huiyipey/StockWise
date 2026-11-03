@@ -32,10 +32,10 @@ class ReportPeriodFilter extends StatelessWidget {
                   key: ValueKey('report-period-${value.name}'),
                   onPressed: () => onSelected(value),
                   style: TextButton.styleFrom(
-                    minimumSize: const Size(76, 46),
+                    minimumSize: const Size(76, 44),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 12,
+                      horizontal: 16,
+                      vertical: 10,
                     ),
                     tapTargetSize: MaterialTapTargetSize.padded,
                     backgroundColor: selected == value
@@ -44,9 +44,11 @@ class ReportPeriodFilter extends StatelessWidget {
                     foregroundColor: selected == value
                         ? InventoryColors.green
                         : InventoryColors.muted,
-                    shape: const StadiumBorder(),
+                    shape: const StadiumBorder(
+                      side: BorderSide(color: InventoryColors.line),
+                    ),
                     textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontSize: 14,
+                      fontSize: 13,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0,
                       height: 1.2,
@@ -219,7 +221,7 @@ class ReportMetrics extends StatelessWidget {
           Text(
             metric.$1,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: InventoryColors.muted,
             ),
@@ -230,7 +232,7 @@ class ReportMetrics extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               metric.$2,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
         ],
@@ -252,7 +254,7 @@ class ReportMetrics extends StatelessWidget {
               const Text(
                 'PRODUCT SALES',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   color: Color(0xFFC9DBCA),
                   fontWeight: FontWeight.w700,
                 ),
@@ -630,16 +632,11 @@ class _ReportChartState extends State<ReportChart> {
                 );
               },
             ),
-            if (widget.window.buckets.any(
-              (bucket) => bucket.upcoming(widget.today),
-            )) ...[
-              const SizedBox(height: 6),
-              const Text(
-                'Upcoming periods are shown in grey.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 9.5, color: InventoryColors.muted),
-              ),
-            ],
+            const Text(
+              'Tap a bar to view records in data',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 9.5, color: InventoryColors.muted),
+            ),
             if (widget.data.records.isEmpty) ...[
               const SizedBox(height: 20),
               Text(
@@ -729,22 +726,34 @@ class _ReportRecordsState extends State<ReportRecords> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              rows.isEmpty
-                  ? 'No records for this ${data.bucket.start == data.bucket.end ? 'date' : 'period'}.'
-                  : 'Records ${widget.page * 25 + 1}-${widget.page * 25 + rows.length} of ${data.records.length}',
-              style: const TextStyle(
-                fontSize: 10.5,
-                color: InventoryColors.muted,
-              ),
-            ),
-            if (rows.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 30),
-                child: Icon(
-                  Icons.receipt_long_outlined,
-                  size: 38,
+            if (rows.isNotEmpty)
+              Text(
+                'Records ${widget.page * 25 + 1}-${widget.page * 25 + rows.length} of ${data.records.length}',
+                style: const TextStyle(
+                  fontSize: 10.5,
                   color: InventoryColors.muted,
+                ),
+              ),
+            if (rows.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 30),
+                child: Column(
+                  children: [
+                    const Icon(
+                      Icons.receipt_long_outlined,
+                      size: 38,
+                      color: InventoryColors.muted,
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'No records for this ${data.bucket.start == data.bucket.end ? "date" : "period"}.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: InventoryColors.muted,
+                      ),
+                    ),
+                  ],
                 ),
               )
             else ...[

@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'cart_item_data.dart';
+import '../models/store_hours.dart';
+import '../models/shelf_life.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -12,7 +14,6 @@ import '../models/store_address.dart';
 import '../models/barcode_product.dart';
 import '../models/product_name.dart';
 import '../models/category_label.dart';
-import '../models/order_status.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -22,6 +23,84 @@ class FirestoreService {
   FirestoreService._();
 
   static final FirestoreService instance = FirestoreService._();
+  String? _pendingCheckoutId;
+  Future<Map<String, dynamic>> callCommerce(
+    String name,
+    Map<String, dynamic> data,
+  ) async {
+    try {
+      final result =
+          await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+              .httpsCallable(
+                name,
+                options: HttpsCallableOptions(
+                  timeout: Duration(seconds: name == 'deleteStore' ? 540 : 120),
+                ),
+              )
+              .call({'storeId': _storeId, ...data});
+      return Map<String, dynamic>.from(result.data as Map);
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(e.message ?? 'Please try again.');
+    }
+  }
+
+  Future<Map<String, dynamic>> quoteCart(String postcode) =>
+      callCommerce('quoteCart', {'postcode': postcode});
+  Stream<Map<String, dynamic>> watchCommerceSettings() => _storeRef
+      .collection('settings')
+      .doc('commerce')
+      .snapshots()
+      .map((s) => s.data() ?? {});
+  Future<void> saveDeliveryFees({
+    required String mode,
+    required int fixedCents,
+    required Map<String, int> postcodeFees,
+  }) async {
+    await callCommerce('saveDeliveryFees', {
+      'mode': mode,
+      'fixedCents': fixedCents,
+      'postcodeFees': postcodeFees,
+    });
+  }
+
+  Future<void> setReportEmailPreference(bool enabled) =>
+      _storeRef.collection('members').doc(_user.uid).update({
+        'reportsByEmail': enabled,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+  Stream<bool> watchReportEmailPreference() => _storeRef
+      .collection('members')
+      .doc(_user.uid)
+      .snapshots()
+      .map((s) => s.data()?['reportsByEmail'] as bool? ?? true);
+  Future<void> deleteStore(StoreInfo store) async {
+    try {
+      await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
+          .httpsCallable(
+            'deleteStore',
+            options: HttpsCallableOptions(
+              timeout: const Duration(seconds: 540),
+            ),
+          )
+          .call({'storeId': store.id, 'confirmName': store.name});
+    } on FirebaseFunctionsException catch (e) {
+      throw StateError(e.message ?? 'Could not delete this store.');
+    }
+  }
+
+  Stream<InventoryBatch?> watchInventoryBatch(String id) => _storeRef
+      .collection('inventoryBatches')
+      .doc(id)
+      .snapshots()
+      .map((s) => s.exists ? InventoryBatch.fromDoc(s) : null);
+  Future<InventoryBatch?> getInventoryBatch(String id) async {
+    final s = await _storeRef.collection('inventoryBatches').doc(id).get();
+    return s.exists ? InventoryBatch.fromDoc(s) : null;
+  }
+
+  Future<void> removeInventory(InventoryBatch item) async {
+    await callCommerce('removeInventory', {'batchId': item.id});
+  }
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -144,6 +223,7 @@ class FirestoreService {
     required String storeId,
     required String name,
     required StoreAddress address,
+    StoreHours? operatingHours,
   }) async {
     final validation =
         storeNameError(name) ?? shopAddressError(address.formatted);
@@ -160,6 +240,8 @@ class FirestoreService {
               'storeId': storeId,
               'name': name,
               'address': address.toMap(),
+              if (operatingHours != null)
+                'operatingHours': operatingHours.toMap(),
             });
     final data = Map<String, dynamic>.from(response.data as Map);
     return StoreInfo(
@@ -168,6 +250,7 @@ class FirestoreService {
       code: data['code'] as String,
       shopAddress: data['shopAddress'] as String,
       address: StoreAddress.fromMap(data['address']),
+      operatingHours: StoreHours.fromMap(data['operatingHours']),
       logoPath: data['logoPath'] as String?,
       status: data['status'] as String? ?? 'active',
       currency: data['currency'] as String? ?? 'MYR',
@@ -188,6 +271,7 @@ class FirestoreService {
   Future<StoreInfo> createStore({
     required String name,
     required StoreAddress address,
+    StoreHours? operatingHours,
   }) async {
     final validation =
         storeNameError(name) ?? shopAddressError(address.formatted);
@@ -200,7 +284,12 @@ class FirestoreService {
                 timeout: const Duration(seconds: 60),
               ),
             )
-            .call({'name': name, 'address': address.toMap()});
+            .call({
+              'name': name,
+              'address': address.toMap(),
+              if (operatingHours != null)
+                'operatingHours': operatingHours.toMap(),
+            });
     final data = Map<String, dynamic>.from(response.data as Map);
     return StoreInfo(
       id: data['id'] as String,
@@ -208,6 +297,7 @@ class FirestoreService {
       code: data['code'] as String,
       shopAddress: data['shopAddress'] as String,
       address: StoreAddress.fromMap(data['address']),
+      operatingHours: StoreHours.fromMap(data['operatingHours']),
     );
   }
 
@@ -390,6 +480,7 @@ class FirestoreService {
         basePriceCents: input.basePriceCents,
         promotionEnabled: input.promotionEnabled,
         promotionPriceCents: input.promotionPriceCents,
+        promotion: input.promotion,
         notifyOnExpiry: input.notifyOnExpiry,
         image: input.image,
       );
@@ -406,33 +497,41 @@ class FirestoreService {
     required int basePriceCents,
     required bool promotionEnabled,
     int? promotionPriceCents,
+    Map<String, dynamic>? promotion,
     required bool notifyOnExpiry,
     XFile? image,
   }) async {
     if (name.trim().isEmpty) throw ArgumentError('Product name is required.');
     final productName = capitalizeProductName(name.trim());
-    if (quantity < 0) throw ArgumentError('Quantity cannot be negative.');
-    if (basePriceCents < 0) throw ArgumentError('Price cannot be negative.');
+    if (quantity < 1) throw ArgumentError('Enter a valid quantity.');
+    if (basePriceCents <= 0) {
+      throw ArgumentError('Enter a price greater than zero.');
+    }
+    if (existing != null && !existing.expiryAt.isAfter(DateTime.now())) {
+      throw StateError('Expired inventory cannot be edited.');
+    }
     if (promotionEnabled &&
-        (promotionPriceCents == null || promotionPriceCents < 0)) {
+        promotion?['type'] != 'bundle' &&
+        (promotionPriceCents == null || promotionPriceCents <= 0)) {
       throw ArgumentError('Enter a valid promotion price.');
     }
 
     if (reusedProduct != null &&
-        (existing != null ||
-            reusedProduct.storeId != _storeId ||
+        (reusedProduct.storeId != _storeId ||
             reusedProduct.barcode != barcode?.trim())) {
       throw ArgumentError('Look up the barcode again for the selected store.');
     }
     final productRef = existing == null
         ? _storeRef.collection('products').doc(reusedProduct?.id)
-        : _storeRef.collection('products').doc(existing.productId);
+        : _storeRef
+              .collection('products')
+              .doc(reusedProduct?.id ?? existing.productId);
     final batchRef = existing == null
         ? _storeRef.collection('inventoryBatches').doc()
         : _storeRef.collection('inventoryBatches').doc(existing.id);
     final uploadedPath = await uploadProductImage(image, productRef.id);
     final imagePath =
-        uploadedPath ?? existing?.imagePath ?? reusedProduct?.imagePath;
+        uploadedPath ?? reusedProduct?.imagePath ?? existing?.imagePath;
     final categoryId = category;
     final write = _db.batch();
     final productData = <String, dynamic>{
@@ -464,6 +563,15 @@ class FirestoreService {
       'basePriceCents': basePriceCents,
       'promotionEnabled': promotionEnabled,
       'promotionPriceCents': promotionEnabled ? promotionPriceCents : null,
+      'promotion': promotionEnabled ? promotion : null,
+      'receivedAt': Timestamp.fromDate(existing?.receivedAt ?? DateTime.now()),
+      'totalShelfLifeDays': calendarDaysBetween(
+        existing?.receivedAt ?? DateTime.now(),
+        expiryAt,
+      ),
+      'shelfLifeType': shelfLifeType(
+        calendarDaysBetween(existing?.receivedAt ?? DateTime.now(), expiryAt),
+      ).name,
       'notifyOnExpiry': notifyOnExpiry,
       'status': quantity == 0 ? 'depleted' : 'active',
       'createdBy': _user.uid,
@@ -511,56 +619,11 @@ class FirestoreService {
     InventoryBatch batch, {
     required int quantity,
     String reason = 'discarded',
-  }) => _reduceBatch(
-    batch,
-    quantity: quantity,
-    eventType: 'discarded',
-    reason: reason,
-  );
-
-  Future<void> _reduceBatch(
-    InventoryBatch batch, {
-    required int quantity,
-    required String eventType,
-    String? reason,
   }) async {
-    if (quantity <= 0) throw ArgumentError('Quantity must be positive.');
-    final ref = _storeRef.collection('inventoryBatches').doc(batch.id);
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(ref);
-      final current = InventoryBatch.fromDoc(snapshot);
-      if (current.quantityOnHand < quantity) {
-        throw StateError('Not enough stock available.');
-      }
-      final remaining = current.quantityOnHand - quantity;
-      transaction.update(ref, {
-        'quantityOnHand': remaining,
-        'status': remaining == 0 ? 'depleted' : 'active',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(_storeRef.collection('inventoryEvents').doc(), {
-        'storeId': _storeId,
-        'batchId': current.id,
-        'productId': current.productId,
-        'productName': current.productName,
-        'categoryId': current.categoryId,
-        'eventType': eventType,
-        'quantity': quantity,
-        'quantityDelta': -quantity,
-        'reason': reason,
-        'actorUid': _user.uid,
-        'occurredAt': FieldValue.serverTimestamp(),
-      });
+    await callCommerce('discardInventory', {
+      'batchId': batch.id,
+      'quantity': quantity,
     });
-    await _createNotification(
-      recipientUid: _user.uid,
-      type: 'stock_consumed',
-      title: '${batch.productName} updated',
-      body:
-          '$quantity ${batch.unitLabel}${quantity == 1 ? '' : 's'} marked as $eventType.',
-      relatedCollection: 'inventoryBatches',
-      relatedDocumentId: batch.id,
-    );
   }
 
   Stream<List<CartLine>> watchCart() => _storeRef
@@ -623,20 +686,30 @@ class FirestoreService {
       await ref.delete();
       return;
     }
-    final batch = await _storeRef
-        .collection('inventoryBatches')
-        .doc(line.batchId)
-        .get();
-    if (!batch.exists) throw StateError('This item is no longer available.');
-    final current = InventoryBatch.fromDoc(batch);
-    if (!current.canSellAt(DateTime.now())) {
-      throw StateError('This item is no longer available.');
-    }
-    final available = current.availableQuantity;
-    if (quantity > available) throw StateError('Only $available available.');
-    await ref.update({
-      'quantity': quantity,
-      'updatedAt': FieldValue.serverTimestamp(),
+    await _db.runTransaction((transaction) async {
+      final batch = await transaction.get(
+        _storeRef.collection('inventoryBatches').doc(line.batchId),
+      );
+      final saved = await transaction.get(ref);
+      if (!saved.exists) throw StateError('This cart item has been removed.');
+      if (!batch.exists) throw StateError('This item is no longer available.');
+      final current = InventoryBatch.fromDoc(batch);
+      if (!current.canSellAt(DateTime.now())) {
+        throw StateError('This item is no longer available.');
+      }
+      if (quantity > current.availableQuantity) {
+        throw StateError('Only ${current.availableQuantity} available.');
+      }
+      transaction.set(
+        ref,
+        cartItemData(
+          storeId: _storeId,
+          batchId: batch.id,
+          batch: batch.data()!,
+          quantity: quantity,
+        )..['updatedAt'] = FieldValue.serverTimestamp(),
+        SetOptions(merge: true),
+      );
     });
   }
 
@@ -651,119 +724,27 @@ class FirestoreService {
     required String fulfillmentType,
     required Map<String, dynamic> receiver,
     required String paymentMethod,
+    int? expectedTotalCents,
   }) async {
     if (fulfillmentType != 'delivery') {
       throw ArgumentError('Only delivery orders are supported.');
     }
-    if (!const {'Bank transfer', 'Touch n Go'}.contains(paymentMethod)) {
-      throw ArgumentError('Select a supported payment method.');
+    final total =
+        expectedTotalCents ??
+        (await quoteCart(receiver['postalCode'] as String? ?? ''))['totalCents']
+            as int?;
+    if (total == null) {
+      throw StateError('Delivery is not configured for this postcode.');
     }
-    final cartItemsRef = _storeRef
-        .collection('carts')
-        .doc(_user.uid)
-        .collection('items');
-    final cartSnapshot = await cartItemsRef.get();
-    if (cartSnapshot.docs.isEmpty) throw StateError('Your cart is empty.');
-    final cartLines = cartSnapshot.docs.map(CartLine.fromDoc).toList();
-    final settings = await _storeRef
-        .collection('settings')
-        .doc('commerce')
-        .get();
-    final deliveryFee =
-        (settings.data()?['deliveryFeeCents'] as num?)?.round() ?? 500;
-    final subtotal = cartLines.fold<int>(
-      0,
-      (total, line) => total + line.lineTotalCents,
-    );
-    final orderRef = _storeRef.collection('orders').doc();
-    final orderNumber =
-        'SW-${DateTime.now().millisecondsSinceEpoch.toString().substring(6)}';
-
-    await _db.runTransaction((transaction) async {
-      final batches = <String, DocumentSnapshot<Map<String, dynamic>>>{};
-      for (final line in cartLines) {
-        batches[line.batchId] = await transaction.get(
-          _storeRef.collection('inventoryBatches').doc(line.batchId),
-        );
-      }
-      for (final line in cartLines) {
-        final batchRef = _storeRef
-            .collection('inventoryBatches')
-            .doc(line.batchId);
-        final batchSnap = batches[line.batchId]!;
-        if (!batchSnap.exists) {
-          throw StateError('${line.productName} is no longer available.');
-        }
-        final batch = InventoryBatch.fromDoc(batchSnap);
-        if (!batch.canSellAt(DateTime.now())) {
-          throw StateError(
-            '${line.productName} is no longer available. Please remove it from your cart.',
-          );
-        }
-        if (batch.availableQuantity < line.quantity) {
-          throw StateError(
-            'Only ${batch.availableQuantity} ${line.productName} available.',
-          );
-        }
-        final remaining = batch.quantityOnHand - line.quantity;
-        transaction.update(batchRef, {
-          'quantityOnHand': remaining,
-          'status': remaining == 0 ? 'depleted' : 'active',
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        transaction.set(orderRef.collection('items').doc(), {
-          'storeId': _storeId,
-          'productId': line.productId,
-          'batchId': line.batchId,
-          'productName': line.productName,
-          'imagePath': line.imagePath,
-          'expiryAt': Timestamp.fromDate(line.expiryAt),
-          'unitLabel': batch.unitLabel,
-          'quantity': line.quantity,
-          'unitPriceCents': line.unitPriceCents,
-          'lineTotalCents': line.lineTotalCents,
-        });
-        transaction.set(_storeRef.collection('inventoryEvents').doc(), {
-          'storeId': _storeId,
-          'batchId': line.batchId,
-          'productId': line.productId,
-          'productName': line.productName,
-          'categoryId': batch.categoryId,
-          'eventType': 'sold',
-          'quantity': line.quantity,
-          'quantityDelta': -line.quantity,
-          'actorUid': _user.uid,
-          'orderId': orderRef.id,
-          'occurredAt': FieldValue.serverTimestamp(),
-        });
-        transaction.delete(cartItemsRef.doc(line.id));
-      }
-      transaction.set(orderRef, {
-        'storeId': _storeId,
-        'orderNumber': orderNumber,
-        'userId': _user.uid,
-        'status': 'to_pay',
-        'paymentStatus': 'unpaid',
-        'fulfillmentType': fulfillmentType,
-        'receiver': receiver,
-        'payment': {'methodLabel': paymentMethod},
-        'subtotalCents': subtotal,
-        'shippingFeeCents': deliveryFee,
-        'totalCents': subtotal + deliveryFee,
-        'currency': 'MYR',
-        'placedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    _pendingCheckoutId ??= _db.collection('orders').doc().id;
+    final result = await callCommerce('placeOrder', {
+      'receiver': receiver,
+      'paymentMethod': paymentMethod,
+      'requestId': _pendingCheckoutId,
+      'expectedTotalCents': total,
     });
-    await _createNotification(
-      recipientUid: _user.uid,
-      type: 'order_status',
-      title: 'Order $orderNumber placed',
-      body: 'Your order is waiting for payment.',
-      relatedCollection: 'orders',
-      relatedDocumentId: orderRef.id,
-    );
-    return orderRef.id;
+    _pendingCheckoutId = null;
+    return result['id'] as String;
   }
 
   Stream<List<StoreOrder>> watchOrders({required bool admin}) {
@@ -810,10 +791,16 @@ class FirestoreService {
 
   Future<InventoryBatch?> findSavedOrderItem(OrderLine line) async {
     if (line.batchId.isEmpty) return null;
-    final snapshot = await _storeRef
+    var snapshot = await _storeRef
         .collection('inventoryBatches')
         .doc(line.batchId)
         .get(const GetOptions(source: Source.server));
+    if (!snapshot.exists) {
+      snapshot = await _storeRef
+          .collection('inventoryArchive')
+          .doc(line.batchId)
+          .get(const GetOptions(source: Source.server));
+    }
     if (!snapshot.exists) return null;
     final item = InventoryBatch.fromDoc(snapshot);
     if (line.productId.isNotEmpty && item.productId != line.productId) {
@@ -842,45 +829,16 @@ class FirestoreService {
     return ref.fullPath;
   }
 
-  Future<void> updateOrderStatus(StoreOrder order, String status) async {
-    final store = _storeRef;
-    final orderRef = store.collection('orders').doc(order.id);
-    final notice = store.collection('notifications').doc();
-    await _db.runTransaction((transaction) async {
-      final snapshot = await transaction.get(orderRef);
-      if (!snapshot.exists) {
-        throw StateError('This order is no longer available.');
-      }
-      final current = StoreOrder.fromDoc(snapshot);
-      if (current.status != order.status) {
-        throw StateError(
-          'This order changed. Review its current status before saving.',
-        );
-      }
-      final error = orderStatusError(
-        current.status,
-        status,
-        hasReceipt: current.receiptPath?.trim().isNotEmpty == true,
-      );
-      if (error != null) throw StateError(error);
-      if (current.status == status) return;
-      transaction.update(orderRef, {
-        'status': status,
-        'paymentStatus': orderPaymentAfter(current.paymentStatus, status),
-        'updatedAt': FieldValue.serverTimestamp(),
-        if (status == 'completed') 'completedAt': FieldValue.serverTimestamp(),
-      });
-      transaction.set(notice, {
-        'storeId': store.id,
-        'recipientUid': current.userId,
-        'type': 'order_status',
-        'title': 'Order ${current.orderNumber} updated',
-        'body': 'Status: ${orderLabel(status)}.',
-        'relatedCollection': 'orders',
-        'relatedDocumentId': current.id,
-        'readAt': null,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+  Future<void> updateOrderStatus(
+    StoreOrder order,
+    String status, {
+    String? reason,
+  }) async {
+    await callCommerce('updateOrderStatus', {
+      'orderId': order.id,
+      'status': status,
+      'expectedStatus': order.status,
+      'reason': reason,
     });
   }
 
@@ -898,25 +856,6 @@ class FirestoreService {
       .collection('notifications')
       .doc(id)
       .update({'readAt': FieldValue.serverTimestamp()});
-
-  Future<void> _createNotification({
-    required String recipientUid,
-    required String type,
-    required String title,
-    required String body,
-    String? relatedCollection,
-    String? relatedDocumentId,
-  }) => _storeRef.collection('notifications').add({
-    'storeId': _storeId,
-    'recipientUid': recipientUid,
-    'type': type,
-    'title': title,
-    'body': body,
-    'relatedCollection': relatedCollection,
-    'relatedDocumentId': relatedDocumentId,
-    'readAt': null,
-    'createdAt': FieldValue.serverTimestamp(),
-  });
 
   Stream<List<InventoryEvent>> watchWasteEvents() =>
       _storeRef.collection('inventoryEvents').snapshots().map((snapshot) {

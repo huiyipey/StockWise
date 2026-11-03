@@ -285,26 +285,21 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         footer: _verified
             ? null
             : _link(
-                _signingOut ? 'Signing out...' : 'Back to sign in',
+                _signingOut ? 'Signing out...' : 'Back to Sign In',
                 _busy ? null : _signOut,
                 size: 13,
               ),
         child: AuthCard(
-          leading: Align(
-            alignment: Alignment.centerLeft,
-            child: CircleAvatar(
-              radius: 27,
-              backgroundColor: AuthColors.soft,
-              child: Icon(
-                _verified ? Icons.check : Icons.mail_outline,
-                size: 28,
-                color: AuthColors.green,
-              ),
-            ),
-          ),
+          leading: _verified
+              ? const Icon(
+                  Icons.check_circle_outline_rounded,
+                  color: AuthColors.green,
+                  size: 40,
+                )
+              : null,
           title: _verified
               ? 'Email verified'
-              : (_sendFailed ? 'Verify your email' : 'Check your email'),
+              : (_sendFailed ? 'Verify your email' : 'Check Your Email'),
           subtitle: _verified
               ? "You're all set. Welcome to StockWise."
               : 'One last step before you get started.',
@@ -385,7 +380,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                     ? 'Try again'
                     : (_sendFailed
                           ? 'Send verification email'
-                          : "I've verified my email"),
+                          : "I've Verified My Email"),
                 busy: _loading || _sending || _checking,
                 busyLabel: _loading
                     ? 'Loading...'
@@ -397,10 +392,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
               const SizedBox(height: 14),
               _link(
                 _sendFailed
-                    ? "I've verified my email"
+                    ? "I've Verified My Email"
                     : _remaining > 0
                     ? 'Resend email in $time'
-                    : 'Resend verification email',
+                    : 'Resend Verification Email',
                 _busy
                     ? null
                     : (_sendFailed ? _check : (_remaining > 0 ? null : _send)),
@@ -411,6 +406,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 11, color: AuthColors.muted),
                 ),
+              const SizedBox(height: 20),
               _link(
                 'Wrong email address?',
                 _busy ? null : _editEmail,

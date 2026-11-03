@@ -255,6 +255,20 @@ class ShopProductCard extends StatelessWidget {
         '${item.availableQuantity} ${item.unitLabel} available',
         style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
       ),
+      if (item.bundlePromotion)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            item.promotionLabel,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: InventoryColors.green,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
     ],
   );
 
@@ -302,6 +316,20 @@ class ShopProductCard extends StatelessWidget {
         '${item.availableQuantity} ${item.unitLabel} available',
         style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
       ),
+      if (item.bundlePromotion)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            item.promotionLabel,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 10,
+              color: InventoryColors.green,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
     ],
   );
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/app_models.dart';
+import '../models/shelf_life.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
@@ -110,6 +111,17 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                              if (item.bundlePromotion)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Text(
+                                    item.promotionLabel,
+                                    style: const TextStyle(
+                                      color: InventoryColors.green,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
                               if (item.promotionEnabled &&
                                   item.promotionPriceCents != null)
                                 Text(
@@ -225,6 +237,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     ),
   );
 
+  Color get expiryColour => switch (item.expiryColour) {
+    ShelfLifeColour.green => InventoryColors.green,
+    ShelfLifeColour.orange => InventoryColors.amber,
+    ShelfLifeColour.red => InventoryColors.error,
+  };
   Widget stockCard() {
     final days = item.daysUntilExpiry;
     final countdown = days < 0
@@ -271,11 +288,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           const Divider(height: 34),
           Row(
             children: [
-              Icon(
-                Icons.access_time_rounded,
-                size: 28,
-                color: days < 0 ? InventoryColors.error : InventoryColors.amber,
-              ),
+              Icon(Icons.access_time_rounded, size: 28, color: expiryColour),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
@@ -311,9 +324,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                               vertical: 7,
                             ),
                             decoration: BoxDecoration(
-                              color: days < 0
-                                  ? const Color(0xFFFAE7E0)
-                                  : const Color(0xFFFBECD6),
+                              color: expiryColour.withValues(alpha: .12),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -321,9 +332,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: days < 0
-                                    ? InventoryColors.error
-                                    : InventoryColors.amber,
+                                color: expiryColour,
                               ),
                             ),
                           ),

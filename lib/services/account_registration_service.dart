@@ -21,7 +21,7 @@ class AccountRegistrationService {
                   timeout: const Duration(seconds: 15),
                 ),
               )
-          .call({'email': email});
+              .call({'email': email});
       final data = result.data;
       final registered = data is Map ? data['registered'] : null;
       if (registered is! bool) {

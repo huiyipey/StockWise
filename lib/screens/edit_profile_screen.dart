@@ -54,7 +54,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) => ProfileFormPage(
-    title: 'Edit profile',
+    title: 'Edit Profile',
     dirty: dirty,
     busy: saving || picking,
     completed: completed,
@@ -116,7 +116,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   style: const TextStyle(fontSize: 13),
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
-                    labelText: 'Phone number (optional)',
+                    labelText: 'Phone Number (Optional)',
                     hintText: 'Enter your phone number',
                   ),
                   validator: profilePhoneError,
@@ -154,7 +154,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       ),
     ),
     footer: ProfileFooter(
-      label: saving ? 'Saving...' : 'Save changes',
+      label: saving ? 'Saving...' : 'Save Changes',
       busy: saving,
       onPressed: saving || picking ? null : _save,
     ),

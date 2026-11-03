@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../models/report_data.dart';
@@ -173,46 +172,10 @@ class _ReportDashboardState extends State<ReportDashboard> {
       ..showSnackBar(inventoryFeedback(message, error: error));
   }
 
-  void openRecords(int index) {
-    setState(() {
-      selected = index;
-      page = 0;
-      graph = false;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final target = contentAnchor.currentContext;
-      if (mounted && target != null) {
-        Scrollable.ensureVisible(
-          target,
-          alignment: 0,
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOut,
-        ).ignore();
-      }
-    });
-  }
-
-  Widget emailStatus() =>
-      widget.emailStatus ??
-      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('systemStatus')
-            .doc('reportEmail')
-            .snapshots(),
-        builder: (context, snapshot) {
-          final state = snapshot.data?.data()?['status'];
-          return ReportNotice(
-            error: state == 'delivery_errors' || snapshot.hasError,
-            message: snapshot.hasError
-                ? 'Could not check email delivery status.'
-                : state == 'ready'
-                ? 'Email service is configured.'
-                : state == 'delivery_errors'
-                ? 'Some emails need attention. Contact your app administrator.'
-                : 'Email delivery is awaiting sender setup or its first successful run.',
-          );
-        },
-      );
+  void openRecords(int index) => setState(() {
+    selected = index;
+    page = 0;
+  });
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
@@ -255,23 +218,8 @@ class _ReportDashboardState extends State<ReportDashboard> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                const Text(
-                  'MYT',
-                  style: TextStyle(fontSize: 10, color: InventoryColors.muted),
-                ),
               ],
             ),
-            if (window.end.isAfter(today)) ...[
-              const SizedBox(height: 7),
-              Text(
-                'Totals through ${reportDate(today)}',
-                style: const TextStyle(
-                  fontSize: 10.5,
-                  color: InventoryColors.muted,
-                ),
-              ),
-            ],
             const SizedBox(height: 20),
             if (loading) ...[
               for (final height in [116.0, 80.0, 218.0])
@@ -318,20 +266,24 @@ class _ReportDashboardState extends State<ReportDashboard> {
                   ),
                   const SizedBox(width: 14),
                   IconButton(
-                    key: const ValueKey('report-download-icon'),
-                    tooltip: 'Download CSV',
-                    onPressed: downloading ? null : download,
+                    key: const ValueKey('report-refresh-icon'),
+                    tooltip: 'Refresh report',
+                    onPressed: loading
+                        ? null
+                        : () => setState(() {
+                            load();
+                          }),
                     style: IconButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: InventoryColors.green,
                       minimumSize: const Size.square(40),
                     ),
-                    icon: downloading
+                    icon: loading
                         ? const SizedBox.square(
                             dimension: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.download_rounded, size: 22),
+                        : const Icon(Icons.refresh_rounded, size: 22),
                   ),
                 ],
               ),
@@ -391,8 +343,6 @@ class _ReportDashboardState extends State<ReportDashboard> {
                 ),
               ),
             ],
-            const SizedBox(height: 24),
-            ReportEmailCard(status: emailStatus()),
           ],
         );
       },

@@ -11,6 +11,9 @@ import '../services/postcode_lookup.dart';
 import '../services/store_fields.dart';
 import '../widgets/auth_ui.dart';
 import '../widgets/store_ui.dart';
+import '../widgets/inventory_ui.dart';
+import '../widgets/store_hours_editor.dart';
+import '../models/store_hours.dart';
 
 /// Creation opens as a page; editing uses an unbranded, scrollable dialog.
 class CreateStoreDialog extends StatefulWidget {
@@ -30,6 +33,9 @@ class CreateStoreDialog extends StatefulWidget {
 
 class _CreateStoreDialogState extends State<CreateStoreDialog> {
   final form = GlobalKey<FormState>();
+  late StoreHours hours =
+      widget.initialStore?.operatingHours ?? const StoreHours();
+  late final initialHours = hours.toMap().toString();
   final scroll = ScrollController();
   late final name = TextEditingController(text: widget.initialStore?.name);
   late final line1 = TextEditingController(
@@ -59,7 +65,8 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
       allowExit = false;
   bool get editing => widget.initialStore != null;
   bool get hasUnsavedChanges =>
-      initialValues.entries.any((entry) => entry.key.text != entry.value);
+      initialValues.entries.any((entry) => entry.key.text != entry.value) ||
+      initialHours != hours.toMap().toString();
 
   @override
   void initState() {
@@ -168,19 +175,20 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
       error = null;
     });
     try {
-      final store =
-          await (widget.onCreate ??
-              (editing
-                  ? ({required String name, required StoreAddress address}) =>
-                        FirestoreService.instance.updateStore(
-                          storeId: widget.initialStore!.id,
-                          name: name,
-                          address: address,
-                        )
-                  : FirestoreService.instance.createStore))(
-            name: name.text,
-            address: address,
-          );
+      final store = widget.onCreate != null
+          ? await widget.onCreate!(name: name.text, address: address)
+          : editing
+          ? await FirestoreService.instance.updateStore(
+              storeId: widget.initialStore!.id,
+              name: name.text,
+              address: address,
+              operatingHours: hours,
+            )
+          : await FirestoreService.instance.createStore(
+              name: name.text,
+              address: address,
+              operatingHours: hours,
+            );
       if (!mounted) return;
       setState(() {
         saving = false;
@@ -338,11 +346,16 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
           ),
         StoreAddressField(
           fieldKey: 'store-name',
-          label: 'Store name',
+          label: 'Store Name',
           controller: name,
           hint: 'e.g. Harvest Market',
           enabled: !saving,
           validator: storeNameError,
+        ),
+        StoreHoursEditor(
+          value: hours,
+          enabled: !saving,
+          onChanged: (value) => setState(() => hours = value),
         ),
         StoreAddressField(
           fieldKey: 'address-1',
@@ -465,10 +478,11 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
       StorePrimaryButton(
         label: saving
             ? (editing ? 'Saving…' : 'Creating…')
-            : (editing ? 'Save changes' : 'Create store'),
+            : (editing ? 'Save Changes' : 'Create Store'),
         busy: saving,
         onPressed:
-            lookingUp ||
+            !hours.valid ||
+                lookingUp ||
                 lookupError != null ||
                 resolvedPostcode != postcode.text ||
                 storeNameError(name.text) != null ||
@@ -481,7 +495,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
       TextButton(
         onPressed: saving ? null : _requestLeave,
         style: TextButton.styleFrom(foregroundColor: AuthColors.green),
-        child: Text(editing ? 'Cancel' : 'Back to stores'),
+        child: Text(editing ? 'Cancel' : 'Back to Stores'),
       ),
     ],
   );
@@ -492,7 +506,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     onPopInvokedWithResult: (didPop, result) {
       if (!didPop) unawaited(_requestLeave());
     },
-    child: editing ? _editDialog() : _createPage(),
+    child: editing ? _editDialog() : InventoryTheme(child: _createPage()),
   );
 
   Widget _editDialog() => Dialog(
@@ -515,7 +529,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
               children: [
                 const Expanded(
                   child: Text(
-                    'Edit shop',
+                    'Edit Store',
                     style: TextStyle(
                       fontSize: 25,
                       color: AuthColors.ink,
@@ -563,31 +577,10 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     body: SafeArea(
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: saving ? null : _requestLeave,
-                  tooltip: 'Back',
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: AuthColors.muted,
-                  ),
-                ),
-                if (collapsed)
-                  const Expanded(
-                    child: Text(
-                      'Create store',
-                      style: TextStyle(
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                        color: AuthColors.ink,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          InventoryHeader(
+            title: 'Create Store',
+            back: true,
+            onBack: saving ? null : _requestLeave,
           ),
           Expanded(
             child: SingleChildScrollView(
@@ -602,7 +595,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
                       const AuthBrand(),
                       const SizedBox(height: 36),
                       AuthCard(
-                        title: 'Create store',
+                        title: 'Store Details',
                         subtitle: 'Add your store name and address.',
                         children: [const SizedBox(height: 24), _fields()],
                       ),

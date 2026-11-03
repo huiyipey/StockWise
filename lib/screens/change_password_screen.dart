@@ -98,7 +98,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) => ProfileFormPage(
-    title: 'Change password',
+    title: 'Change Password',
     busy: saving,
     body: Form(
       key: form,
@@ -164,7 +164,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       ),
     ),
     footer: ProfileFooter(
-      label: saving ? 'Changing...' : 'Change password',
+      label: saving ? 'Changing...' : 'Change Password',
       busy: saving,
       onPressed: saving ? null : _save,
     ),

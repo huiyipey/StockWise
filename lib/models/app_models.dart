@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'store_address.dart';
 import 'product_name.dart';
 import 'category_label.dart';
+import 'store_hours.dart';
+import 'shelf_life.dart';
+import 'promotion.dart';
 
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
@@ -50,6 +53,7 @@ class StoreInfo {
   final String shopAddress;
   final StoreAddress? address;
   final DateTime? createdAt;
+  final StoreHours operatingHours;
 
   const StoreInfo({
     required this.id,
@@ -61,6 +65,7 @@ class StoreInfo {
     this.shopAddress = '',
     this.address,
     this.createdAt,
+    this.operatingHours = const StoreHours(),
   });
 
   factory StoreInfo.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -81,6 +86,7 @@ class StoreInfo {
           : data['createdAt'] is DateTime
           ? data['createdAt'] as DateTime
           : null,
+      operatingHours: StoreHours.fromMap(data['operatingHours']),
     );
   }
 }
@@ -126,6 +132,9 @@ class InventoryBatch {
   final int? promotionPriceCents;
   final bool notifyOnExpiry;
   final String status;
+  final DateTime? receivedAt;
+  final int? totalShelfLifeDays;
+  final Map<String, dynamic>? promotion;
 
   const InventoryBatch({
     required this.id,
@@ -143,6 +152,9 @@ class InventoryBatch {
     this.promotionPriceCents,
     required this.notifyOnExpiry,
     required this.status,
+    this.receivedAt,
+    this.totalShelfLifeDays,
+    this.promotion,
   });
 
   int get availableQuantity =>
@@ -150,6 +162,16 @@ class InventoryBatch {
   int get sellingPriceCents => promotionEnabled && promotionPriceCents != null
       ? promotionPriceCents!
       : basePriceCents;
+  ShelfLifeType get shelfLife => shelfLifeType(
+    totalShelfLifeDays ??
+        calendarDaysBetween(receivedAt ?? DateTime.now(), expiryAt),
+  );
+  ShelfLifeColour get expiryColour =>
+      shelfLifeColour(shelfLife, daysUntilExpiry);
+  String get promotionLabel =>
+      promotionEnabled ? Promotion.fromMap(promotion).label : '';
+  bool get bundlePromotion =>
+      promotionEnabled && promotion?['type'] == 'bundle';
   bool canSellAt(DateTime time) =>
       status == 'active' && availableQuantity > 0 && expiryAt.isAfter(time);
   int get daysUntilExpiry => daysUntilExpiryFrom(DateTime.now());
@@ -187,6 +209,15 @@ class InventoryBatch {
           : _int(data['promotionPriceCents']),
       notifyOnExpiry: data['notifyOnExpiry'] as bool? ?? true,
       status: data['status'] as String? ?? 'active',
+      receivedAt: data['receivedAt'] is Timestamp
+          ? (data['receivedAt'] as Timestamp).toDate()
+          : data['createdAt'] is Timestamp
+          ? (data['createdAt'] as Timestamp).toDate()
+          : null,
+      totalShelfLifeDays: (data['totalShelfLifeDays'] as num?)?.toInt(),
+      promotion: data['promotion'] is Map
+          ? Map<String, dynamic>.from(data['promotion'])
+          : null,
     );
   }
 }
@@ -245,6 +276,7 @@ class StoreOrder {
   final int totalCents;
   final DateTime placedAt;
   final String? receiptPath;
+  final String? cancellationReason;
 
   const StoreOrder({
     required this.id,
@@ -260,6 +292,7 @@ class StoreOrder {
     required this.totalCents,
     required this.placedAt,
     this.receiptPath,
+    this.cancellationReason,
   });
 
   factory StoreOrder.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -278,6 +311,7 @@ class StoreOrder {
       totalCents: _int(data['totalCents']),
       placedAt: _date(data['placedAt']),
       receiptPath: data['receiptPath'] as String?,
+      cancellationReason: data['cancellationReason'] as String?,
     );
   }
 }
@@ -293,6 +327,9 @@ class OrderLine {
   final int quantity;
   final int unitPriceCents;
   final int lineTotalCents;
+  final String promotionLabel;
+  final String categoryId;
+  final int? regularUnitPriceCents;
 
   const OrderLine({
     required this.id,
@@ -305,6 +342,9 @@ class OrderLine {
     required this.quantity,
     required this.unitPriceCents,
     required this.lineTotalCents,
+    this.promotionLabel = '',
+    this.categoryId = 'Others',
+    this.regularUnitPriceCents,
   });
 
   factory OrderLine.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -325,6 +365,9 @@ class OrderLine {
       quantity: _int(data['quantity']),
       unitPriceCents: _int(data['unitPriceCents']),
       lineTotalCents: _int(data['lineTotalCents']),
+      promotionLabel: data['promotionLabel'] as String? ?? '',
+      categoryId: data['categoryId'] as String? ?? 'Others',
+      regularUnitPriceCents: (data['regularUnitPriceCents'] as num?)?.toInt(),
     );
   }
 }

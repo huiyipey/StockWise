@@ -214,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
     ),
     child: AutofillGroup(
       child: AuthCard(
-        title: 'Welcome back',
+        title: 'Welcome Back',
         subtitle: 'Sign in to continue to your store.',
         children: [
           AuthField(
