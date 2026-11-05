@@ -4,7 +4,8 @@ const day = (value) => DateTime.fromISO(value, {zone: ZONE});
 function range(start, end) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) throw Error('Choose valid dates.');
   const a = day(start), b = day(end).plus({days: 1});
-  if (!a.isValid || !b.isValid || b <= a || b.diff(a, 'days').days > 366) throw Error('Choose a range of 1 to 366 days.');
+  // A 53-week retail fiscal year contains 371 days.
+  if (!a.isValid || !b.isValid || b <= a || b.diff(a, 'days').days > 371) throw Error('Choose a range of 1 to 371 days.');
   return {start: a.toJSDate(), end: b.toJSDate()};
 }
 function report(kind, records, start, end, names = {}) {
@@ -48,14 +49,24 @@ function csv(data, storeName) {
   return '\uFEFF' + [[storeName, data.kind + ' report'], ['From', data.start, 'Through', data.end],
     ['Timezone', data.timezone],
     data.kind === 'sales' ? ['Paid orders', data.count, 'Product sales MYR', data.revenueCents / 100, 'Delivery MYR', data.deliveryCents / 100] : ['Waste units', data.units],
-    [], data.headers, ...data.rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+    [], data.headers, ...data.rows,
+    ...(data.kind === 'waste' ? [[], ['Waste by category'], ['Category', 'Units'],
+      ...Object.entries(data.categories).sort(([a], [b]) => a.localeCompare(b)), ['TOTAL', data.units]] : []),
+  ].map(row => row.map(csvCell).join(',')).join('\r\n');
 }
-function duePeriods(now = new Date()) {
+function duePeriods(now = new Date(), cadences = ['weekly', 'monthly']) {
   const today = DateTime.fromJSDate(now, {zone: ZONE}).startOf('day');
   const result = [];
-  if (today.weekday === 1) result.push({cadence: 'weekly', start: today.minus({weeks: 1}).toISODate(), end: today.minus({days: 1}).toISODate()});
-  if (today.day === 1) result.push({cadence: 'monthly', start: today.minus({months: 1}).startOf('month').toISODate(), end: today.minus({days: 1}).toISODate()});
+  if (cadences.includes('daily')) result.push({cadence: 'daily', start: today.minus({days: 1}).toISODate(), end: today.minus({days: 1}).toISODate()});
+  if (cadences.includes('weekly') && today.weekday === 1) result.push({cadence: 'weekly', start: today.minus({weeks: 1}).toISODate(), end: today.minus({days: 1}).toISODate()});
+  if (cadences.includes('monthly') && today.day === 1) result.push({cadence: 'monthly', start: today.minus({months: 1}).startOf('month').toISODate(), end: today.minus({days: 1}).toISODate()});
+  if (cadences.includes('yearly') && today.month === 1 && today.day === 1) result.push({cadence: 'yearly', start: today.minus({years: 1}).startOf('year').toISODate(), end: today.minus({days: 1}).toISODate()});
   return result;
+}
+function reportCadences(member = {}, kind) {
+  if (member.reportsByEmail === false) return [];
+  const values = member.reportEmailSchedules?.[kind];
+  return Array.isArray(values) ? [...new Set(values.filter(value => ['daily', 'weekly', 'monthly', 'yearly'].includes(value)))] : ['weekly'];
 }
 function recommendations(catalog, history) {
   const bought = new Map();
@@ -68,4 +79,4 @@ function recommendations(catalog, history) {
     return {id: item.id, reason: purchases ? 'You bought this product before.' : item.promotion ? 'Available on promotion in this store.' : 'Available in this store.', score: purchases * 10 + (item.promotion ? 2 : 0)};
   }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 6);
 }
-module.exports = {range, report, csv, duePeriods, recommendations};
+module.exports = {range, report, csv, duePeriods, reportCadences, recommendations};

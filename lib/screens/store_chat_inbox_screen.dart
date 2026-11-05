@@ -63,86 +63,126 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
                       separatorBuilder: (_, _) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
                         final row = rows[index];
-                        final unread = row.hasUnread(isAdmin: true);
-                        return Material(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => StoreChatScreen(
-                                  repository: widget.repository,
-                                  customerId: row.customerId,
-                                  customerName: row.customerName,
+                        return _ConversationMessages(
+                          key: ValueKey(row.customerId),
+                          repository: widget.repository,
+                          customerId: row.customerId,
+                          builder: (context, messages) {
+                            final unreadCount = messages.hasData
+                                ? row.unreadMessageCount(
+                                    messages.data!,
+                                    isAdmin: true,
+                                  )
+                                : null;
+                            final unread = unreadCount == null
+                                ? row.hasUnread(isAdmin: true)
+                                : unreadCount > 0;
+                            return Material(
+                              key: ValueKey('conversation-${row.customerId}'),
+                              color: unread
+                                  ? InventoryColors.soft
+                                  : Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                side: BorderSide(
+                                  color: unread
+                                      ? InventoryColors.green
+                                      : InventoryColors.line,
+                                  width: unread ? 1.5 : 1,
                                 ),
                               ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ProfilePhoto(
-                                    name: row.customerName,
-                                    radius: 22,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          row.customerName,
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: unread
-                                                ? FontWeight.w700
-                                                : FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          '${row.lastSenderRole == 'admin' ? 'Admin: ' : ''}${row.lastMessage}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            height: 1.4,
-                                            color: InventoryColors.muted,
-                                          ),
-                                        ),
-                                      ],
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(18),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StoreChatScreen(
+                                      repository: widget.repository,
+                                      customerId: row.customerId,
+                                      customerName: row.customerName,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      if (row.lastMessageAt != null)
-                                        Text(
-                                          DateFormat(
-                                            'd MMM\nh:mm a',
-                                          ).format(row.lastMessageAt!),
-                                          textAlign: TextAlign.end,
-                                          style: const TextStyle(
-                                            fontSize: 10.5,
-                                            color: InventoryColors.muted,
-                                          ),
+                                      ProfilePhoto(
+                                        name: row.customerName,
+                                        radius: 22,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              row.customerName,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: unread
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              '${row.lastSenderRole == 'admin' ? 'Admin: ' : ''}${row.lastMessage}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                height: 1.4,
+                                                color: unread
+                                                    ? InventoryColors.ink
+                                                    : InventoryColors.muted,
+                                                fontWeight: unread
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w400,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      if (unread) ...[
-                                        const SizedBox(height: 10),
-                                        const ProfileTag('Unread'),
-                                      ],
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.end,
+                                        children: [
+                                          if (row.lastMessageAt != null)
+                                            Text(
+                                              DateFormat(
+                                                'd MMM\nh:mm a',
+                                              ).format(row.lastMessageAt!),
+                                              textAlign: TextAlign.end,
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                color: InventoryColors.muted,
+                                              ),
+                                            ),
+                                          if (unread) ...[
+                                            const SizedBox(height: 10),
+                                            ProfileTag(
+                                              unreadCount == null
+                                                  ? 'Unread'
+                                                  : '$unreadCount unread',
+                                              key: ValueKey(
+                                                'conversation-unread-${row.customerId}',
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                     ],
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         );
                       },
                     );
@@ -154,5 +194,41 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
         ),
       ),
     ),
+  );
+}
+
+// Each visible conversation owns its listener. Rows recreated after scrolling
+// get a fresh stream, including repositories that return single-use streams.
+class _ConversationMessages extends StatefulWidget {
+  const _ConversationMessages({
+    super.key,
+    required this.repository,
+    required this.customerId,
+    required this.builder,
+  });
+  final StoreChatRepository repository;
+  final String customerId;
+  final AsyncWidgetBuilder<List<StoreChatMessage>> builder;
+  @override
+  State<_ConversationMessages> createState() => _ConversationMessagesState();
+}
+
+class _ConversationMessagesState extends State<_ConversationMessages> {
+  late Stream<List<StoreChatMessage>> messages = widget.repository
+      .watchMessages(widget.customerId);
+
+  @override
+  void didUpdateWidget(covariant _ConversationMessages oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository ||
+        oldWidget.customerId != widget.customerId) {
+      messages = widget.repository.watchMessages(widget.customerId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<StoreChatMessage>>(
+    stream: messages,
+    builder: widget.builder,
   );
 }

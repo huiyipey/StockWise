@@ -525,31 +525,7 @@ class _ShopScreenState extends State<ShopScreen> {
         await FirestoreService.instance.addToCart(item);
       }
       if (!mounted) return;
-      showCustomerFeedback(
-        context,
-        '${item.productName} added to cart',
-        bottomMargin: 6,
-        action: TextButton(
-          style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
-            minimumSize: Size.zero,
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          onPressed: () {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            openCart();
-          },
-          child: const Text(
-            'View cart',
-            style: TextStyle(
-              fontSize: 13,
-              decoration: TextDecoration.underline,
-              decorationColor: Colors.white,
-            ),
-          ),
-        ),
-      );
+      showAddedToCartFeedback(context, item.productName, onViewCart: openCart);
     } catch (error) {
       if (!mounted) return;
       final message = error is StateError

@@ -146,11 +146,80 @@ class _ReportDashboardState extends State<ReportDashboard> {
     if (downloading || loading || data == null) return;
     final selection = data!.select(window.buckets[selected]);
     if (selection.bucket.upcoming(today)) return;
+    final format = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Download Report',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              for (final option in [
+                ('chart', 'Chart', 'PDF · all chart periods'),
+                ('data', 'Data', 'CSV · selected period records'),
+                ('both', 'Both', 'ZIP · chart PDF and selected-period CSV'),
+              ])
+                ListTile(
+                  key: ValueKey('report-export-${option.$1}'),
+                  leading: Icon(
+                    option.$1 == 'chart'
+                        ? Icons.bar_chart_rounded
+                        : option.$1 == 'data'
+                        ? Icons.table_chart_outlined
+                        : Icons.folder_zip_outlined,
+                    color: InventoryColors.green,
+                  ),
+                  title: Text(option.$2),
+                  subtitle: Text(option.$3),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => Navigator.pop(context, option.$1),
+                ),
+              if (kind == 'waste')
+                const Text(
+                  'Waste by category is included in every waste report file.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.4,
+                    color: InventoryColors.muted,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (format == null || !mounted) return;
     final export = selection.export(
       storeName: data!.storeName,
       today: today,
       openedAt: opened,
     );
+    export.addAll({
+      'format': format,
+      'storeName': data!.storeName,
+      'chartRange': window.dateLabel,
+      'selectionLabel': selection.bucket.label,
+      'chart': [
+        for (final bucket in window.buckets)
+          {'label': bucket.axisLabel, 'value': data!.select(bucket).value},
+      ],
+      'categories': selection.categories,
+      'selectedUnits': selection.units,
+      'headers': selection.headers,
+      'rows': selection.records.map((row) => row.cells(kind)).toList(),
+      if (period == ReportPeriod.weekly)
+        'calendarNote':
+            'Fiscal year starts Monday on or before 1 January. Monday-Sunday weeks; periods repeat 4, 4, 5 weeks. A 53rd week is added to period 12.',
+    });
     setState(() => downloading = true);
     try {
       final saved = await (widget.downloader ?? ReportService.download)(export);
@@ -205,6 +274,18 @@ class _ReportDashboardState extends State<ReportDashboard> {
               onSelected: choosePeriod,
             ),
             const SizedBox(height: 12),
+            if (period == ReportPeriod.weekly) ...[
+              const Text(
+                'Fiscal year starts Monday on or before 1 January. Monday–Sunday weeks follow 4, 4, 5 weeks per quarter. A 53rd week is included in period 12.',
+                key: ValueKey('retail-calendar-explanation'),
+                style: TextStyle(
+                  fontSize: 11,
+                  height: 1.5,
+                  color: InventoryColors.muted,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -328,7 +409,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
               const SizedBox(height: 20),
               InventoryButton(
                 key: const ValueKey('report-download'),
-                label: downloading ? 'Saving...' : 'Download CSV',
+                label: downloading ? 'Saving...' : 'Download Report',
                 busy: downloading,
                 icon: Icons.download_rounded,
                 onPressed: downloading ? null : download,

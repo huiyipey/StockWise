@@ -66,10 +66,8 @@ class _OrderReceiptState extends State<OrderReceipt> {
             padding: const EdgeInsets.symmetric(vertical: 28),
             child: Column(
               children: [
-                Icon(
-                  widget.isAdmin
-                      ? Icons.description_outlined
-                      : Icons.attach_file_rounded,
+                const Icon(
+                  Icons.attach_file_rounded,
                   size: 30,
                   color: InventoryColors.muted,
                 ),

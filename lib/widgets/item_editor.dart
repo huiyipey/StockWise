@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -66,6 +68,24 @@ class _ItemEditorState extends State<ItemEditor> {
   XFile? image;
   bool saving = false, allowExit = false;
   late Map<String, dynamic> promotionData;
+  late final String initialDraft;
+  String get draft => jsonEncode({
+    'name': name.text,
+    'barcode': barcode.text,
+    'unit': unit.text,
+    'basePrice': basePrice.text,
+    'quantity': quantity.text,
+    'promotion': promotion,
+    if (promotion)
+      'promotionData': Map.fromEntries(
+        promotionData.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+      ),
+    'notifications': notifications,
+    'expiryAt': expiryAt?.toIso8601String(),
+    'category': category,
+    'image': image?.path,
+    'reusedImage': reusedProduct?.imagePath,
+  });
   late final categoriesStream =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
   bool get busy => saving || lookingUp || scanning;
@@ -103,6 +123,7 @@ class _ItemEditorState extends State<ItemEditor> {
     notifications = item?.notifyOnExpiry ?? true;
     expiryAt = item?.expiryAt;
     category = item?.categoryId;
+    initialDraft = draft;
     barcode.addListener(_barcodeChanged);
   }
 
@@ -839,13 +860,15 @@ class _ItemEditorState extends State<ItemEditor> {
 
   Future<void> _leave() async {
     if (busy) return;
-    final discard = await showProfileConfirmation(
-      context: context,
-      title: 'Discard inventory changes?',
-      message: 'Your changes have not been saved.',
-      action: 'Discard and leave',
-      danger: true,
-    );
+    final discard =
+        draft == initialDraft ||
+        await showProfileConfirmation(
+          context: context,
+          title: 'Discard inventory changes?',
+          message: 'Your changes have not been saved.',
+          action: 'Discard and leave',
+          danger: true,
+        );
     if (discard && mounted) {
       setState(() => allowExit = true);
       await WidgetsBinding.instance.endOfFrame;

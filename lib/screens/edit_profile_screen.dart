@@ -116,9 +116,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   enabled: !saving && !picking,
                   style: const TextStyle(fontSize: 13),
                   keyboardType: TextInputType.phone,
+                  autofillHints: const [AutofillHints.telephoneNumber],
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   decoration: const InputDecoration(
                     labelText: 'Phone Number (Optional)',
-                    hintText: 'Enter your phone number',
+                    hintText: 'e.g. 012-345 6789',
                   ),
                   validator: profilePhoneError,
                 ),

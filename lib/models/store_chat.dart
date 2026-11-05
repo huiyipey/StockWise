@@ -41,6 +41,25 @@ class StoreConversation {
     final readAt = isAdmin ? adminReadAt : customerReadAt;
     return readAt == null || lastMessageAt!.isAfter(readAt);
   }
+
+  int unreadMessageCount(
+    Iterable<StoreChatMessage> messages, {
+    required bool isAdmin,
+  }) {
+    // Sending a reply marks the preceding messages read. This also handles
+    // legacy conversation records that do not yet carry a read timestamp.
+    if (lastSenderRole == (isAdmin ? 'admin' : 'customer')) return 0;
+    final readAt = isAdmin ? adminReadAt : customerReadAt;
+    final incomingRole = isAdmin ? 'customer' : 'admin';
+    return messages
+        .where(
+          (message) =>
+              message.senderRole == incomingRole &&
+              message.sentAt != null &&
+              (readAt == null || message.sentAt!.isAfter(readAt)),
+        )
+        .length;
+  }
 }
 
 class StoreChatMessage {

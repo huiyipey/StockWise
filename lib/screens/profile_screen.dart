@@ -15,6 +15,8 @@ import '../services/store_chat_service.dart';
 import '../services/password_change_service.dart';
 import '../services/store_fields.dart';
 import '../models/app_models.dart';
+import '../models/report_email_schedule.dart';
+import 'report_email_settings_screen.dart';
 import 'create_store_dialog.dart';
 import 'cart_screen.dart';
 import 'address_book_screen.dart';
@@ -238,7 +240,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Divider(height: 1, indent: 16, endIndent: 16),
               ],
               if (session.canManageMembers) ...[
-                const Divider(height: 1, indent: 16, endIndent: 16),
                 ProfileAction(
                   label: 'Manage Store Admins',
                   subtitle: 'Add staff access by email',
@@ -275,7 +276,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const Divider(height: 1, indent: 16, endIndent: 16),
               ],
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+                padding: const EdgeInsets.fromLTRB(16, 17, 8, 17),
                 child: Row(
                   children: [
                     const Icon(
@@ -325,11 +326,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _ReportEmailPreference(
                   disabled: loggingOut,
                   stream: widget.profileStream != null
-                      ? Stream.value(true)
-                      : FirestoreService.instance.watchReportEmailPreference(),
+                      ? Stream.value(const ReportEmailSchedule())
+                      : FirestoreService.instance.watchReportEmailSchedule(),
                   save: widget.profileStream != null
-                      ? (enabled) async {}
-                      : FirestoreService.instance.setReportEmailPreference,
+                      ? (value) async {}
+                      : FirestoreService.instance.saveReportEmailSchedule,
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
               ],
@@ -737,72 +738,43 @@ class _ReportEmailPreference extends StatefulWidget {
     required this.save,
     required this.disabled,
   });
-  final Stream<bool> stream;
-  final Future<void> Function(bool) save;
+  final Stream<ReportEmailSchedule> stream;
+  final Future<void> Function(ReportEmailSchedule) save;
   final bool disabled;
   @override
   State<_ReportEmailPreference> createState() => _ReportEmailPreferenceState();
 }
 
 class _ReportEmailPreferenceState extends State<_ReportEmailPreference> {
-  bool saving = false;
-  bool? value;
-  String? error;
+  ReportEmailSchedule? saved;
   @override
-  Widget build(BuildContext context) => StreamBuilder<bool>(
+  Widget build(BuildContext context) => StreamBuilder<ReportEmailSchedule>(
     stream: widget.stream,
-    builder: (context, snapshot) => Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.mail_outline_rounded,
-                size: 21,
-                color: InventoryColors.green,
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Text(
-                  'Receive Reports via Email',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
-              Switch(
-                value: value ?? snapshot.data ?? true,
-                onChanged: saving || widget.disabled || snapshot.hasError
-                    ? null
-                    : (enabled) async {
-                        setState(() {
-                          value = enabled;
-                          saving = true;
-                          error = null;
-                        });
-                        try {
-                          await widget.save(enabled);
-                        } catch (_) {
-                          if (mounted) {
-                            setState(() {
-                              value = null;
-                              error =
-                                  'Could not update report email preference.';
-                            });
-                          }
-                        } finally {
-                          if (mounted) setState(() => saving = false);
-                        }
-                      },
-              ),
-            ],
-          ),
-        ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            child: ProfileNotice(error!, error: true),
-          ),
-      ],
-    ),
+    builder: (context, snapshot) {
+      final schedule = saved ?? snapshot.data ?? const ReportEmailSchedule();
+      return ProfileAction(
+        key: const ValueKey('profile-report-email'),
+        label: 'Receive Reports via Email',
+        subtitle: snapshot.hasError
+            ? 'Could not load report schedules'
+            : schedule.subtitle,
+        icon: Icons.mail_outline_rounded,
+        trailingLabel: schedule.enabled ? 'Enabled' : 'Disabled',
+        onTap: widget.disabled || snapshot.hasError
+            ? null
+            : () async {
+                final result = await Navigator.push<ReportEmailSchedule>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReportEmailSettingsScreen(
+                      initial: schedule,
+                      save: widget.save,
+                    ),
+                  ),
+                );
+                if (mounted && result != null) setState(() => saved = result);
+              },
+      );
+    },
   );
 }

@@ -63,6 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 enlarged: true,
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
                 storeIcon: LocalDatabaseShortcut(
+                  compact: true,
                   onOpen: () async {
                     await Navigator.of(context).push<void>(
                       MaterialPageRoute(
@@ -164,6 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               InventoryFilters(
                                 compact: true,
+                                outlined: true,
                                 ids: ids,
                                 records: records.data ?? [],
                                 category: effectiveCategory,

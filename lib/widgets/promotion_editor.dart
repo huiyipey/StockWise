@@ -95,24 +95,16 @@ class _PromotionEditorState extends State<PromotionEditor> {
     ValueChanged<String> change,
   ) => Padding(
     padding: const EdgeInsets.only(bottom: 16),
-    child: DropdownButtonFormField<String>(
+    child: InventoryChoiceField(
       key: ValueKey('promotion-$label-$value'),
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label),
-      items: values.entries
-          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-          .toList(),
-      onChanged: !widget.enabled
-          ? null
-          : (v) {
-              if (v != null) {
-                setState(() {
-                  change(v);
-                  changed();
-                });
-              }
-            },
+      label: label,
+      value: value,
+      choices: values,
+      enabled: widget.enabled,
+      onChanged: (v) => setState(() {
+        change(v);
+        changed();
+      }),
     ),
   );
   Widget field(
@@ -128,12 +120,17 @@ class _PromotionEditorState extends State<PromotionEditor> {
       key: ValueKey(key),
       controller: controller,
       enabled: widget.enabled,
+      style: const TextStyle(fontSize: 14, color: InventoryColors.muted),
       keyboardType: TextInputType.numberWithOptions(decimal: money || percent),
-      decoration: InputDecoration(
-        labelText: label,
+      decoration: inventoryEditorDecoration(
+        label,
         prefixText: money ? 'RM ' : null,
         suffixText: percent ? '%' : null,
-        hintText: money ? '0.00' : null,
+        hintText: money
+            ? '0.00'
+            : percent
+            ? 'e.g. 10'
+            : 'e.g. 2',
       ),
       onChanged: (_) => changed(),
       validator: (value) {
@@ -223,8 +220,8 @@ class _PromotionEditorState extends State<PromotionEditor> {
                       });
                     },
               child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Bundle Product (Y)',
+                decoration: inventoryEditorDecoration(
+                  'Bundle Product (Y)',
                   errorText: state.errorText,
                 ),
                 child: Row(
@@ -234,7 +231,10 @@ class _PromotionEditorState extends State<PromotionEditor> {
                         targetName.isEmpty
                             ? 'Search name or barcode'
                             : targetName,
-                        style: const TextStyle(fontSize: 14),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: InventoryColors.muted,
+                        ),
                       ),
                     ),
                     const Icon(Icons.search_rounded, size: 20),
@@ -268,15 +268,6 @@ class _PromotionEditorState extends State<PromotionEditor> {
             money: reward == 'fixed',
             percent: reward == 'percentage',
           ),
-        const Text(
-          'For same-product offers, the cart quantity includes reward units (Buy 2 Get 1 means select 3). Different bundle products are added automatically. Existing percentage or fixed discounts on those products apply first.',
-          style: TextStyle(
-            fontSize: 11.5,
-            height: 1.5,
-            color: InventoryColors.muted,
-          ),
-        ),
-        const SizedBox(height: 14),
       ],
     ],
   );

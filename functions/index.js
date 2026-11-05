@@ -9,7 +9,7 @@ const {GoogleGenAI} = require('@google/genai');
 const {defineSecret} = require('firebase-functions/params');
 const nodemailer = require('nodemailer');
 const {createHash} = require('node:crypto');
-const {range, report, csv, duePeriods, recommendations} = require('./reporting');
+const {range, report, csv, duePeriods, reportCadences, recommendations} = require('./reporting');
 const {createAdminInviteHandler} = require('./admin_invites');
 const {createEmailRegistrationHandler} = require('./auth_registration');
 const {createVerificationHandler, identityEmailSender, withVerifiedAccount} = require('./email_verification');
@@ -104,38 +104,42 @@ exports.emailOrderConfirmation=onDocumentCreated({document:'stores/{storeId}/ord
 exports.retryOrderConfirmations=onSchedule({schedule:'every 15 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},orderEmails.retry);
 async function teamEmails(store, ownerUid) {
   const members = await store.collection('members').get();
-  const uids = new Set(ownerUid ? [ownerUid] : []);
+  const uids = new Map(ownerUid ? [[ownerUid, {}]] : []);
   for (const member of members.docs) {
-    if(member.data().reportsByEmail===false)uids.delete(member.id);
-    else if (member.data().isActive === true && roles.includes(member.data().role)) uids.add(member.id);
+    if(member.data().reportsByEmail===false || member.data().isActive !== true || !roles.includes(member.data().role)) uids.delete(member.id);
+    else uids.set(member.id, member.data());
   }
-  const result = new Set();
+  const result = [];
   // Auth is the authoritative source, not client-editable profile/member email fields.
-  for (const uid of uids) {
-    try { const user = await getAuth().getUser(uid); if (user.email && !user.disabled) result.add(user.email.toLowerCase()); }
+  for (const [uid, member] of uids) {
+    try { const user = await getAuth().getUser(uid); if (user.email && !user.disabled) result.push({email: user.email.toLowerCase(), sales: reportCadences(member, 'sales'), waste: reportCadences(member, 'waste')}); }
     catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
   }
-  return [...result];
+  return result;
 }
 exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/Kuala_Lumpur',
   timeoutSeconds: 540, memory: '512MiB', maxInstances: 1, retryCount: 3}, async event => {
-  const periods = duePeriods(new Date(event.scheduleTime));
+  const periods = duePeriods(new Date(event.scheduleTime), ['daily', 'weekly', 'monthly', 'yearly']);
   if (!periods.length) return;
   let mail;
-  try { mail = await mailTransport(); }
-  catch (error) {
-    await db.collection('systemStatus').doc('reportEmail').set({status: 'configuration_required', updatedAt: FieldValue.serverTimestamp()});
-    console.error('Report mail sender is not configured or accessible.');
-    throw Error('REPORT_SMTP_CONFIG is required.');
-  }
   const stores = await db.collection('stores').where('status', '==', 'active').get();
   let failed = false;
   for (const doc of stores.docs) {
     try {
       const recipients = await teamEmails(doc.ref, doc.data().ownerUid);
       for (const period of periods) for (const kind of ['waste', 'sales']) {
+        const selectedRecipients = [...new Set(recipients.filter(recipient => recipient[kind].includes(period.cadence)).map(recipient => recipient.email))];
+        if (!selectedRecipients.length) continue;
+        if (!mail) {
+          try { mail = await mailTransport(); }
+          catch (_) {
+            await db.collection('systemStatus').doc('reportEmail').set({status: 'configuration_required', updatedAt: FieldValue.serverTimestamp()});
+            console.error('Report mail sender is not configured or accessible.');
+            throw Error('REPORT_SMTP_CONFIG is required.');
+          }
+        }
         const result = await buildReport(doc.ref, kind, period.start, period.end);
-        for (const to of recipients) {
+        for (const to of selectedRecipients) {
           const recipientId = createHash('sha256').update(to).digest('hex').slice(0, 24);
           const id = `${kind}-${period.cadence}-${period.start}-${recipientId}`;
           const run = doc.ref.collection('reportDeliveries').doc(id);
@@ -165,6 +169,10 @@ exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/K
         }
       }
     } catch (error) { console.error('Store report failed', doc.id, error.code || 'error'); failed = true; }
+  }
+  if (!mail) {
+    if (failed) throw Error('Report mail sender or store data requires review.');
+    return;
   }
   mail.transport.close();
   await db.collection('systemStatus').doc('reportEmail').set({status: failed ? 'delivery_errors' : 'ready', updatedAt: FieldValue.serverTimestamp()});

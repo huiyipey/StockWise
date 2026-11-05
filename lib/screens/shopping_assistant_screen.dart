@@ -151,35 +151,38 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: Colors.white,
+      isScrollControlled: true,
       builder: (context) => SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                'Attach an Image',
-                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text(
+                  'Attach an Image',
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+                ),
               ),
-            ),
-            const Text(
-              'JPG, PNG or WebP · Up to 2 MB',
-              style: TextStyle(fontSize: 12, color: InventoryColors.muted),
-            ),
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Photo Library'),
-              onTap: () => Navigator.pop(context, ImageSource.gallery),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Take Photo'),
-              onTap: () => Navigator.pop(context, ImageSource.camera),
-            ),
-            const SizedBox(height: 12),
-          ],
+              const Text(
+                'JPG, PNG or WebP · Up to 2 MB',
+                style: TextStyle(fontSize: 12, color: InventoryColors.muted),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Photo Library'),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -633,23 +636,45 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                         Expanded(
                           child: TextField(
                             controller: question,
+                            textAlignVertical: TextAlignVertical.center,
                             onChanged: (_) {
                               if (attachmentError != null) {
                                 setState(() => attachmentError = null);
                               }
                             },
                             maxLength: 1000,
+                            buildCounter:
+                                (
+                                  context, {
+                                  required currentLength,
+                                  required isFocused,
+                                  maxLength,
+                                }) => null,
                             minLines: 1,
                             maxLines:
                                 attachment != null &&
                                     MediaQuery.viewInsetsOf(context).bottom > 0
-                                ? 2
+                                ? MediaQuery.sizeOf(context).height -
+                                              MediaQuery.viewInsetsOf(
+                                                context,
+                                              ).bottom <
+                                          450
+                                      ? 1
+                                      : 2
                                 : 3,
                             enabled: !busy,
                             style: const TextStyle(fontSize: 13),
                             decoration: const InputDecoration(
                               hintText: 'Ask StockWise anything...',
-                              counterText: '',
+                              hintMaxLines: 1,
+                              floatingLabelBehavior:
+                                  FloatingLabelBehavior.never,
+                              isDense: true,
+                              constraints: BoxConstraints(minHeight: 46),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
                             ),
                           ),
                         ),

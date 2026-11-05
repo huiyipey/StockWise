@@ -6,6 +6,7 @@ class SavedAddress {
   final String name;
   final String phone;
   final String addressLine1;
+  final String addressLine2;
   final String city;
   final String state;
   final String postalCode;
@@ -16,6 +17,7 @@ class SavedAddress {
     required this.name,
     required this.phone,
     required this.addressLine1,
+    this.addressLine2 = '',
     required this.city,
     required this.state,
     required this.postalCode,
@@ -28,7 +30,9 @@ class SavedAddress {
       label: data['label'] as String? ?? 'Address',
       name: data['name'] as String? ?? '',
       phone: data['phone'] as String? ?? '',
-      addressLine1: data['addressLine1'] as String? ?? '',
+      addressLine1:
+          data['addressLine1'] as String? ?? data['street'] as String? ?? '',
+      addressLine2: data['addressLine2'] as String? ?? '',
       city: data['city'] as String? ?? '',
       state: data['state'] as String? ?? '',
       postalCode: data['postalCode'] as String? ?? '',
@@ -40,13 +44,18 @@ class SavedAddress {
     'name': name.trim(),
     'phone': phone.trim(),
     'addressLine1': addressLine1.trim(),
+    'addressLine2': addressLine2.trim(),
     'city': city.trim(),
     'state': state.trim(),
     'postalCode': postalCode.trim(),
     'countryCode': 'MY',
   };
 
-  String get formatted => '$addressLine1, $postalCode $city, $state';
+  String get formatted => [
+    addressLine1.trim(),
+    if (addressLine2.trim().isNotEmpty) addressLine2.trim(),
+    '${postalCode.trim()} ${city.trim()}, ${state.trim()}',
+  ].join(', ');
 }
 
 class AddressBook {

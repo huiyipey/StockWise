@@ -4,7 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/saved_address.dart';
+import '../models/store_address.dart';
+import 'postcode_lookup.dart';
 import 'profile_fields.dart';
+import 'store_fields.dart';
 
 abstract class AddressBookRepository {
   Stream<AddressBook> watch();
@@ -19,10 +22,7 @@ String? addressRequired(String? value) =>
 String? addressPhoneError(String? value) =>
     addressRequired(value) ?? profilePhoneError(value);
 
-String? addressPostalError(String? value) =>
-    RegExp(r'^\d{5}$').hasMatch(value?.trim() ?? '')
-    ? null
-    : 'Enter a 5-digit postal code';
+String? addressPostalError(String? value) => postcodeError(value?.trim());
 
 class AddressBookService implements AddressBookRepository {
   AddressBookService._();
@@ -76,16 +76,32 @@ class AddressBookService implements AddressBookRepository {
   @override
   Future<void> save(SavedAddress address, {bool makeDefault = false}) async {
     final data = address.toData();
-    for (final field in ['label', 'addressLine1', 'city', 'state']) {
-      if (addressRequired(data[field] as String) != null) {
-        throw ArgumentError('Complete the address details.');
-      }
-    }
     final error =
+        addressRequired(address.label) ??
+        (address.label.trim().length > 40
+            ? 'Use 40 characters or fewer'
+            : null) ??
         profileNameError(address.name) ??
         addressPhoneError(address.phone) ??
+        addressLineError(address.addressLine1) ??
+        addressLineError(address.addressLine2, required: false) ??
+        cityError(address.city) ??
         addressPostalError(address.postalCode);
     if (error != null) throw ArgumentError(error);
+    final location = await MalaysianPostcodes.lookup(address.postalCode.trim());
+    if (location == null) {
+      throw ArgumentError('Postcode not found. Check the number.');
+    }
+    data['state'] = location.state;
+    final completeAddress = StoreAddress(
+      line1: address.addressLine1,
+      line2: address.addressLine2,
+      postcode: address.postalCode,
+      city: address.city,
+      state: location.state,
+    );
+    final combinedError = shopAddressError(completeAddress.formatted);
+    if (combinedError != null) throw ArgumentError(combinedError);
     final user = _userRef;
     final addresses = user.collection('addresses');
     final ref = address.id.isEmpty

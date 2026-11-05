@@ -1,3 +1,21 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M5,5h14v3h-14zM6,10h12v11h-12zM9,1h6v3h-6z" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Transparent, monochrome storefront for Android notification masks. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,11.5V21H20V11.5M9,21V15H15V21" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,3H19L22,8V9C22,10.66 20.66,12 19,12C17.34,12 16,10.66 16,9C16,10.66 14.21,12 12,12C9.79,12 8,10.66 8,9C8,10.66 6.66,12 5,12C3.34,12 2,10.66 2,9V8L5,3ZM9,3L8,8V9M15,3L16,8V9" />
 </vector>

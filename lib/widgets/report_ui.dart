@@ -334,7 +334,9 @@ class _ReportChartState extends State<ReportChart> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !scroll.hasClients || widget.selected == 0) return;
-      final width = widget.window.period == ReportPeriod.monthly
+      final width =
+          widget.window.period == ReportPeriod.monthly ||
+              widget.window.period == ReportPeriod.weekly
           ? 96.0
           : widget.window.period == ReportPeriod.yearly
           ? 70.0
@@ -377,7 +379,9 @@ class _ReportChartState extends State<ReportChart> {
     final baseline = 160 + scaler.scale(10) * 1.4 + 8;
     final labelHeight = math.max(38.0, scaler.scale(11) * 2.6);
     final height = baseline + 8 + labelHeight;
-    final width = widget.window.period == ReportPeriod.monthly
+    final width =
+        widget.window.period == ReportPeriod.monthly ||
+            widget.window.period == ReportPeriod.weekly
         ? 96.0
         : widget.window.period == ReportPeriod.yearly
         ? 70.0
@@ -560,11 +564,14 @@ class _ReportChartState extends State<ReportChart> {
                                                           alignment: Alignment
                                                               .topCenter,
                                                           child: Text(
-                                                            widget
-                                                                        .window
-                                                                        .period ==
-                                                                    ReportPeriod
-                                                                        .monthly
+                                                            widget.window.period ==
+                                                                        ReportPeriod
+                                                                            .monthly ||
+                                                                    widget
+                                                                            .window
+                                                                            .period ==
+                                                                        ReportPeriod
+                                                                            .weekly
                                                                 ? bucket
                                                                       .axisLabel
                                                                       .replaceFirst(

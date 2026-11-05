@@ -57,10 +57,12 @@ class StoreHoursEditor extends StatelessWidget {
                                 ? StoreHours(
                                     opens: minutes,
                                     closes: value.closes,
+                                    closedDays: value.closedDays,
                                   )
                                 : StoreHours(
                                     opens: value.opens,
                                     closes: minutes == 0 ? 1440 : minutes,
+                                    closedDays: value.closedDays,
                                   );
                             field.didChange(next);
                             onChanged(next);
@@ -98,10 +100,98 @@ class StoreHoursEditor extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Daily hours. Orders close 30 minutes before the store closes so deliveries can be processed.',
+            'Hours apply on open days. Orders close 30 minutes before closing.',
             style: TextStyle(
               fontSize: 11.5,
               height: 1.5,
+              color: InventoryColors.muted,
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Closed Days',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: InventoryColors.ink,
+            ),
+          ),
+          const SizedBox(height: 5),
+          const Text(
+            'Choose any days the store is closed, or leave all unselected for no closed days.',
+            style: TextStyle(
+              fontSize: 11.5,
+              height: 1.5,
+              color: InventoryColors.muted,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 7,
+            runSpacing: 6,
+            children: [
+              for (var day = 1; day <= 7; day++)
+                FilterChip(
+                  key: ValueKey('store-closed-day-$day'),
+                  label: Text(StoreHours.dayNames[day - 1]),
+                  selected: value.closedDays.contains(day),
+                  onSelected: !enabled
+                      ? null
+                      : (selected) {
+                          final next = StoreHours(
+                            opens: value.opens,
+                            closes: value.closes,
+                            closedDays: {...value.closedDays}..remove(day),
+                          );
+                          final days = {...next.closedDays, if (selected) day};
+                          final updated = StoreHours(
+                            opens: next.opens,
+                            closes: next.closes,
+                            closedDays: days,
+                          );
+                          field.didChange(updated);
+                          onChanged(updated);
+                        },
+                ),
+            ],
+          ),
+          Wrap(
+            spacing: 10,
+            children: [
+              TextButton(
+                onPressed: !enabled
+                    ? null
+                    : () {
+                        final next = StoreHours(
+                          opens: value.opens,
+                          closes: value.closes,
+                        );
+                        field.didChange(next);
+                        onChanged(next);
+                      },
+                child: const Text('No Closed Days'),
+              ),
+              TextButton(
+                onPressed: !enabled
+                    ? null
+                    : () {
+                        final next = StoreHours(
+                          opens: value.opens,
+                          closes: value.closes,
+                          closedDays: {1, 2, 3, 4, 5, 6, 7},
+                        );
+                        field.didChange(next);
+                        onChanged(next);
+                      },
+                child: const Text('Closed Every Day'),
+              ),
+            ],
+          ),
+          Text(
+            value.closedDaysLabel,
+            key: const ValueKey('store-closed-days-summary'),
+            style: const TextStyle(
+              fontSize: 11.5,
               color: InventoryColors.muted,
             ),
           ),

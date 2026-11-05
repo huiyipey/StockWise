@@ -360,6 +360,99 @@ class InventoryInputBorder extends UnderlineInputBorder {
   }
 }
 
+/// The same inset label, outline and value styling used by the item category.
+InputDecoration inventoryEditorDecoration(
+  String label, {
+  String? hintText,
+  String? errorText,
+  String? prefixText,
+  String? suffixText,
+  Widget? suffixIcon,
+  bool enabled = true,
+}) => InputDecoration(
+  labelText: label,
+  hintText: hintText,
+  errorText: errorText,
+  enabled: enabled,
+  prefixText: prefixText,
+  suffixText: suffixText,
+  suffixIcon: suffixIcon,
+  floatingLabelBehavior: FloatingLabelBehavior.always,
+  filled: true,
+  fillColor: Colors.white,
+  isDense: true,
+  constraints: const BoxConstraints(minHeight: 68),
+  contentPadding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+  labelStyle: const TextStyle(
+    color: InventoryColors.ink,
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+  ),
+  floatingLabelStyle: const TextStyle(
+    color: InventoryColors.ink,
+    fontSize: 16,
+    fontWeight: FontWeight.w700,
+  ),
+  hintStyle: const TextStyle(color: InventoryColors.muted, fontSize: 14),
+  prefixStyle: const TextStyle(color: InventoryColors.muted, fontSize: 14),
+  suffixStyle: const TextStyle(color: InventoryColors.muted, fontSize: 14),
+  border: const InventoryInputBorder(),
+  enabledBorder: const InventoryInputBorder(),
+  disabledBorder: const InventoryInputBorder(),
+  focusedBorder: const InventoryInputBorder(
+    borderSide: BorderSide(color: InventoryColors.green, width: 1.4),
+  ),
+  errorBorder: const InventoryInputBorder(
+    borderSide: BorderSide(color: InventoryColors.error),
+  ),
+);
+
+class InventoryChoiceField extends StatelessWidget {
+  const InventoryChoiceField({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.choices,
+    required this.onChanged,
+    this.enabled = true,
+  });
+  final String label, value;
+  final Map<String, String> choices;
+  final ValueChanged<String> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: !enabled
+          ? null
+          : () async {
+              FocusScope.of(context).unfocus();
+              final selected = await showInventoryCategorySheet(
+                context: context,
+                choices: choices,
+                selected: value,
+                title: label,
+              );
+              if (selected != null && context.mounted) onChanged(selected);
+            },
+      child: InputDecorator(
+        decoration: inventoryEditorDecoration(
+          label,
+          enabled: enabled,
+          suffixIcon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
+        ),
+        child: Text(
+          choices[value] ?? value,
+          style: const TextStyle(fontSize: 14, color: InventoryColors.muted),
+        ),
+      ),
+    ),
+  );
+}
+
 class InventoryHeader extends StatelessWidget {
   const InventoryHeader({
     super.key,
@@ -948,8 +1041,9 @@ class InventoryFilters extends StatelessWidget {
     required this.onSort,
     this.compact = false,
     this.customerStyle = false,
+    this.outlined = false,
   });
-  final bool customerStyle;
+  final bool customerStyle, outlined;
   final List<String> ids;
   final List<StoreCategory> records;
   final String category;
@@ -992,7 +1086,8 @@ class InventoryFilters extends StatelessWidget {
       compact: compact,
       bold: true,
       white: compact,
-      outlined: customerStyle,
+      outlined: customerStyle || outlined,
+      pillShape: outlined && !customerStyle,
       minWidth: compact ? 64 : 94,
       fontSize: 12,
     );
@@ -1005,7 +1100,8 @@ class InventoryFilters extends StatelessWidget {
             onPressed: onDate!,
             compact: compact,
             muted: true,
-            outlined: !compact || customerStyle,
+            outlined: !compact || customerStyle || outlined,
+            pillShape: outlined && !customerStyle,
             startAligned: customerStyle,
             fontSize: customerStyle
                 ? 13
@@ -1035,7 +1131,8 @@ class InventoryFilters extends StatelessWidget {
         onPressed: selectCategory,
         compact: true,
         bold: true,
-        outlined: customerStyle,
+        outlined: customerStyle || outlined,
+        pillShape: outlined && !customerStyle,
         fontSize: 13,
         fontWeight: FontWeight.w800,
       );
@@ -1142,6 +1239,7 @@ class _InventoryFilterPill extends StatelessWidget {
     this.bold = false,
     this.outlined = false,
     this.white = false,
+    this.pillShape = false,
     this.trailing,
     this.fontSize = 11,
     this.fontWeight,
@@ -1153,7 +1251,7 @@ class _InventoryFilterPill extends StatelessWidget {
   final VoidCallback onPressed;
   final IconData? icon;
   final bool compact, muted, bold, outlined;
-  final bool white;
+  final bool white, pillShape;
   final Widget? trailing;
   final double fontSize, minWidth;
   final FontWeight? fontWeight;
@@ -1171,7 +1269,9 @@ class _InventoryFilterPill extends StatelessWidget {
       ),
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(outlined || !compact ? 12 : 22),
+        borderRadius: BorderRadius.circular(
+          pillShape || (!outlined && compact) ? 22 : 12,
+        ),
         side: outlined
             ? const BorderSide(color: InventoryColors.line)
             : BorderSide.none,

@@ -7,12 +7,20 @@ const titleCase = value => String(value || '').trim().replace(/\s+/gu, ' ').repl
 function operatingHours(value) {
   const hours = value || {opens:540,closes:1260};
   if (!Number.isInteger(hours.opens) || !Number.isInteger(hours.closes) || hours.opens < 0 || hours.closes > 1440 || hours.closes <= hours.opens + 30) throw Error('Set operating hours with at least 30 minutes for orders.');
-  return {opens:hours.opens,closes:hours.closes};
+  const closedDays = hours.closedDays ?? [];
+  if (!Array.isArray(closedDays) || closedDays.length > 7 || closedDays.some(day => !Number.isInteger(day) || day < 1 || day > 7)) throw Error('Choose closed days from Monday through Sunday.');
+  return {opens:hours.opens,closes:hours.closes,closedDays:[...new Set(closedDays)].sort((a,b)=>a-b)};
 }
 function orderingOpen(store, now = new Date()) {
   const h=operatingHours(store.operatingHours), local=DateTime.fromJSDate(now).setZone(zone);
   const minute=local.hour*60+local.minute;
-  return store.status==='active' && minute>=h.opens && minute<h.closes-30;
+  return store.status==='active' && !h.closedDays.includes(local.weekday) && minute>=h.opens && minute<h.closes-30;
+}
+function orderingClosedMessage(store, now = new Date()) {
+  const local=DateTime.fromJSDate(now).setZone(zone);
+  return operatingHours(store.operatingHours).closedDays.includes(local.weekday)
+    ? 'The store is closed today. Please return on an open day.'
+    : 'Ordering is closed. Orders close 30 minutes before the store closes.';
 }
 function shelfLife(batch, now=new Date()) {
   const expiry=DateTime.fromJSDate(date(batch.expiryAt)).setZone(zone).startOf('day');
@@ -27,7 +35,7 @@ function expiryStage(batch, store, now=new Date()) {
   if (batch.notifyOnExpiry===false || batch.status!=='active' || batch.quantityOnHand<=0 || date(batch.expiryAt)<=now) return null;
   const life=shelfLife(batch,now), h=operatingHours(store.operatingHours), local=DateTime.fromJSDate(now).setZone(zone);
   const minute=local.hour*60+local.minute;
-  if (minute<h.opens || minute>=h.closes) return null;
+  if (h.closedDays.includes(local.weekday) || minute<h.opens || minute>=h.closes) return null;
   const middle=Math.floor((life.orange+life.red+1)/2);
   if (life.daysLeft<=1 && minute>=h.closes-30) return 4;
   if (life.daysLeft<=life.red) return 3;
@@ -65,4 +73,4 @@ function quoteCart(cart, inventory, {now=new Date()}={}) {
   return require('./bundle_quote').bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, titleCase, shelfLife});
 }
 
-module.exports={titleCase,operatingHours,orderingOpen,shelfLife,expiryStage,validatePromotion,sellingPrice,deliveryFee,quoteCart};
+module.exports={titleCase,operatingHours,orderingOpen,orderingClosedMessage,shelfLife,expiryStage,validatePromotion,sellingPrice,deliveryFee,quoteCart};

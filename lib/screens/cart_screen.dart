@@ -428,19 +428,18 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                   ],
                 ),
-                if (item?.bundlePromotion == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 9, left: 100),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: PromotionDescription(
-                        item!.promotionLabel,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
                 const SizedBox(height: 10),
-                _controls(context, line, item, blocked, total, original),
+                _controls(
+                  context,
+                  line,
+                  item,
+                  blocked,
+                  total,
+                  original,
+                  promotionLabel: item?.bundlePromotion == true
+                      ? item!.promotionLabel
+                      : null,
+                ),
               ],
             ),
           ),
@@ -455,8 +454,9 @@ class _CartScreenState extends State<CartScreen> {
     InventoryBatch? item,
     bool blocked,
     int total,
-    int originalTotal,
-  ) {
+    int originalTotal, {
+    String? promotionLabel,
+  }) {
     final remove = IconButton(
       key: ValueKey('cart-remove-${line.id}'),
       tooltip: 'Remove ${line.productName}',
@@ -527,70 +527,109 @@ class _CartScreenState extends State<CartScreen> {
         ),
       ),
     );
-    final price = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (total < originalTotal) ...[
-          Text(
-            orderMoney(originalTotal),
-            style: const TextStyle(
-              fontSize: 15,
-              color: InventoryColors.muted,
-              decoration: TextDecoration.lineThrough,
-            ),
-          ),
-          const SizedBox(height: 3),
-        ],
-        Text(
-          orderMoney(total),
-          textAlign: TextAlign.right,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            color: total < originalTotal
-                ? InventoryColors.green
-                : InventoryColors.ink,
-          ),
-        ),
-      ],
+    final currentStyle = DefaultTextStyle.of(context).style.copyWith(
+      fontSize: 15,
+      fontWeight: FontWeight.w800,
+      color: total < originalTotal
+          ? InventoryColors.green
+          : InventoryColors.ink,
     );
+    final originalStyle = DefaultTextStyle.of(context).style.copyWith(
+      fontSize: 15,
+      color: InventoryColors.muted,
+      decoration: TextDecoration.lineThrough,
+    );
+    Size measure(String label, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(text: label, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout();
+      final size = painter.size;
+      painter.dispose();
+      return size;
+    }
+
+    final currentSize = measure(orderMoney(total), currentStyle);
+    final originalSize = measure(orderMoney(originalTotal), originalStyle);
+    final discounted = total < originalTotal;
+    final priceWidth = discounted && originalSize.width > currentSize.width
+        ? originalSize.width
+        : currentSize.width;
+    final price = SizedBox(
+      width: priceWidth,
+      height: currentSize.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.centerRight,
+        children: [
+          Text(
+            orderMoney(total),
+            key: ValueKey('cart-total-${line.id}'),
+            textAlign: TextAlign.right,
+            style: currentStyle,
+          ),
+          if (discounted)
+            Positioned(
+              right: 0,
+              bottom: currentSize.height + 3,
+              child: Text(
+                orderMoney(originalTotal),
+                key: ValueKey('cart-original-total-${line.id}'),
+                style: originalStyle,
+              ),
+            ),
+        ],
+      ),
+    );
+    final controls = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [if (!blocked) quantity, const SizedBox(width: 6), remove],
+    );
+    final tag = promotionLabel == null
+        ? null
+        : PromotionDescription(promotionLabel, fontSize: 11);
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < 280 ||
-            MediaQuery.textScalerOf(context).scale(14) > 18) {
-          return Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+        final tagBesideControls = tag != null && constraints.maxWidth >= 600;
+        final controlsWidth = blocked ? 54 : 166;
+        final fits = controlsWidth + 8 + priceWidth <= constraints.maxWidth;
+        final row = fits
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (!blocked) quantity,
-                  const SizedBox(width: 6),
-                  remove,
+                  if (tagBesideControls) ...[
+                    Expanded(
+                      child: Align(alignment: Alignment.centerLeft, child: tag),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  controls,
+                  const Spacer(),
+                  const SizedBox(width: 8),
+                  price,
                 ],
-              ),
-              price,
-            ],
-          );
-        }
-        return Row(
-          children: [
-            if (!blocked)
-              Expanded(
-                child: Row(
-                  children: [quantity, const SizedBox(width: 6), remove],
-                ),
               )
-            else
-              Expanded(
-                child: Align(alignment: Alignment.centerLeft, child: remove),
+            : Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: discounted ? originalSize.height + 11 : 8,
+                children: [controls, price],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (tag != null && !tagBesideControls) ...[
+              Align(alignment: Alignment.centerLeft, child: tag),
+              const SizedBox(height: 8),
+            ],
+            Padding(
+              padding: EdgeInsets.only(
+                top: discounted ? originalSize.height + 3 : 0,
               ),
-            const SizedBox(width: 8),
-            price,
+              child: row,
+            ),
           ],
         );
       },

@@ -9,11 +9,13 @@ import '../services/store_fields.dart';
 import '../services/store_session.dart';
 import '../widgets/auth_ui.dart';
 import '../widgets/store_ui.dart';
+import '../widgets/store_created_notice.dart';
 import '../widgets/profile_ui.dart' show showProfileConfirmation;
 import '../widgets/inventory_ui.dart';
 import 'create_store_dialog.dart';
 import 'home_screen.dart';
 import 'shop_screen.dart';
+import 'profile_screen.dart';
 
 class StoreGateScreen extends StatefulWidget {
   const StoreGateScreen({
@@ -506,6 +508,14 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
       );
       if (store != null && mounted) {
         setState(() => StoreSession.instance.select(store, role: 'owner'));
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        final openProfile = await showStoreCreatedNotice(context);
+        if (mounted && openProfile) {
+          await Navigator.of(context).push<void>(
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => creating = false);

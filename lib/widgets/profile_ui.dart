@@ -43,11 +43,13 @@ class ProfileAction extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.subtitle,
+    this.trailingLabel,
   });
   final String label;
   final IconData icon;
   final VoidCallback? onTap;
   final String? subtitle;
+  final String? trailingLabel;
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
@@ -88,6 +90,17 @@ class ProfileAction extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
+          if (trailingLabel != null) ...[
+            Text(
+              trailingLabel!,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: InventoryColors.green,
+              ),
+            ),
+            const SizedBox(width: 5),
+          ],
           const Icon(
             Icons.chevron_right_rounded,
             size: 19,

@@ -1,10 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import '../models/report_data.dart';
 import 'store_session.dart';
+import 'report_export.dart';
 
 class ReportService {
   static final _functions = FirebaseFunctions.instanceFor(
@@ -72,12 +71,13 @@ class ReportService {
   }
 
   static Future<bool> download(Map<String, dynamic> data) async {
+    final output = await ReportExportFile.build(data);
     final file = await FlutterFileDialog.saveFile(
       params: SaveFileDialogParams(
-        data: Uint8List.fromList(utf8.encode(data['csv'] as String)),
+        data: output.bytes,
         fileName:
-            'StockWise-${StoreSession.instance.storeId}-${data['kind']}-${data['start']}-${data['end']}.csv',
-        mimeTypesFilter: const ['text/csv'],
+            'StockWise-${StoreSession.instance.storeId}-${data['kind']}-${data['start']}-${data['end']}.${output.extension}',
+        mimeTypesFilter: [output.mimeType],
       ),
     );
     return file != null;

@@ -2,11 +2,17 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../models/app_models.dart';
 import '../models/saved_address.dart';
+import '../models/store_address.dart';
 import '../services/address_book_service.dart';
+import '../services/customer_postcode_controller.dart';
 import '../services/firestore_service.dart';
+import '../services/postcode_lookup.dart';
+import '../services/profile_fields.dart';
+import '../services/store_fields.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/order_ui.dart';
 import '../widgets/commerce_quote.dart';
@@ -25,6 +31,7 @@ class CheckoutScreen extends StatefulWidget {
     this.onPlaced,
     this.quoteLoader,
     this.acceptedPromotionReviewToken,
+    this.lookupPostcode = MalaysianPostcodes.lookup,
   });
   final List<CartLine> lines;
   final AddressBookRepository? addressRepository;
@@ -33,6 +40,7 @@ class CheckoutScreen extends StatefulWidget {
   final VoidCallback? onPlaced;
   final Future<Map<String, dynamic>> Function(String)? quoteLoader;
   final String? acceptedPromotionReviewToken;
+  final PostcodeLookup lookupPostcode;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
@@ -44,9 +52,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   late final TextEditingController name, email;
   final phone = TextEditingController();
   final address = TextEditingController();
+  final address2 = TextEditingController();
   final city = TextEditingController();
   final state = TextEditingController();
   final postalCode = TextEditingController();
+  late final CustomerPostcodeController location;
   String payment = 'Bank transfer';
   bool placing = false;
   Map<String, dynamic>? quote;
@@ -104,6 +114,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    location = CustomerPostcodeController(
+      postcode: postalCode,
+      city: city,
+      state: state,
+      lookup: widget.lookupPostcode,
+    )..addListener(locationChanged);
     acceptedPromotionReviewToken = widget.acceptedPromotionReviewToken;
     name = TextEditingController(
       text:
@@ -156,12 +172,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     addressSubscription?.cancel();
     quoteDebounce?.cancel();
+    location.dispose();
     scroll.dispose();
     for (final controller in [
       name,
       email,
       phone,
       address,
+      address2,
       city,
       state,
       postalCode,
@@ -177,10 +195,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     name.text = saved.name;
     phone.text = saved.phone;
     address.text = saved.addressLine1;
+    address2.text = saved.addressLine2;
     city.text = saved.city;
     state.text = saved.state;
     postalCode.text = saved.postalCode;
+    unawaited(location.loadExisting());
     scheduleQuote();
+  }
+
+  void locationChanged() {
+    if (mounted) setState(() {});
   }
 
   void deliveryEdited(String _) => setState(() {
@@ -235,9 +259,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         selectedAddressId = null;
         manualDetails = true;
         address.clear();
-        city.clear();
-        state.clear();
+        address2.clear();
         postalCode.clear();
+        location.invalidate();
         scheduleQuote();
       }
     });
@@ -262,11 +286,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int get shipping =>
       (quote?['deliveryFeeCents'] as num?)?.toInt() ?? (usesQuote ? 0 : 500);
   bool get canPlace =>
-      !usesQuote ||
-      (!quoting &&
-          quoteError == null &&
-          quote != null &&
-          quote?['deliveryFeeCents'] != null);
+      !location.lookingUp &&
+      (!usesQuote ||
+          (!quoting &&
+              quoteError == null &&
+              quote != null &&
+              quote?['deliveryFeeCents'] != null));
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
@@ -340,6 +365,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 'Phone',
                                 phone,
                                 keyboard: TextInputType.phone,
+                                hint: 'e.g. 012-345 6789 or +60 12-345 6789',
                               ),
                               field(
                                 'email',
@@ -347,14 +373,105 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 email,
                                 keyboard: TextInputType.emailAddress,
                               ),
-                              field('address', 'Address', address),
-                              field('city', 'City', city),
-                              field('state', 'State', state),
+                              field(
+                                'address',
+                                'Address 1',
+                                address,
+                                hint: 'Unit / house number and street',
+                                keyboard: TextInputType.streetAddress,
+                                maxLines: 3,
+                                maxLength: 200,
+                              ),
+                              field(
+                                'address2',
+                                'Address 2 (Optional)',
+                                address2,
+                                hint: 'Building, floor or area',
+                                keyboard: TextInputType.streetAddress,
+                                maxLines: 2,
+                                maxLength: 200,
+                              ),
                               field(
                                 'postal',
-                                'Postal code',
+                                'Postcode',
                                 postalCode,
                                 keyboard: TextInputType.number,
+                                hint: 'e.g. 47500',
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(5),
+                                ],
+                                onChanged: (value) {
+                                  location.changed(value);
+                                  deliveryEdited(value);
+                                },
+                                suffix: location.lookingUp
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: SizedBox.square(
+                                          dimension: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      )
+                                    : location.ready
+                                    ? const Icon(
+                                        Icons.check_rounded,
+                                        color: InventoryColors.green,
+                                        size: 20,
+                                      )
+                                    : null,
+                              ),
+                              if (location.lookingUp)
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 16),
+                                  child: Text(
+                                    'Finding city and state…',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: InventoryColors.muted,
+                                    ),
+                                  ),
+                                ),
+                              if (location.lookupFailed)
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: TextButton(
+                                    onPressed: placing ? null : location.retry,
+                                    child: const Text('Retry lookup'),
+                                  ),
+                                ),
+                              field(
+                                'city',
+                                'City',
+                                city,
+                                hint: 'From postcode',
+                                enabled: location.ready,
+                                maxLength: 80,
+                              ),
+                              field(
+                                'state',
+                                'State',
+                                state,
+                                hint: 'From postcode',
+                                readOnly: true,
+                                suffix: const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 18,
+                                  color: InventoryColors.muted,
+                                ),
+                              ),
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 20),
+                                child: Text(
+                                  'State is filled from your postcode and cannot be edited.',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    height: 1.4,
+                                    color: InventoryColors.muted,
+                                  ),
+                                ),
                               ),
                               OrderPickerField(
                                 key: const ValueKey('checkout-payment'),
@@ -433,29 +550,89 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     String label,
     TextEditingController controller, {
     TextInputType? keyboard,
+    String? hint,
+    int? maxLength,
+    int maxLines = 1,
+    bool enabled = true,
+    bool readOnly = false,
+    Widget? suffix,
+    List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
   }) => Padding(
     key: anchors.putIfAbsent(id, () => GlobalKey()),
     padding: const EdgeInsets.only(bottom: 20),
     child: TextFormField(
       key: ValueKey('checkout-$id'),
       controller: controller,
-      enabled: !placing,
-      onChanged: id == 'email' ? null : deliveryEdited,
+      enabled: !placing && enabled,
+      readOnly: readOnly,
+      onChanged: readOnly
+          ? null
+          : onChanged ?? (id == 'email' ? null : deliveryEdited),
       keyboardType: keyboard,
+      inputFormatters: inputFormatters,
+      maxLength: maxLength,
+      maxLines: maxLines,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 13),
       textInputAction: TextInputAction.next,
       decoration: InputDecoration(
         labelText: label,
-        hintText: 'Enter ${label.toLowerCase()}',
+        hintText: hint ?? 'Enter ${label.toLowerCase()}',
+        counterText: '',
+        suffixIcon: suffix,
+        errorText: id == 'postal' ? location.error : null,
+        errorMaxLines: 3,
       ),
-      validator: (value) => value == null || value.trim().isEmpty
-          ? 'Required'
-          : id == 'email' &&
-                !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())
-          ? 'Enter a valid email.'
-          : null,
+      validator: (value) => fieldError(id, value),
     ),
   );
+
+  StoreAddress get structuredAddress => StoreAddress(
+    line1: address.text,
+    line2: address2.text,
+    postcode: postalCode.text,
+    city: city.text,
+    state: state.text,
+  );
+
+  String? fieldError(String id, String? value) {
+    switch (id) {
+      case 'name':
+        return profileNameError(value);
+      case 'phone':
+        return addressPhoneError(value);
+      case 'address':
+        return addressLineError(value);
+      case 'address2':
+        final lineError = addressLineError(value, required: false);
+        if (lineError != null) return lineError;
+        if (location.ready &&
+            addressLineError(address.text) == null &&
+            cityError(city.text) == null) {
+          return shopAddressError(structuredAddress.formatted);
+        }
+        return null;
+      case 'city':
+        return cityError(value) ??
+            (RegExp(r'[\r\n]').hasMatch(value ?? '')
+                ? 'Enter a valid city'
+                : null);
+      case 'postal':
+        return postcodeError(value) ??
+            location.error ??
+            (!location.ready && !location.lookingUp
+                ? 'Enter a valid postcode to fill City and State.'
+                : null);
+      case 'email':
+        return addressRequired(value) ??
+            (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value!.trim())
+                ? 'Enter a valid email.'
+                : null);
+      default:
+        return addressRequired(value);
+    }
+  }
 
   Future<void> place() async {
     if (placing || !canPlace) return;
@@ -466,18 +643,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 'phone': phone,
                 'email': email,
                 'address': address,
+                'address2': address2,
+                'postal': postalCode,
                 'city': city,
                 'state': state,
-                'postal': postalCode,
               }.entries
-              .where(
-                (entry) =>
-                    entry.value.text.trim().isEmpty ||
-                    entry.key == 'email' &&
-                        !RegExp(
-                          r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
-                        ).hasMatch(entry.value.text.trim()),
-              )
+              .where((entry) => fieldError(entry.key, entry.value.text) != null)
               .firstOrNull;
       final anchor = anchors[invalid?.key]?.currentContext;
       if (anchor != null) {
@@ -498,6 +669,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'phone': phone.text.trim(),
       'email': email.text.trim(),
       'addressLine1': address.text.trim(),
+      'addressLine2': address2.text.trim(),
       'city': city.text.trim(),
       'state': state.text.trim(),
       'postalCode': postalCode.text.trim(),

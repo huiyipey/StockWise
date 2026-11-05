@@ -128,6 +128,45 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                         );
                       }
                       final data = snapshot.data!;
+                      if (data.addresses.isEmpty) {
+                        return CustomScrollView(
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                              sliver: SliverToBoxAdapter(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    InventoryButton(
+                                      label: 'Add Address',
+                                      icon: Icons.add_rounded,
+                                      onPressed: busy ? null : () => edit(data),
+                                    ),
+                                    if (operationMessage != null)
+                                      ProfileNotice(
+                                        operationMessage!,
+                                        busy: true,
+                                      ),
+                                    if (error != null)
+                                      ProfileNotice(error!, error: true),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(
+                                child: ProfileEmpty(
+                                  'No saved addresses yet',
+                                  body: 'Add your first delivery address.',
+                                  icon: Icons.location_on_outlined,
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                      }
                       return ListView(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                         children: [
@@ -137,12 +176,6 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                             onPressed: busy ? null : () => edit(data),
                           ),
                           const SizedBox(height: 20),
-                          if (data.addresses.isEmpty)
-                            const ProfileEmpty(
-                              'No saved addresses yet',
-                              body: 'Add your first delivery address.',
-                              icon: Icons.location_on_outlined,
-                            ),
                           for (final address in data.addresses)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),

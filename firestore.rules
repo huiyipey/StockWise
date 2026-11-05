@@ -35,6 +35,19 @@ service cloud.firestore {
       return hasStoreRole(storeId, ['owner', 'admin']);
     }
 
+    function validReportSchedules(data) {
+      return !data.keys().hasAny(['reportEmailSchedules'])
+        || (data.reportEmailSchedules is map
+          && data.reportEmailSchedules.keys().hasOnly(['sales', 'waste'])
+          && data.reportEmailSchedules.keys().hasAll(['sales', 'waste'])
+          && data.reportEmailSchedules.sales is list
+          && data.reportEmailSchedules.waste is list
+          && data.reportEmailSchedules.sales.size() <= 4
+          && data.reportEmailSchedules.waste.size() <= 4
+          && data.reportEmailSchedules.sales.hasOnly(['daily', 'weekly', 'monthly', 'yearly'])
+          && data.reportEmailSchedules.waste.hasOnly(['daily', 'weekly', 'monthly', 'yearly']));
+    }
+
     function isBootstrapOwner(storeId) {
       return signedIn()
         && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid
@@ -116,6 +129,51 @@ service cloud.firestore {
         && (resource.data[field] == null || data[field] >= resource.data[field]);
     }
 
+    // Keep these numbering ranges in sync with functions/data/malaysia_phone_patterns.json.
+    function validCompactMalaysianPhone(value) {
+      let prefixed = value.matches('(\\+60|0060|60|0)[0-9]+');
+      let national = value.replace('^(\\+60|0060|60|0)', '');
+      return value.matches('\\+?[0-9]+')
+        && (prefixed || value.matches("(?:1[378]00\\d{6}|1600\\d{6})"))
+        && national.matches("(?:427[01]\\d{4}|(?:3(?:2[0-36-9]|3[0-368]|4[0-278]|5[0-24-8]|6[0-467]|7[1246-9]|8\\d|9[0-57])\\d|4(?:2[0-689]|[3-79]\\d|8[1-35689])|5(?:2[0-589]|[3468]\\d|5[0-489]|7[1-9]|9[23])|6(?:2[2-9]|3[1357-9]|[46]\\d|5[0-6]|7[0-35-9]|85|9[015-8])|7(?:[2579]\\d|3[03-68]|4[0-8]|6[5-9]|8[0-35-9])|8(?:[24][2-8]|3[2-5]|5[2-7]|6[2-589]|7[2-578]|[89][2-9])|9(?:0[57]|13|[25-7]\\d|[3489][0-8]))\\d{5}|1(?:(?:1888[689]|4400|8(?:47|8[27])[0-4])\\d{4}|9\\d{7,8})|1(?:0(?:[23568]\\d|4[0-6]|7[016-9]|9[0-8])|1(?:[1-5]\\d\\d|6(?:0[5-9]|[1-9]\\d)|7(?:[0-4]\\d|5[0-79]|6[02-4]|8[02-5]))|(?:[26]\\d|[37][1-9]|4[235-9])\\d|5(?:31|9\\d\\d)|8(?:1[23]|[236]\\d|4[06]|5(?:46|[7-9])|7[016-9]|8[01]|9[0-8]))\\d{5}|15(?:4(?:6[0-4]\\d|8(?:0[125]|[17]\\d|21|3[01]|4[01589]|5[014]|6[02]))|6(?:32[0-6]|78\\d))\\d{4}|1[378]00\\d{6}|1600\\d{6})");
+    }
+
+    function validMalaysianPhone(value) {
+      return value is string
+        && value.trim().size() <= 64
+        && value.trim().matches('[+0-9 ()-]+')
+        && value.trim().matches('[^()]*(?:\\([^()]*[0-9][^()]*\\)[^()]*)*')
+        && validCompactMalaysianPhone(value.trim().replace('[ ()-]', ''));
+    }
+
+    function validOptionalPhone(value) {
+      return value == null || (value is string
+        && (value.trim().size() == 0 || validMalaysianPhone(value)));
+    }
+
+    function nonemptyAddressText(value, maximum) {
+      return value is string && value.size() <= maximum
+        && value.matches('(?s).*\\S.*');
+    }
+
+    function validSavedAddress(data) {
+      let line2 = data.get('addressLine2', '');
+      let expectedState = get(/databases/$(database)/documents/validationData/malaysiaPostcodes).data.states.get(data.postalCode, '');
+      let formatted = data.addressLine1 + (line2.size() > 0 ? '\n' + line2 : '')
+        + '\n' + data.postalCode + ' ' + data.city + ', ' + data.state;
+      return nonemptyAddressText(data.label, 40)
+        && nonemptyAddressText(data.name, 80)
+        && validMalaysianPhone(data.phone)
+        && nonemptyAddressText(data.addressLine1, 200)
+        && line2 is string && line2.size() <= 200
+        && nonemptyAddressText(data.city, 80) && data.city.matches('[^\r\n]+')
+        && nonemptyAddressText(data.state, 80) && data.state.matches('[^\r\n]+')
+        && data.postalCode is string && data.postalCode.matches('[0-9]{5}')
+        && expectedState.size() > 0 && data.state == expectedState
+        && data.get('countryCode', 'MY') == 'MY'
+        && formatted.size() <= 500;
+    }
+
     function validShopAddress(data) {
       return data.shopAddress is string && data.shopAddress.size() <= 500
         && data.shopAddress.matches('(?s).*\\S.*');
@@ -125,12 +183,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Rules may read this trusted index; clients use the bundled offline copy.
+    match /validationData/{documentId} {
+      allow read, write: if false;
+    }
+
     match /users/{uid} {
-      allow create, read, update: if owns(uid);
+      allow read: if owns(uid);
+      allow create: if owns(uid) && validOptionalPhone(request.resource.data.get('phoneNumber', null));
+      // Legacy phone values do not block unrelated preference/address updates.
+      allow update: if owns(uid)
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['phoneNumber'])
+          || validOptionalPhone(request.resource.data.get('phoneNumber', null)));
       allow delete: if false;
 
       match /addresses/{addressId} {
-        allow read, write: if owns(uid);
+        allow read, delete: if owns(uid);
+        allow create, update: if owns(uid) && validSavedAddress(request.resource.data);
       }
 
       match /devices/{deviceId} {
@@ -184,14 +253,14 @@ service cloud.firestore {
             && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.emailLowercase
               == request.auth.token.email.lower())
         );
-        allow update: if (owns(uid) && isActiveMember(storeId)
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportsByEmail', 'updatedAt'])
+        allow update: if validReportSchedules(request.resource.data) && ((owns(uid) && isActiveMember(storeId)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportsByEmail', 'reportEmailSchedules', 'updatedAt'])
             && request.resource.data.reportsByEmail is bool)
           || (hasStoreRole(storeId, ['owner'])
             && request.resource.data.role == resource.data.role)
           || (hasStoreRole(storeId, ['admin'])
             && resource.data.role != 'owner'
-            && request.resource.data.role == resource.data.role);
+            && request.resource.data.role == resource.data.role));
         allow delete: if hasStoreRole(storeId, ['owner']) && uid != request.auth.uid;
       }
 

@@ -154,7 +154,15 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
       if (oldReservation?.exists && oldReservation.data().storeId === storeId) tx.delete(oldRef);
       // Older app releases still send a single address. Never leave stale structured fields.
       const savedAddress = address ?? (shopAddress === data.shopAddress ? data.address ?? null : null);
-      let hours;try{hours=operatingHours(request.data?.operatingHours??data.operatingHours);}catch(e){throw new HttpsError('invalid-argument',e.message);}
+      let hours;
+      try {
+        const requested = request.data?.operatingHours;
+        // A prior app version can edit the times without sending closed days.
+        // Explicit [] from the new editor still clears every closed day.
+        hours = operatingHours(requested == null ? data.operatingHours : {
+          ...requested, closedDays: requested.closedDays ?? data.operatingHours?.closedDays ?? [],
+        });
+      } catch(e) { throw new HttpsError('invalid-argument',e.message); }
       tx.update(store, {name, shopAddress, address: savedAddress, operatingHours:hours, nameLowercase: normalized, nameKey, updatedAt: timestamp});
       return {
         id: storeId, name, shopAddress, address: savedAddress, code: data.code ?? storeId.slice(0, 6).toUpperCase(),

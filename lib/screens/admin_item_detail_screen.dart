@@ -752,9 +752,16 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
             children: [
               Text(widget.item.productName),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  IconButton(
+              TextFormField(
+                key: const ValueKey('discard-quantity'),
+                controller: quantity,
+                enabled: !saving,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  labelText: 'Quantity',
+                  prefixIcon: IconButton(
+                    tooltip: 'Decrease discard quantity',
                     onPressed: saving
                         ? null
                         : () {
@@ -765,23 +772,8 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
                           },
                     icon: const Icon(Icons.remove_circle_outline),
                   ),
-                  Expanded(
-                    child: TextFormField(
-                      key: const ValueKey('discard-quantity'),
-                      controller: quantity,
-                      enabled: !saving,
-                      keyboardType: TextInputType.number,
-                      textAlign: TextAlign.center,
-                      decoration: const InputDecoration(labelText: 'Quantity'),
-                      validator: (v) {
-                        final n = int.tryParse(v ?? '');
-                        return n == null || n < 1 || n > available
-                            ? 'Enter 1–$available'
-                            : null;
-                      },
-                    ),
-                  ),
-                  IconButton(
+                  suffixIcon: IconButton(
+                    tooltip: 'Increase discard quantity',
                     onPressed: saving
                         ? null
                         : () {
@@ -792,7 +784,13 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
                           },
                     icon: const Icon(Icons.add_circle_outline),
                   ),
-                ],
+                ),
+                validator: (v) {
+                  final n = int.tryParse(v ?? '');
+                  return n == null || n < 1 || n > available
+                      ? 'Enter 1–$available'
+                      : null;
+                },
               ),
               const SizedBox(height: 12),
               Text(

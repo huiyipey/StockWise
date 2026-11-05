@@ -14,6 +14,7 @@ import '../models/store_address.dart';
 import '../models/barcode_product.dart';
 import '../models/product_name.dart';
 import '../models/category_label.dart';
+import '../models/report_email_schedule.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -75,6 +76,17 @@ class FirestoreService {
       .doc(_user.uid)
       .snapshots()
       .map((s) => s.data()?['reportsByEmail'] as bool? ?? true);
+  Stream<ReportEmailSchedule> watchReportEmailSchedule() => _storeRef
+      .collection('members')
+      .doc(_user.uid)
+      .snapshots()
+      .map((s) => ReportEmailSchedule.fromMember(s.data() ?? {}));
+  Future<void> saveReportEmailSchedule(ReportEmailSchedule value) =>
+      _storeRef.collection('members').doc(_user.uid).update({
+        'reportsByEmail': value.enabled,
+        'reportEmailSchedules': value.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
   Future<void> deleteStore(StoreInfo store) async {
     try {
       await FirebaseFunctions.instanceFor(region: 'asia-southeast1')

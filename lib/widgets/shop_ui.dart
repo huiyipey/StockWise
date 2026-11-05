@@ -255,17 +255,23 @@ class ShopProductCard extends StatelessWidget {
         )
       else
         AspectRatio(
-          aspectRatio: 1.5,
-          child: ShopProductPhoto(item: item, image: image),
+          aspectRatio: 1.2,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ShopProductPhoto(item: item, image: image),
+              Positioned(right: 3, bottom: 3, child: _addButton()),
+            ],
+          ),
         ),
-      SizedBox(height: large ? 12 : 10),
+      SizedBox(height: large ? 12 : 8),
       Text(
         category,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
       ),
-      const SizedBox(height: 4),
+      SizedBox(height: large ? 4 : 3),
       Text(
         item.productName,
         maxLines: 2,
@@ -276,34 +282,47 @@ class ShopProductCard extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-      SizedBox(height: large ? 8 : 5),
+      SizedBox(height: large ? 8 : 4),
       _price(),
-      SizedBox(height: large ? 8 : 5),
-      _expiry(),
-      const SizedBox(height: 6),
-      Text(
-        '${item.availableQuantity} ${item.unitLabel} available',
-        style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
-      ),
-      const SizedBox(height: 6),
-      if (!large) const Spacer(),
-      SizedBox(
-        height: large ? footerHeight : null,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (item.bundlePromotion) ...[
-              Expanded(
-                child: PromotionDescription(item.promotionLabel, fontSize: 11),
-              ),
-              const SizedBox(width: 8),
-            ] else
-              const Spacer(),
-            _addButton(),
-          ],
+      if (large) ...[
+        const SizedBox(height: 8),
+        _expiry(),
+        const SizedBox(height: 6),
+        _available(),
+        const SizedBox(height: 6),
+      ] else ...[
+        const SizedBox(height: 6),
+        const Spacer(),
+        _expiry(),
+        const SizedBox(height: 4),
+        _available(),
+      ],
+      if (large)
+        SizedBox(
+          height: footerHeight,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (item.bundlePromotion) ...[
+                Expanded(
+                  child: PromotionDescription(
+                    item.promotionLabel,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ] else
+                const Spacer(),
+              _addButton(),
+            ],
+          ),
         ),
-      ),
     ],
+  );
+
+  Widget _available() => Text(
+    '${item.availableQuantity} ${item.unitLabel} available',
+    style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
   );
 
   Widget _price() => Wrap(

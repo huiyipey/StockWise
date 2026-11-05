@@ -1,7 +1,8 @@
 const {HttpsError}=require('firebase-functions/v2/https');
 const {createHash}=require('node:crypto');
-const {quoteCart,deliveryFee,orderingOpen,titleCase,operatingHours}=require('./commerce_logic');
+const {quoteCart,deliveryFee,orderingOpen,orderingClosedMessage,titleCase,operatingHours}=require('./commerce_logic');
 const postcodes=require('./data/malaysia_postcodes.json');
+const {isValidMalaysianPhone}=require('./malaysian_phone');
 const roles=['owner','admin','manager','staff'];
 function storeRef(db,request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Please sign in.');
@@ -17,8 +18,16 @@ async function team(tx,store,uid,owner=false) {
 function receiverDetails(value) {
   const result={};
   for(const key of ['name','phone','email','addressLine1','addressLine2','city','state','postalCode'])result[key]=typeof value?.[key]==='string'?value[key].trim():'';
-  if(!result.name||!result.phone||!result.addressLine1||!result.city||!postcodes[result.postalCode]||Object.values(result).some(x=>x.length>250))throw new HttpsError('invalid-argument','Enter complete delivery details and a valid Malaysian postcode.');
-  result.state=postcodes[result.postalCode][1];return result;
+  if(!result.name||result.name.length>80)throw new HttpsError('invalid-argument','Enter a recipient name of 1–80 characters.');
+  if(!isValidMalaysianPhone(result.phone))throw new HttpsError('invalid-argument','Enter a valid Malaysian phone number.');
+  if(!result.addressLine1||result.addressLine1.length>200||result.addressLine2.length>200)throw new HttpsError('invalid-argument','Enter Address 1; use up to 200 characters per address line.');
+  if(!/^\d{5}$/.test(result.postalCode)||!postcodes[result.postalCode])throw new HttpsError('invalid-argument','Postcode not found. Check the number.');
+  if(!result.city||result.city.length>80||/[\r\n]/.test(result.city))throw new HttpsError('invalid-argument','Enter a city of 1–80 characters.');
+  result.state=postcodes[result.postalCode][1];
+  const address=[result.addressLine1,...(result.addressLine2?[result.addressLine2]:[]),`${result.postalCode} ${result.city}, ${result.state}`].join('\n');
+  if(address.length>500)throw new HttpsError('invalid-argument','Use 500 characters or fewer for the address.');
+  if(result.email.length>250)throw new HttpsError('invalid-argument','Use 250 characters or fewer for the email.');
+  return result;
 }
 function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucket}) {
   const wrap=fn=>async request=>{try{return await fn(request);}catch(e){if(e instanceof HttpsError)throw e;throw new HttpsError('failed-precondition',e.message||'Please refresh and try again.');}};
@@ -39,7 +48,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         const open=orderingOpen(data.shop,now());
         return {...data.quote,lines:data.quote.lines.map(l=>({...l,expiryAt:l.expiryAt.toISOString(),receivedAt:l.receivedAt.toISOString()})),deliveryFeeCents:fee,
           totalCents:fee===null?null:data.quote.subtotalCents+fee,canOrder:open&&fee!==null,orderingOpen:open,deliveryAvailable:fee!==null,
-          message:!open?'Ordering is closed. Orders close 30 minutes before the store closes.':fee===null?'Delivery is not configured for this postcode. Please contact the store.':null};
+          message:!open?orderingClosedMessage(data.shop,now()):fee===null?'Delivery is not configured for this postcode. Please contact the store.':null};
       });
     }),
     placeOrder:wrap(async request=>{
@@ -52,7 +61,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
       return db.runTransaction(async tx=>{
         const old=await tx.get(order);if(old.exists)return {id,orderNumber:old.data().orderNumber};
         const data=await readQuote(tx,store,uid);
-        if(!orderingOpen(data.shop,now()))throw new HttpsError('failed-precondition','Ordering is closed. Orders close 30 minutes before the store closes.');
+        if(!orderingOpen(data.shop,now()))throw new HttpsError('failed-precondition',orderingClosedMessage(data.shop,now()));
         const fee=deliveryFee(data.settings,receiver.postalCode);
         if(fee===null)throw new HttpsError('failed-precondition','Delivery is not configured for this postcode. Please contact the store.');
         if(data.quote.promotionWarnings.length && request.data.acceptedPromotionReviewToken!==data.quote.promotionReviewToken)

@@ -42,5 +42,6 @@ String? postcodeError(String? value) => RegExp(r'^\d{5}$').hasMatch(value ?? '')
 String? cityError(String? value) {
   if ((value ?? '').trim().isEmpty) return 'Enter the city';
   if (value!.trim().length > 80) return 'Use 80 characters or fewer';
+  if (RegExp(r'[\r\n]').hasMatch(value)) return 'Enter the city on one line';
   return null;
 }

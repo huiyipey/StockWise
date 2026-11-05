@@ -140,7 +140,6 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         },
         child: Scaffold(
           body: SafeArea(
-            bottom: !widget.isAdmin,
             child: Column(
               children: [
                 InventoryHeader(
@@ -444,9 +443,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                                 'Exp: ${DateFormat('d MMM yyyy').format(line.expiryAt)}',
                             style: TextStyle(
                               color:
-                                  !widget.isAdmin &&
-                                      line.expiryColourAt(DateTime.now()) ==
-                                          ShelfLifeColour.red
+                                  line.expiryColourAt(DateTime.now()) ==
+                                      ShelfLifeColour.red
                                   ? InventoryColors.error
                                   : InventoryColors.muted,
                             ),
@@ -492,46 +490,45 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        openingLineId == line.id
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(
-                                Icons.chevron_right_rounded,
-                                size: 18,
-                                color: InventoryColors.muted,
-                              ),
+                        if (line.promotionLabel.isEmpty) ...[
+                          const SizedBox(width: 8),
+                          lineArrow(line),
+                        ],
                       ],
                     ),
                     if (line.promotionLabel.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 7),
-                        child: widget.isAdmin
-                            ? Text(
-                                line.promotionLabel,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: InventoryColors.green,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            : PromotionDescription(
-                                line.promotionLabel,
-                                fontSize: 11,
-                              ),
+                        child: PromotionDescription(
+                          line.promotionLabel,
+                          fontSize: 11,
+                        ),
                       ),
                   ],
                 ),
               ),
+              if (line.promotionLabel.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                lineArrow(line),
+              ],
             ],
           ),
         ),
       ),
     ),
+  );
+
+  Widget lineArrow(OrderLine line) => SizedBox(
+    key: ValueKey('order-line-arrow-${line.id}'),
+    width: 18,
+    height: 18,
+    child: openingLineId == line.id
+        ? const CircularProgressIndicator(strokeWidth: 2)
+        : const Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: InventoryColors.muted,
+          ),
   );
 
   Future<void> chooseStatus() async {

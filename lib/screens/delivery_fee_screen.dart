@@ -154,39 +154,35 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: mode,
-                      decoration: const InputDecoration(
-                        labelText: 'Delivery Fee Type',
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'fixed',
-                          child: Text('Fixed Amount'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'postcode',
-                          child: Text('By Malaysian Postcode'),
-                        ),
-                      ],
-                      onChanged: saving
-                          ? null
-                          : (value) => setState(() => mode = value!),
+                    InventoryChoiceField(
+                      key: const ValueKey('delivery-fee-type'),
+                      label: 'Delivery Fee Type',
+                      value: mode,
+                      enabled: !saving,
+                      choices: const {
+                        'fixed': 'Fixed Amount',
+                        'postcode': 'By Malaysian Postcode',
+                      },
+                      onChanged: (value) => setState(() => mode = value),
                     ),
                     const SizedBox(height: 20),
                     TextFormField(
                       controller: fixed,
                       enabled: !saving,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: InventoryColors.muted,
+                      ),
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       validator: money,
-                      decoration: InputDecoration(
-                        labelText: mode == 'fixed'
+                      decoration: inventoryEditorDecoration(
+                        mode == 'fixed'
                             ? 'Delivery Fee per Order'
                             : 'Fixed Fee (Used in Fixed Amount Mode)',
                         prefixText: 'RM ',
+                        hintText: '0.00',
                       ),
                     ),
                     if (mode == 'postcode') ...[

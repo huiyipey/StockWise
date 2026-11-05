@@ -1,7 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/saved_address.dart';
+import '../models/store_address.dart';
 import '../services/address_book_service.dart';
+import '../services/customer_postcode_controller.dart';
+import '../services/postcode_lookup.dart';
 import '../services/profile_fields.dart';
+import '../services/store_fields.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
@@ -12,12 +19,14 @@ class EditAddressScreen extends StatefulWidget {
     this.initialName = '',
     this.initialPhone = '',
     this.isDefault = false,
+    this.lookupPostcode = MalaysianPostcodes.lookup,
     required this.repository,
   });
   final SavedAddress? address;
   final String initialName, initialPhone;
   final bool isDefault;
   final AddressBookRepository repository;
+  final PostcodeLookup lookupPostcode;
   @override
   State<EditAddressScreen> createState() => _EditAddressScreenState();
 }
@@ -34,28 +43,42 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
   late final street = TextEditingController(
     text: widget.address?.addressLine1 ?? '',
   );
+  late final line2 = TextEditingController(
+    text: widget.address?.addressLine2 ?? '',
+  );
   late final city = TextEditingController(text: widget.address?.city ?? '');
   late final region = TextEditingController(text: widget.address?.state ?? '');
   late final postal = TextEditingController(
     text: widget.address?.postalCode ?? '',
   );
   late bool makeDefault = widget.isDefault;
-  late final List<String> original = controllers
+  late final postcodeLocation = CustomerPostcodeController(
+    postcode: postal,
+    city: city,
+    state: region,
+    lookup: widget.lookupPostcode,
+  );
+  late final List<String> original = editableControllers
       .map((controller) => controller.text)
       .toList();
-  bool saving = false, completed = false;
+  bool saving = false, completed = false, submitted = false;
   String? error;
   List<TextEditingController> get controllers => [
     label,
     name,
     phone,
     street,
+    line2,
     city,
     region,
     postal,
   ];
+  List<TextEditingController> get editableControllers =>
+      controllers.where((controller) => controller != region).toList();
   bool get dirty =>
-      controllers.indexed.any((entry) => entry.$2.text != original[entry.$1]) ||
+      editableControllers.indexed.any(
+        (entry) => entry.$2.text != original[entry.$1],
+      ) ||
       makeDefault != widget.isDefault;
   @override
   void initState() {
@@ -64,6 +87,8 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     for (final controller in controllers) {
       controller.addListener(refresh);
     }
+    postcodeLocation.addListener(refresh);
+    if (postal.text.isNotEmpty) unawaited(postcodeLocation.loadExisting());
   }
 
   void refresh() {
@@ -72,6 +97,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
 
   @override
   void dispose() {
+    postcodeLocation.dispose();
     for (final controller in controllers) {
       controller.dispose();
     }
@@ -79,7 +105,26 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
   }
 
   Future<void> save() async {
-    if (saving || !(form.currentState?.validate() ?? false)) return;
+    if (saving || postcodeLocation.lookingUp) return;
+    setState(() => submitted = true);
+    if (!(form.currentState?.validate() ?? false)) return;
+    if (!postcodeLocation.ready) {
+      setState(() => error = 'Enter a valid postcode to fill City and State.');
+      return;
+    }
+    final combinedError = shopAddressError(
+      StoreAddress(
+        line1: street.text,
+        line2: line2.text,
+        postcode: postal.text,
+        city: city.text,
+        state: region.text,
+      ).formatted,
+    );
+    if (combinedError != null) {
+      setState(() => error = combinedError);
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       saving = true;
@@ -93,6 +138,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
           name: name.text,
           phone: phone.text,
           addressLine1: street.text,
+          addressLine2: line2.text,
           city: city.text,
           state: region.text,
           postalCode: postal.text,
@@ -123,16 +169,36 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     TextInputType? keyboard,
     String? Function(String?)? validator,
     int? maxLength,
+    String? hint,
+    int maxLines = 1,
+    bool readOnly = false,
+    Widget? suffix,
+    ValueChanged<String>? onChanged,
+    List<TextInputFormatter>? formatters,
+    bool enabled = true,
+    String? inlineError,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 20),
     child: TextFormField(
       key: ValueKey(key),
       controller: controller,
-      enabled: !saving,
+      enabled: !saving && enabled,
       keyboardType: keyboard,
       maxLength: maxLength,
+      maxLines: maxLines,
+      readOnly: readOnly,
+      onChanged: onChanged,
+      inputFormatters: formatters,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
       style: const TextStyle(fontSize: 13),
-      decoration: InputDecoration(labelText: title, counterText: ''),
+      decoration: InputDecoration(
+        labelText: title,
+        hintText: hint,
+        counterText: '',
+        suffixIcon: suffix,
+        errorText: inlineError,
+        errorMaxLines: 3,
+      ),
       validator: validator ?? addressRequired,
     ),
   );
@@ -146,6 +212,9 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     discardTitle: 'Discard address changes?',
     body: Form(
       key: form,
+      autovalidateMode: submitted
+          ? AutovalidateMode.onUserInteraction
+          : AutovalidateMode.disabled,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
@@ -173,17 +242,93 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
                   phone,
                   keyboard: TextInputType.phone,
                   validator: addressPhoneError,
+                  hint: 'e.g. 012-345 6789',
                 ),
-                field('address-street', 'Address', street, maxLength: 200),
-                field('address-city', 'City', city, maxLength: 80),
-                field('address-state', 'State', region, maxLength: 80),
+                field(
+                  'address-street',
+                  'Address 1',
+                  street,
+                  hint: 'Unit / house number and street',
+                  keyboard: TextInputType.streetAddress,
+                  maxLength: 200,
+                  maxLines: 3,
+                  validator: addressLineError,
+                ),
+                field(
+                  'address-line-2',
+                  'Address 2 (Optional)',
+                  line2,
+                  hint: 'Building, floor or area',
+                  keyboard: TextInputType.streetAddress,
+                  maxLength: 200,
+                  maxLines: 2,
+                  validator: (value) =>
+                      addressLineError(value, required: false),
+                ),
                 field(
                   'address-postal',
-                  'Postal code',
+                  'Postcode',
                   postal,
                   keyboard: TextInputType.number,
                   validator: addressPostalError,
+                  maxLength: 5,
+                  hint: 'e.g. 47500',
+                  formatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (value) {
+                    error = null;
+                    postcodeLocation.changed(value);
+                  },
+                  inlineError: postcodeLocation.error,
                 ),
+                if (postcodeLocation.lookingUp)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                if (postcodeLocation.lookupFailed) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: saving ? null : postcodeLocation.retry,
+                      child: const Text('Retry postcode lookup'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                field(
+                  'address-city',
+                  'City',
+                  city,
+                  maxLength: 80,
+                  hint: 'From postcode',
+                  enabled: postcodeLocation.ready,
+                  validator: cityError,
+                ),
+                field(
+                  'address-state',
+                  'State',
+                  region,
+                  hint: 'From postcode',
+                  readOnly: true,
+                  suffix: const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 18,
+                    color: InventoryColors.muted,
+                  ),
+                  validator: (_) =>
+                      postcodeLocation.lookingUp || postcodeLocation.ready
+                      ? null
+                      : 'Enter a valid postcode to fill State.',
+                ),
+                const Text(
+                  'State is filled from your postcode and cannot be edited.',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    height: 1.4,
+                    color: InventoryColors.muted,
+                  ),
+                ),
+                const SizedBox(height: 10),
                 const Text(
                   'Country: Malaysia',
                   style: TextStyle(fontSize: 11, color: InventoryColors.muted),
@@ -222,7 +367,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     footer: ProfileFooter(
       label: saving ? 'Saving...' : 'Save address',
       busy: saving,
-      onPressed: saving ? null : save,
+      onPressed: saving || postcodeLocation.lookingUp ? null : save,
     ),
   );
 }

@@ -9,6 +9,7 @@ import '../widgets/order_ui.dart';
 import '../widgets/customer_ui.dart';
 import '../widgets/catalogue_cache_notice.dart';
 import 'product_image_screen.dart';
+import 'cart_screen.dart';
 
 class ItemDetailScreen extends StatefulWidget {
   const ItemDetailScreen({
@@ -16,10 +17,12 @@ class ItemDetailScreen extends StatefulWidget {
     required this.item,
     this.addToCart,
     this.imageProvider,
+    this.onOpenCart,
   });
   final InventoryBatch item;
   final Future<void> Function(InventoryBatch, int)? addToCart;
   final ImageProvider? imageProvider;
+  final VoidCallback? onOpenCart;
   @override
   State<ItemDetailScreen> createState() => _ItemDetailScreenState();
 }
@@ -27,7 +30,6 @@ class ItemDetailScreen extends StatefulWidget {
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
   int quantity = 1;
   bool adding = false;
-  String? error;
   InventoryBatch get item => widget.item;
   bool get selling => item.canSellAt(DateTime.now());
   String get unit =>
@@ -162,10 +164,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         'This product is no longer available for sale.',
                         error: true,
                       ),
-                    ],
-                    if (error != null) ...[
-                      const SizedBox(height: 16),
-                      OrderNotice(error!, error: true),
                     ],
                   ],
                 ),
@@ -309,7 +307,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     if (adding || !selling) return;
     setState(() {
       adding = true;
-      error = null;
     });
     try {
       await (widget.addToCart ??
@@ -318,14 +315,35 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             quantity: amount,
           ))(item, quantity);
       if (mounted) {
-        showCustomerFeedback(context, 'Added to cart');
+        showAddedToCartFeedback(
+          context,
+          item.productName,
+          onViewCart:
+              widget.onOpenCart ??
+              () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const CartScreen())),
+        );
       }
     } catch (failure) {
       if (mounted) {
-        setState(
-          () => error = failure is StateError
-              ? failure.message
-              : 'Could not add this product. Please try again.',
+        setState(() => adding = false);
+        await showDialog<void>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Could Not Add to Cart'),
+            content: Text(
+              failure is StateError
+                  ? failure.message
+                  : 'Could not add this product. Please try again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
         );
       }
     } finally {

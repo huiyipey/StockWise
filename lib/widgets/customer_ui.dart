@@ -72,6 +72,36 @@ void showCustomerFeedback(
     );
 }
 
+void showAddedToCartFeedback(
+  BuildContext context,
+  String productName, {
+  required VoidCallback onViewCart,
+}) => showCustomerFeedback(
+  context,
+  '$productName added to cart',
+  bottomMargin: 6,
+  action: TextButton(
+    style: TextButton.styleFrom(
+      foregroundColor: Colors.white,
+      minimumSize: Size.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    ),
+    onPressed: () {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      onViewCart();
+    },
+    child: const Text(
+      'View cart',
+      style: TextStyle(
+        fontSize: 13,
+        decoration: TextDecoration.underline,
+        decorationColor: Colors.white,
+      ),
+    ),
+  ),
+);
+
 class CustomerBottomNav extends StatefulWidget {
   const CustomerBottomNav({
     super.key,
@@ -190,7 +220,10 @@ class ProductPricingCard extends StatelessWidget {
             if (item.bundlePromotion)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: PromotionDescription(item.promotionLabel),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: PromotionDescription(item.promotionLabel),
+                ),
               ),
           ],
         ),
