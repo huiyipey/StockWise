@@ -641,7 +641,9 @@ class _ItemEditorState extends State<ItemEditor> {
     return FormField<String>(
       key: ValueKey('item-category-$category'),
       initialValue: choices.containsKey(category) ? category : null,
-      validator: (value) => value == null ? 'Choose a category' : null,
+      validator: (value) => value == null || !choices.containsKey(value)
+          ? 'Choose a category'
+          : null,
       builder: (field) => Semantics(
         button: true,
         child: InkWell(

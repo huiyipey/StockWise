@@ -209,7 +209,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
             'unauthenticated' =>
               'Please sign in again to save the shop details.',
             'permission-denied' =>
-              'Only the shop owner can edit these details.',
+              'Only an active admin of this shop can edit these details.',
             'not-found' => 'This store no longer exists.',
             _ =>
               editing

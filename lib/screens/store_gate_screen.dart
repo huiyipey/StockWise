@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
+import '../models/store_role.dart';
 import '../services/firestore_service.dart';
 import '../services/store_fields.dart';
 import '../services/store_session.dart';
@@ -26,6 +28,7 @@ class StoreGateScreen extends StatefulWidget {
     this.onRefresh,
     this.onCreate,
     this.onSelect,
+    this.selectedStoreBuilder,
   });
   final Stream<List<StoreInfo>>? storesStream;
   final Stream<List<StoreMembership>>? membershipsStream;
@@ -33,6 +36,7 @@ class StoreGateScreen extends StatefulWidget {
   final Future<void> Function()? onRefresh;
   final StoreCreator? onCreate;
   final void Function(StoreInfo store, String role)? onSelect;
+  final Widget Function(BuildContext, StoreInfo, String)? selectedStoreBuilder;
 
   @override
   State<StoreGateScreen> createState() => _StoreGateScreenState();
@@ -41,8 +45,12 @@ class StoreGateScreen extends StatefulWidget {
 class _StoreGateScreenState extends State<StoreGateScreen> {
   bool creating = false, checkingInvites = false, selecting = false;
   String? deleting;
-  late Stream<List<StoreInfo>> stores;
-  late Stream<List<StoreMembership>> memberships;
+  StreamSubscription<List<StoreInfo>>? _storesSubscription;
+  StreamSubscription<List<StoreMembership>>? _membershipsSubscription;
+  List<StoreInfo>? _stores;
+  List<StoreMembership>? _memberships;
+  bool _storesFailed = false, _membershipsFailed = false;
+  int _streamVersion = 0;
 
   @override
   void initState() {
@@ -60,10 +68,84 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
   }
 
   void _streams() {
-    stores = widget.storesStream ?? FirestoreService.instance.watchStores();
-    memberships =
-        widget.membershipsStream ??
-        FirestoreService.instance.watchMyMemberships();
+    unawaited(_storesSubscription?.cancel());
+    unawaited(_membershipsSubscription?.cancel());
+    final version = ++_streamVersion;
+    _stores = null;
+    _memberships = null;
+    _storesFailed = false;
+    _membershipsFailed = false;
+    _storesSubscription =
+        (widget.storesStream ?? FirestoreService.instance.watchStores()).listen(
+          (stores) {
+            if (!mounted || version != _streamVersion) return;
+            final session = StoreSession.instance;
+            final removed =
+                session.storeId != null &&
+                (_stores?.any((store) => store.id == session.storeId) ??
+                    false) &&
+                !stores.any((store) => store.id == session.storeId);
+            setState(() {
+              _stores = stores;
+              _storesFailed = false;
+            });
+            if (removed) {
+              session.clear();
+              _closeStoreRoutes('This store is no longer available.');
+            }
+          },
+          onError: (Object error) {
+            if (!mounted || version != _streamVersion) return;
+            setState(() => _storesFailed = true);
+          },
+        );
+    _membershipsSubscription =
+        (widget.membershipsStream ??
+                FirestoreService.instance.watchMyMemberships())
+            .listen(
+              (memberships) {
+                if (!mounted || version != _streamVersion) return;
+                setState(() {
+                  _memberships = memberships;
+                  _membershipsFailed = false;
+                });
+                final session = StoreSession.instance;
+                if (session.reconcileMemberships(memberships)) {
+                  _closeStoreRoutes(
+                    session.canManage
+                        ? 'You now have admin access to this store.'
+                        : 'Your admin access to this store has been removed.',
+                  );
+                }
+              },
+              onError: (Object error) {
+                if (!mounted || version != _streamVersion) return;
+                setState(() => _membershipsFailed = true);
+                if (StoreSession.instance.canManage) {
+                  StoreSession.instance.clear();
+                  _closeStoreRoutes(
+                    'Could not confirm admin access. Please reopen your store.',
+                  );
+                }
+              },
+            );
+  }
+
+  void _closeStoreRoutes(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_storesSubscription?.cancel());
+    unawaited(_membershipsSubscription?.cancel());
+    super.dispose();
   }
 
   Future<void> _checkInvites() async {
@@ -80,7 +162,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Staff access refreshed')));
+        ).showSnackBar(const SnackBar(content: Text('Admin access refreshed')));
       }
     } catch (_) {
       if (mounted) {
@@ -96,34 +178,36 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final session = StoreSession.instance;
-    if (session.store != null) {
-      return session.canManage ? const HomeScreen() : const ShopScreen();
-    }
-    return Scaffold(
-      backgroundColor: AuthColors.background,
-      body: SafeArea(
-        child: StreamBuilder<List<StoreInfo>>(
-          stream: stores,
-          builder: (context, storeSnapshot) =>
-              StreamBuilder<List<StoreMembership>>(
-                stream: memberships,
-                builder: (context, memberSnapshot) => _content(
-                  storeSnapshot.data ?? const [],
-                  {
-                    for (final member
-                        in memberSnapshot.data ?? <StoreMembership>[])
-                      member.storeId: member.role,
-                  },
-                  failed: storeSnapshot.hasError || memberSnapshot.hasError,
-                  loading: !storeSnapshot.hasData || !memberSnapshot.hasData,
-                ),
-              ),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: StoreSession.instance,
+    builder: (context, _) {
+      final session = StoreSession.instance;
+      final selectedStore = session.store;
+      if (selectedStore != null && _memberships != null) {
+        return widget.selectedStoreBuilder?.call(
+              context,
+              selectedStore,
+              session.role,
+            ) ??
+            (session.canManage ? const HomeScreen() : const ShopScreen());
+      }
+      final roles = <String, String>{};
+      for (final member in _memberships ?? <StoreMembership>[]) {
+        if (member.isAdmin) roles[member.storeId] = 'admin';
+      }
+      return Scaffold(
+        backgroundColor: AuthColors.background,
+        body: SafeArea(
+          child: _content(
+            _stores ?? const [],
+            roles,
+            failed: _storesFailed || _membershipsFailed,
+            loading: _stores == null || _memberships == null,
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 
   Widget _content(
     List<StoreInfo> stores,
@@ -247,8 +331,8 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                       Flexible(
                         child: Text(
                           checkingInvites
-                              ? 'Refreshing staff access…'
-                              : 'Refresh staff access',
+                              ? 'Refreshing admin access…'
+                              : 'Refresh admin access',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 12,
@@ -267,7 +351,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     },
   );
 
-  Widget _storeTile(StoreInfo store, String role) => role != 'owner'
+  Widget _storeTile(StoreInfo store, String role) => !isStoreAdminRole(role)
       ? _storeCard(store, role)
       : Dismissible(
           key: ValueKey('delete-store-${store.id}'),
@@ -439,7 +523,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
       ),
       const SizedBox(height: 38),
       const Text(
-        "You'll be the store owner.",
+        "You'll have admin access to this store.",
         style: TextStyle(color: AuthColors.muted, fontSize: 11),
       ),
     ],
@@ -481,7 +565,17 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     try {
       await FirestoreService.instance.saveActiveStore(store.id);
       if (mounted) {
-        setState(() => StoreSession.instance.select(store, role: role));
+        final currentRole = storeMembershipRole(
+          store.id,
+          (_memberships ?? <StoreMembership>[]).map(
+            (member) => (
+              storeId: member.storeId,
+              role: member.role,
+              isActive: member.isActive,
+            ),
+          ),
+        );
+        setState(() => StoreSession.instance.select(store, role: currentRole));
       }
     } catch (_) {
       if (mounted) {
@@ -507,7 +601,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
         ),
       );
       if (store != null && mounted) {
-        setState(() => StoreSession.instance.select(store, role: 'owner'));
+        setState(() => StoreSession.instance.select(store, role: 'admin'));
         await WidgetsBinding.instance.endOfFrame;
         if (!mounted) return;
         final openProfile = await showStoreCreatedNotice(context);
@@ -522,11 +616,6 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     }
   }
 
-  String _roleLabel(String role) => switch (role) {
-    'owner' => 'Owner',
-    'admin' => 'Admin',
-    'manager' => 'Manager',
-    'staff' => 'Staff',
-    _ => 'Customer',
-  };
+  String _roleLabel(String role) =>
+      isStoreAdminRole(role) ? 'Admin' : 'Customer';
 }

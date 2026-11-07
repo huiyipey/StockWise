@@ -4,18 +4,21 @@ import '../models/category_label.dart';
 import '../widgets/product_name_formatter.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
+import '../widgets/profile_ui.dart' show showProfileConfirmation;
 
 class CategoryManagementScreen extends StatefulWidget {
   final Stream<List<StoreCategory>>? categoryStream;
   final Future<void> Function(List<StoreCategory>)? orderSaver;
   final Future<void> Function(String name, String? id, bool active)?
   categorySaver;
+  final Future<void> Function(String id)? categoryDeleter;
 
   const CategoryManagementScreen({
     super.key,
     this.categoryStream,
     this.orderSaver,
     this.categorySaver,
+    this.categoryDeleter,
   });
   @override
   State<CategoryManagementScreen> createState() =>
@@ -23,7 +26,7 @@ class CategoryManagementScreen extends StatefulWidget {
 }
 
 class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
-  bool busy = false;
+  bool busy = false, confirmingDelete = false;
   List<StoreCategory>? pendingOrder;
   late final categories =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
@@ -113,11 +116,17 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
   Future<void> _save(
     Future<void> Function() operation, {
     String? failureMessage,
+    String? successMessage,
   }) async {
     if (busy) return;
     setState(() => busy = true);
     try {
       await operation();
+      if (mounted && successMessage != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(inventoryFeedback(successMessage));
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -135,6 +144,29 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> _delete(StoreCategory category) async {
+    if (busy || confirmingDelete) return;
+    confirmingDelete = true;
+    final confirmed = await showProfileConfirmation(
+      context: context,
+      title: 'Delete Category?',
+      message:
+          'Delete “${categoryTitleCase(category.name)}” from this shop? This cannot be undone. Only unused categories can be deleted; archive categories linked to products or stock history instead.',
+      action: 'Delete',
+      cancel: 'Cancel',
+      danger: true,
+    );
+    confirmingDelete = false;
+    if (!confirmed || !mounted) return;
+    await _save(
+      () =>
+          (widget.categoryDeleter ?? FirestoreService.instance.deleteCategory)(
+            category.id,
+          ),
+      successMessage: 'Category deleted.',
+    );
   }
 
   Future<void> _reorder(
@@ -195,7 +227,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           const Text(
-                            'Drag the handles to arrange categories. Archive unused categories to hide them from new items.',
+                            'Drag the handles to arrange categories. Delete unused categories, or archive categories you still need to keep.',
                             style: TextStyle(
                               fontSize: 13,
                               height: 1.6,
@@ -328,6 +360,25 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
                                             );
                                           }
                                         },
+                                ),
+                                IconButton(
+                                  key: ValueKey(
+                                    'delete-category-${category.id}',
+                                  ),
+                                  tooltip:
+                                      'Delete ${categoryTitleCase(category.name)}',
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                  ),
+                                  color: InventoryColors.error,
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 40,
+                                    height: 48,
+                                  ),
+                                  padding: const EdgeInsets.all(8),
+                                  onPressed: busy
+                                      ? null
+                                      : () => _delete(category),
                                 ),
                                 ReorderableDragStartListener(
                                   index: index,

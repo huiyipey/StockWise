@@ -1099,7 +1099,7 @@ class ReportEmailCard extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
               const Text(
-                'Store owner and active staff / Malaysia time',
+                'Active store admins / Malaysia time',
                 style: TextStyle(fontSize: 10, color: InventoryColors.muted),
               ),
             ],

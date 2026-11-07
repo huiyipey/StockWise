@@ -113,7 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           );
                         }
-                        if (StoreSession.instance.isOwner) {
+                        if (StoreSession.instance.canManage) {
                           return StreamBuilder<StoreInfo?>(
                             stream: shop,
                             initialData: StoreSession.instance.store,
@@ -169,7 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           role: '${session.role[0].toUpperCase()}${session.role.substring(1)}',
           storeName: store?.name ?? 'StockWise',
         ),
-        if (session.isOwner) ...[
+        if (session.canManage) ...[
           const SizedBox(height: 16),
           shopDetails(shopData!),
         ],
@@ -242,7 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (session.canManageMembers) ...[
                 ProfileAction(
                   label: 'Manage Store Admins',
-                  subtitle: 'Add staff access by email',
+                  subtitle: 'Add admin access by email',
                   icon: Icons.groups_2_outlined,
                   onTap: loggingOut
                       ? null
@@ -403,9 +403,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 size: 22,
               ),
               SizedBox(width: 10),
-              Text(
-                'Store Details',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              Expanded(
+                child: Text(
+                  'Store Details',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),
@@ -509,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (updated == null || !mounted) return;
     final session = StoreSession.instance;
-    if (session.storeId != store.id || !session.isOwner) return;
+    if (session.storeId != store.id || !session.canManage) return;
     session.select(updated, role: session.role);
     setState(() {});
     ScaffoldMessenger.of(

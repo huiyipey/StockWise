@@ -3,16 +3,16 @@ const {createHash}=require('node:crypto');
 const {quoteCart,deliveryFee,orderingOpen,orderingClosedMessage,titleCase,operatingHours}=require('./commerce_logic');
 const postcodes=require('./data/malaysia_postcodes.json');
 const {isValidMalaysianPhone}=require('./malaysian_phone');
-const roles=['owner','admin','manager','staff'];
+const {isActiveStoreAdmin}=require('./store_roles');
 function storeRef(db,request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Please sign in.');
   const id=request.data?.storeId;
   if(typeof id!=='string'||!/^[-\w]{1,128}$/.test(id))throw new HttpsError('invalid-argument','Select a store.');
   return db.collection('stores').doc(id);
 }
-async function team(tx,store,uid,owner=false) {
+async function team(tx,store,uid) {
   const member=(await tx.get(store.collection('members').doc(uid))).data();
-  if(member?.isActive!==true||!(owner?['owner','admin']:roles).includes(member.role))throw new HttpsError('permission-denied','Store team access is required.');
+  if(!isActiveStoreAdmin(member))throw new HttpsError('permission-denied','Store admin access is required.');
   return member;
 }
 function receiverDetails(value) {
@@ -150,15 +150,14 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
       const store=storeRef(db,request),mode=request.data.mode,fees=request.data.postcodeFees||{},fixed=request.data.fixedCents;
       if(!['fixed','postcode'].includes(mode)||!Number.isSafeInteger(fixed)||fixed<0||fixed>1000000||typeof fees!=='object'||Array.isArray(fees)||Object.keys(fees).length>5000||
         Object.entries(fees).some(([p,v])=>!postcodes[p]||!Number.isSafeInteger(v)||v<0||v>1000000))throw new HttpsError('invalid-argument','Enter valid delivery fees and Malaysian postcodes.');
-      await db.runTransaction(async tx=>{await team(tx,store,request.auth.uid,true);tx.set(store.collection('settings').doc('commerce'),
+      await db.runTransaction(async tx=>{await team(tx,store,request.auth.uid);tx.set(store.collection('settings').doc('commerce'),
         {storeId:store.id,deliveryFeeMode:mode,deliveryFeeCents:fixed,postcodeFees:fees,updatedAt:serverTimestamp()},{merge:true});});
       return {saved:true};
     }),
     deleteStore:wrap(async request=>{
       const store=storeRef(db,request);const data=await db.runTransaction(async tx=>{
-        const member=await team(tx,store,request.auth.uid,true),snap=await tx.get(store);
+        await team(tx,store,request.auth.uid);const snap=await tx.get(store);
         if(!snap.exists)throw new HttpsError('not-found','This store no longer exists.');
-        if(member.role!=='owner'||snap.data().ownerUid!==request.auth.uid)throw new HttpsError('permission-denied','Only the store owner can delete this store.');
         if(request.data.confirmName!==snap.data().name)throw new HttpsError('invalid-argument','Confirm the store name before deleting.');
         tx.update(store,{status:'deleting',updatedAt:serverTimestamp()});return snap.data();
       });

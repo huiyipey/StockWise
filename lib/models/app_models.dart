@@ -6,6 +6,7 @@ import 'category_label.dart';
 import 'store_hours.dart';
 import 'shelf_life.dart';
 import 'promotion.dart';
+import 'store_role.dart';
 
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
@@ -104,14 +105,15 @@ class StoreMembership {
     required this.isActive,
   });
 
+  bool get isAdmin => isActive && isStoreAdminRole(role);
+
   factory StoreMembership.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return StoreMembership(
-      storeId:
-          data['storeId'] as String? ?? doc.reference.parent.parent?.id ?? '',
-      userId: data['userId'] as String? ?? doc.id,
-      role: data['role'] as String? ?? 'staff',
-      isActive: data['isActive'] as bool? ?? true,
+      storeId: doc.reference.parent.parent?.id ?? '',
+      userId: doc.id,
+      role: canonicalStoreRole(data['role']),
+      isActive: data['isActive'] == true,
     );
   }
 }

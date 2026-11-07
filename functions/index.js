@@ -9,8 +9,12 @@ const {GoogleGenAI} = require('@google/genai');
 const {defineSecret} = require('firebase-functions/params');
 const nodemailer = require('nodemailer');
 const {createHash} = require('node:crypto');
-const {range, report, csv, duePeriods, reportCadences, recommendations} = require('./reporting');
+const {range, report, csv, duePeriods, recommendations} = require('./reporting');
 const {createAdminInviteHandler} = require('./admin_invites');
+const {setStoreAdminActiveHandler} = require('./store_admin_access');
+const {deleteCategoryHandler} = require('./category_management');
+const {isActiveStoreAdmin} = require('./store_roles');
+const {storeReportRecipients} = require('./report_recipients');
 const {createEmailRegistrationHandler} = require('./auth_registration');
 const {createVerificationHandler, identityEmailSender, withVerifiedAccount} = require('./email_verification');
 const {createStoreHandler, updateStoreHandler} = require('./store_creation');
@@ -54,7 +58,10 @@ exports.updateStore = verifiedCall({timeoutSeconds: 60, maxInstances: 3}, update
 exports.createAdminInvite = verifiedCall({timeoutSeconds: 30}, createAdminInviteHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
-const roles = ['owner', 'admin', 'manager', 'staff'];
+exports.setStoreAdminActive = verifiedCall({timeoutSeconds: 60}, setStoreAdminActiveHandler({
+  db, serverTimestamp: () => FieldValue.serverTimestamp(),
+}));
+exports.deleteCategory = verifiedCall({timeoutSeconds: 120, memory: '512MiB'}, deleteCategoryHandler({db}));
 function storeFor(request) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
   const id = request.data?.storeId;
@@ -63,7 +70,7 @@ function storeFor(request) {
 }
 async function requireMember(store, uid) {
   const member = (await store.collection('members').doc(uid).get()).data();
-  if (member?.isActive !== true || !roles.includes(member.role)) throw new HttpsError('permission-denied', 'Store team access is required.');
+  if (!isActiveStoreAdmin(member)) throw new HttpsError('permission-denied', 'Store admin access is required.');
 }
 async function buildReport(store, kind, start, end) {
   if (!['sales', 'waste'].includes(kind)) throw new HttpsError('invalid-argument', 'Select sales or waste.');
@@ -102,21 +109,7 @@ async function mailTransport() {
 const orderEmails=orderEmailHandlers({db,auth:getAuth(),transportFactory:mailTransport,bucket:getStorage().bucket(),serverTimestamp:()=>FieldValue.serverTimestamp()});
 exports.emailOrderConfirmation=onDocumentCreated({document:'stores/{storeId}/orders/{orderId}',timeoutSeconds:120,memory:'512MiB'},orderEmails.created);
 exports.retryOrderConfirmations=onSchedule({schedule:'every 15 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},orderEmails.retry);
-async function teamEmails(store, ownerUid) {
-  const members = await store.collection('members').get();
-  const uids = new Map(ownerUid ? [[ownerUid, {}]] : []);
-  for (const member of members.docs) {
-    if(member.data().reportsByEmail===false || member.data().isActive !== true || !roles.includes(member.data().role)) uids.delete(member.id);
-    else uids.set(member.id, member.data());
-  }
-  const result = [];
-  // Auth is the authoritative source, not client-editable profile/member email fields.
-  for (const [uid, member] of uids) {
-    try { const user = await getAuth().getUser(uid); if (user.email && !user.disabled) result.push({email: user.email.toLowerCase(), sales: reportCadences(member, 'sales'), waste: reportCadences(member, 'waste')}); }
-    catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
-  }
-  return result;
-}
+async function teamEmails(store) { return storeReportRecipients(store, getAuth()); }
 exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/Kuala_Lumpur',
   timeoutSeconds: 540, memory: '512MiB', maxInstances: 1, retryCount: 3}, async event => {
   const periods = duePeriods(new Date(event.scheduleTime), ['daily', 'weekly', 'monthly', 'yearly']);
@@ -126,7 +119,7 @@ exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/K
   let failed = false;
   for (const doc of stores.docs) {
     try {
-      const recipients = await teamEmails(doc.ref, doc.data().ownerUid);
+      const recipients = await teamEmails(doc.ref);
       for (const period of periods) for (const kind of ['waste', 'sales']) {
         const selectedRecipients = [...new Set(recipients.filter(recipient => recipient[kind].includes(period.cadence)).map(recipient => recipient.email))];
         if (!selectedRecipients.length) continue;

@@ -1,4 +1,5 @@
 const {HttpsError} = require('firebase-functions/v2/https');
+const {isActiveStoreAdmin} = require('./store_roles');
 
 function createAdminInviteHandler({db, auth, serverTimestamp}) {
   return async request => {
@@ -9,7 +10,7 @@ function createAdminInviteHandler({db, auth, serverTimestamp}) {
     }
     const store = db.collection('stores').doc(storeId);
     const caller = (await store.collection('members').doc(request.auth.uid).get()).data();
-    if (caller?.isActive !== true || !['owner', 'admin'].includes(caller.role)) {
+    if (!isActiveStoreAdmin(caller)) {
       throw new HttpsError('permission-denied', 'Store admin access is required.');
     }
     const email = typeof request.data?.email === 'string' ? request.data.email.trim().toLowerCase() : '';
@@ -30,7 +31,7 @@ function createAdminInviteHandler({db, auth, serverTimestamp}) {
       throw new HttpsError('already-exists', 'You already have store access.');
     }
     const member = (await store.collection('members').doc(account.uid).get()).data();
-    if (member?.isActive === true) {
+    if (isActiveStoreAdmin(member)) {
       throw new HttpsError('already-exists', 'This person already has store access.');
     }
     await store.collection('adminInvites').doc(email).set({

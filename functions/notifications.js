@@ -1,6 +1,7 @@
 const {createHash}=require('node:crypto');
 const {HttpsError}=require('firebase-functions/v2/https');
 const {shelfLife,expiryStage,titleCase}=require('./commerce_logic');
+const {isActiveStoreAdmin}=require('./store_roles');
 const key=token=>createHash('sha256').update(token).digest('hex');
 function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
   async function tokens(uid,type){
@@ -26,7 +27,7 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
     if(!claimed)return;
     try{await action();}catch(e){await ref.delete();throw e;}
   }
-  async function recipients(store){const members=await store.collection('members').get();return members.docs.filter(m=>m.data().isActive===true&&['owner','admin','manager','staff'].includes(m.data().role)).map(m=>m.id);}
+  async function recipients(store){const members=await store.collection('members').get();return members.docs.filter(m=>isActiveStoreAdmin(m.data())).map(m=>m.id);}
   async function cleanup(store,ref,now=new Date()){
     return db.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)return;
       const b=snap.data();if(!b.expiryAt?.toDate||b.expiryAt.toDate()>now)return;
@@ -55,7 +56,7 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
     chatMessage:async event=>{const data=event.data?.data();if(!data)return;const store=db.collection('stores').doc(event.params.storeId);
       const shop=(await store.get()).data();if(shop?.status!=='active')return;
       const team=await store.collection('members').get();
-      const uids=data.senderRole==='customer'?team.docs.filter(d=>d.data().isActive===true&&['owner','admin'].includes(d.data().role)).map(d=>d.id):[event.params.customerId];
+      const uids=data.senderRole==='customer'?team.docs.filter(d=>isActiveStoreAdmin(d.data())).map(d=>d.id):[event.params.customerId];
       for(const uid of uids)if(uid!==data.senderId)await notify(uid,`${data.senderName} · ${shop.name}`,data.text||'Sent an attachment',
         {storeId:store.id,customerId:event.params.customerId,type:'chat'},'order');
     },
@@ -74,7 +75,7 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
       if(before&&signature(before)===signature(after))return;
       const store=db.collection('stores').doc(event.params.storeId),shop=(await store.get()).data();if(shop?.status!=='active')return;
       const [customers,members]=await Promise.all([db.collection('users').where('activeStoreId','==',store.id).get(),store.collection('members').get()]);
-      const team=new Set(members.docs.filter(d=>d.data().isActive===true&&['owner','admin','manager','staff'].includes(d.data().role)).map(d=>d.id));
+      const team=new Set(members.docs.filter(d=>isActiveStoreAdmin(d.data())).map(d=>d.id));
       await once(store,`promotion-${event.id||store.id+'-'+event.params.batchId+'-'+signature(after)}`,async()=>{
         for(const user of customers.docs)if(!team.has(user.id))await notify(user.id,`New promotion · ${shop.name}`,`${after.productName}${after.promotion?.label?': '+after.promotion.label:' is on promotion.'}`,{storeId:store.id,batchId:event.params.batchId,type:'promotion'},'promotion');
       });

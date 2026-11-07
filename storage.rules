@@ -8,10 +8,12 @@ service firebase.storage {
           || request.auth.token.get('stockwise_legacy_account', false) == true);
     }
 
-    function member(storeId) {
+    function storeAdmin(storeId) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid))
-        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.isActive == true;
+        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.isActive == true
+        // Compatibility while legacy memberships are migrated to admin.
+        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.role in ['admin', 'owner', 'manager', 'staff'];
     }
 
     function imageUpload() {
@@ -27,8 +29,7 @@ service firebase.storage {
     }
 
     function chatAdmin(storeId) {
-      return member(storeId)
-        && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'];
+      return storeAdmin(storeId);
     }
 
     function canSendChat(storeId, customerId) {
@@ -67,7 +68,7 @@ service firebase.storage {
 
     match /stores/{storeId}/product-images/{productId}/{fileName} {
       allow read: if signedIn();
-      allow write: if member(storeId) && imageUpload();
+      allow write: if storeAdmin(storeId) && imageUpload();
     }
 
     match /user-avatars/{uid}/{fileName} {
@@ -77,8 +78,8 @@ service firebase.storage {
     }
 
     match /stores/{storeId}/order-attachments/{orderId}/{fileName} {
-      allow read: if member(storeId) || ownsOrder(storeId, orderId);
-      allow write: if (member(storeId) || ownsOrder(storeId, orderId))
+      allow read: if storeAdmin(storeId) || ownsOrder(storeId, orderId);
+      allow write: if (storeAdmin(storeId) || ownsOrder(storeId, orderId))
         && imageUpload();
     }
   }

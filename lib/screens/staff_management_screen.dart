@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../models/store_role.dart';
 import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
@@ -12,10 +13,12 @@ class StaffManagementScreen extends StatefulWidget {
     this.invitesStream,
     this.sendInvite,
     this.changeAccess,
+    this.currentUserId,
   });
   final Stream<List<Map<String, dynamic>>>? membersStream, invitesStream;
   final Future<void> Function(String)? sendInvite;
   final Future<void> Function(String, bool)? changeAccess;
+  final String? currentUserId;
   @override
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
 }
@@ -28,6 +31,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       widget.membersStream ?? FirestoreService.instance.watchStoreMembers();
   late final invites =
       widget.invitesStream ?? FirestoreService.instance.watchAdminInvites();
+  late final currentUserId =
+      widget.currentUserId ??
+      (widget.membersStream == null
+          ? FirestoreService.instance.currentUserId
+          : null);
 
   @override
   Widget build(BuildContext context) => InventoryTheme(
@@ -62,8 +70,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                       stream: invites,
                       builder: (context, inviteSnapshot) {
                         final rows = memberSnapshot.data!
-                            .where((item) => item['role'] != 'customer')
+                            .where((item) => isStoreAdminRole(item['role']))
                             .toList();
+                        final activeAdmins = rows
+                            .where((item) => item['isActive'] == true)
+                            .length;
                         final invitations =
                             (inviteSnapshot.data ??
                                     const <Map<String, dynamic>>[])
@@ -72,15 +83,6 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                         return ListView(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           children: [
-                            const Text(
-                              '',
-                              style: TextStyle(
-                                fontSize: 12,
-                                height: 1.5,
-                                color: InventoryColors.muted,
-                              ),
-                            ),
-                            const SizedBox(height: 22),
                             InventoryButton(
                               label: inviting
                                   ? 'Sending...'
@@ -90,7 +92,8 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                               onPressed: inviting ? null : invite,
                             ),
                             const ProfileSection('Store Team'),
-                            for (final row in rows) memberCard(row),
+                            for (final row in rows)
+                              memberCard(row, activeAdmins: activeAdmins),
                             if (inviteSnapshot.hasError)
                               const ProfileNotice(
                                 'Could not load pending invitations. Please reopen this page.',
@@ -172,9 +175,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     ),
   );
 
-  Widget memberCard(Map<String, dynamic> member) {
-    final owner = member['role'] == 'owner';
+  Widget memberCard(Map<String, dynamic> member, {required int activeAdmins}) {
     final id = member['id'] as String? ?? '';
+    final isActive = member['isActive'] == true;
+    final ownMembership = id == currentUserId;
+    final protected = ownMembership || (isActive && activeAdmins <= 1);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ProfilePanel(
@@ -185,9 +190,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
               radius: 20,
               backgroundColor: InventoryColors.soft,
               child: Icon(
-                owner
-                    ? Icons.storefront_outlined
-                    : Icons.people_outline_rounded,
+                Icons.admin_panel_settings_outlined,
                 size: 21,
                 color: InventoryColors.green,
               ),
@@ -198,8 +201,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    member['email'] as String? ??
-                        (owner ? 'Store Owner' : 'Admin'),
+                    member['email'] as String? ?? 'Admin',
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -207,7 +209,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    owner ? 'Owner' : 'Admin',
+                    ownMembership ? 'Admin · You' : 'Admin',
                     style: const TextStyle(
                       fontSize: 11,
                       color: InventoryColors.muted,
@@ -218,11 +220,9 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
             ),
             Switch(
               key: ValueKey('member-active-$id'),
-              value: member['isActive'] as bool? ?? true,
-              activeTrackColor: owner
-                  ? InventoryColors.line
-                  : InventoryColors.green,
-              onChanged: owner || pending.contains(id) || id.isEmpty
+              value: isActive,
+              activeTrackColor: InventoryColors.green,
+              onChanged: protected || pending.contains(id) || id.isEmpty
                   ? null
                   : (value) => changeAccess(id, value),
             ),
@@ -243,11 +243,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         id,
         value,
       );
-    } catch (_) {
+    } catch (failure) {
       if (mounted) {
         setState(
-          () => error =
-              'Could not update access. The previous setting is retained.',
+          () => error = failure is StateError
+              ? failure.message
+              : 'Could not update access. The previous setting is retained.',
         );
       }
     } finally {
@@ -363,7 +364,7 @@ class _InviteAdminDialogState extends State<_InviteAdminDialog> {
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => submit(),
                 style: const TextStyle(fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Staff email'),
+                decoration: const InputDecoration(labelText: 'Admin Email'),
                 validator: (value) =>
                     RegExp(
                       r'^[^\s@]+@[^\s@]+\.[^\s@]+$',

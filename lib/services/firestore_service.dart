@@ -15,6 +15,7 @@ import '../models/barcode_product.dart';
 import '../models/product_name.dart';
 import '../models/category_label.dart';
 import '../models/report_email_schedule.dart';
+import '../models/store_role.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 import 'order_product.dart';
@@ -175,30 +176,42 @@ class FirestoreService {
         .where('emailLowercase', isEqualTo: emailLowercase)
         .get();
     for (final invitation in invitations.docs) {
-      if (invitation.data()['status'] != 'pending') continue;
       final storeRef = invitation.reference.parent.parent;
-      if (storeRef == null) continue;
+      if (storeRef == null ||
+          storeRef.parent.id != 'stores' ||
+          !isAcceptableAdminInvitation(
+            invitation.data(),
+            storeId: storeRef.id,
+            emailLowercase: emailLowercase,
+          )) {
+        continue;
+      }
       final memberRef = storeRef.collection('members').doc(_user.uid);
       await _db.runTransaction((transaction) async {
         final currentInvite = await transaction.get(invitation.reference);
         final currentMember = await transaction.get(memberRef);
-        if (!currentInvite.exists ||
-            currentInvite.data()?['status'] != 'pending') {
+        if (!isAcceptableAdminInvitation(
+          currentInvite.data(),
+          storeId: storeRef.id,
+          emailLowercase: emailLowercase,
+        )) {
           return;
         }
-        if (currentMember.exists && currentMember.data()?['role'] == 'owner') {
-          return;
+        final currentData = currentMember.data();
+        if (currentData?['isActive'] != true ||
+            !isStoreAdminRole(currentData?['role'])) {
+          transaction.set(memberRef, {
+            'storeId': storeRef.id,
+            'userId': _user.uid,
+            'email': _user.email,
+            'role': 'admin',
+            'isActive': true,
+            'invitationId': invitation.id,
+            if (currentData?['joinedAt'] == null)
+              'joinedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
         }
-        transaction.set(memberRef, {
-          'storeId': storeRef.id,
-          'userId': _user.uid,
-          'email': _user.email,
-          'role': 'admin',
-          'isActive': true,
-          'invitationId': invitation.id,
-          'joinedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
         transaction.update(invitation.reference, {
           'status': 'accepted',
           'acceptedBy': _user.uid,
@@ -272,16 +285,24 @@ class FirestoreService {
     );
   }
 
-  Stream<List<StoreMembership>> watchMyMemberships() => _db
-      .collectionGroup('members')
-      .where('userId', isEqualTo: _user.uid)
-      .snapshots()
-      .map(
-        (snapshot) => snapshot.docs
-            .map(StoreMembership.fromDoc)
-            .where((membership) => membership.isActive)
-            .toList(),
-      );
+  Stream<List<StoreMembership>> watchMyMemberships() {
+    final userId = _user.uid;
+    return _db
+        .collectionGroup('members')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(StoreMembership.fromDoc)
+              .where(
+                (membership) =>
+                    membership.userId == userId && membership.isActive,
+              )
+              .toList(),
+        );
+  }
+
+  String get currentUserId => _user.uid;
 
   Future<StoreInfo> createStore({
     required String name,
@@ -349,18 +370,19 @@ class FirestoreService {
       throw ArgumentError('This email address cannot be used.');
     }
     if (normalized == _user.email?.trim().toLowerCase()) {
-      throw ArgumentError('The store owner already has full access.');
+      throw ArgumentError('You already have admin access to this store.');
     }
     await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
         .httpsCallable('createAdminInvite')
         .call({'storeId': _storeId, 'email': normalized});
   }
 
-  Future<void> setMemberActive(String uid, bool isActive) =>
-      _storeRef.collection('members').doc(uid).update({
-        'isActive': isActive,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+  Future<void> setMemberActive(String uid, bool isActive) async {
+    await callCommerce('setStoreAdminActive', {
+      'userId': uid,
+      'isActive': isActive,
+    });
+  }
 
   Stream<List<String>> watchCategories() => watchCategoryRecords().map(
     (categories) =>
@@ -440,6 +462,11 @@ class FirestoreService {
           'This category already exists. Restore it if archived.',
         );
       }
+      if (id != null && !existing.exists) {
+        throw StateError(
+          'This category was deleted. Reopen the categories page.',
+        );
+      }
       tx.set(ref, {
         'storeId': _storeId,
         'name': categoryTitleCase(trimmed),
@@ -450,6 +477,10 @@ class FirestoreService {
         if (!existing.exists) 'sortOrder': nextOrder,
       }, SetOptions(merge: true));
     });
+  }
+
+  Future<void> deleteCategory(String id) async {
+    await callCommerce('deleteCategory', {'categoryId': id});
   }
 
   Future<void> reorderCategories(List<StoreCategory> categories) async {
@@ -559,6 +590,19 @@ class FirestoreService {
         (reusedProduct.storeId != _storeId ||
             reusedProduct.barcode != barcode?.trim())) {
       throw ArgumentError('Look up the barcode again for the selected store.');
+    }
+    if (category.isEmpty ||
+        category.contains('/') ||
+        category == '.' ||
+        category == '..') {
+      throw ArgumentError('Choose a valid category.');
+    }
+    final selectedCategory = await _storeRef
+        .collection('categories')
+        .doc(category)
+        .get(const GetOptions(source: Source.server));
+    if (!selectedCategory.exists) {
+      throw StateError('This category was deleted. Choose another category.');
     }
     final productRef = existing == null
         ? _storeRef.collection('products').doc(reusedProduct?.id)

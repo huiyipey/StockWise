@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'inventory_ui.dart';
 
-/// Returns true when the new owner wants to review the default settings now.
+/// Returns true when the new admin wants to review the default settings now.
 Future<bool> showStoreCreatedNotice(BuildContext context) async =>
     await showDialog<bool>(
       context: context,

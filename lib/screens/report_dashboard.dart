@@ -218,7 +218,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
       'rows': selection.records.map((row) => row.cells(kind)).toList(),
       if (period == ReportPeriod.weekly)
         'calendarNote':
-            'Fiscal year starts Monday on or before 1 January. Monday-Sunday weeks; periods repeat 4, 4, 5 weeks. A 53rd week is added to period 12.',
+            'ISO weeks run Monday-Sunday. Week 1 is the week containing 4 January.',
     });
     setState(() => downloading = true);
     try {
@@ -276,8 +276,8 @@ class _ReportDashboardState extends State<ReportDashboard> {
             const SizedBox(height: 12),
             if (period == ReportPeriod.weekly) ...[
               const Text(
-                'Fiscal year starts Monday on or before 1 January. Monday–Sunday weeks follow 4, 4, 5 weeks per quarter. A 53rd week is included in period 12.',
-                key: ValueKey('retail-calendar-explanation'),
+                'ISO weeks run Monday–Sunday. Week 1 is the week containing 4 January.',
+                key: ValueKey('iso-week-explanation'),
                 style: TextStyle(
                   fontSize: 11,
                   height: 1.5,

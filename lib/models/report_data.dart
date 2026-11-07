@@ -27,7 +27,7 @@ String reportMoney(int cents) =>
 
 enum ReportPeriod {
   daily('Daily'),
-  weekly('Retail Calendar (4-4-5)'),
+  weekly('Weekly'),
   monthly('Monthly'),
   yearly('Yearly'),
   custom('Custom range');
@@ -86,14 +86,19 @@ class ReportWindow {
             : DateTime(firstYear);
         end = DateTime(today.year, 12, 31);
       case ReportPeriod.weekly:
-        DateTime firstMonday(int year) {
-          final jan1 = DateTime(year);
-          return DateTime(year, 1, 2 - jan1.weekday);
+        DateTime firstIsoMonday(int year) {
+          final jan4 = DateTime(year, 1, 4);
+          return DateTime(year, 1, 5 - jan4.weekday);
         }
-        var fiscalYear = today.year;
-        if (!today.isBefore(firstMonday(fiscalYear + 1))) fiscalYear++;
-        start = firstMonday(fiscalYear);
-        end = firstMonday(fiscalYear + 1).subtract(const Duration(days: 1));
+        // The Thursday identifies the ISO week-year at New Year boundaries.
+        final weekYear = DateTime(
+          today.year,
+          today.month,
+          today.day + DateTime.thursday - today.weekday,
+        ).year;
+        start = firstIsoMonday(weekYear);
+        final nextYear = firstIsoMonday(weekYear + 1);
+        end = DateTime(nextYear.year, nextYear.month, nextYear.day - 1);
       case ReportPeriod.custom:
         if (customStart == null || customEnd == null) {
           throw ArgumentError('Choose a date range.');
@@ -105,7 +110,6 @@ class ReportWindow {
         }
     }
     final buckets = <ReportBucket>[];
-    var retailPeriod = 0;
     for (var cursor = start; !cursor.isAfter(end);) {
       late DateTime last, next;
       late String label, axis;
@@ -118,18 +122,13 @@ class ReportWindow {
         next = DateTime(cursor.year, cursor.month + 1);
         label = axis = DateFormat('MMMM yyyy').format(cursor);
       } else if (period == ReportPeriod.weekly) {
-        final weeks = retailPeriod % 3 == 2 ? 5 : 4;
-        next = DateTime(cursor.year, cursor.month, cursor.day + weeks * 7);
-        if (retailPeriod == 11) next = end.add(const Duration(days: 1));
-        last = next.subtract(const Duration(days: 1));
-        final fiscalYear = end.year;
-        final firstWeek = calendarWeekDays(start, cursor) ~/ 7 + 1;
-        final lastWeek = calendarWeekDays(start, last) ~/ 7 + 1;
-        axis =
-            'P${(retailPeriod + 1).toString().padLeft(2, '0')} FY$fiscalYear';
+        next = DateTime(cursor.year, cursor.month, cursor.day + 7);
+        last = DateTime(cursor.year, cursor.month, cursor.day + 6);
+        final weekYear = DateTime(start.year, start.month, start.day + 3).year;
+        final week = calendarWeekDays(start, cursor) ~/ 7 + 1;
+        axis = 'W${week.toString().padLeft(2, '0')} $weekYear';
         label =
-            '$axis · Weeks $firstWeek–$lastWeek / ${DateFormat("d MMM").format(cursor)} - ${DateFormat("d MMM yyyy").format(last)}';
-        retailPeriod++;
+            'Week $week, $weekYear · ${DateFormat("d MMM yyyy").format(cursor)} - ${DateFormat("d MMM yyyy").format(last)}';
       } else {
         last = cursor;
         next = DateTime(cursor.year, cursor.month, cursor.day + 1);
@@ -153,7 +152,7 @@ class ReportWindow {
   String get granularity => switch (period) {
     ReportPeriod.monthly => 'Monthly',
     ReportPeriod.yearly => 'Yearly',
-    ReportPeriod.weekly => 'Retail period',
+    ReportPeriod.weekly => 'Weekly',
     _ => 'Daily',
   };
 }

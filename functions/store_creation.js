@@ -2,6 +2,7 @@ const {createHash} = require('node:crypto');
 const {HttpsError} = require('firebase-functions/v2/https');
 const postcodes = require('./data/malaysia_postcodes.json');
 const {titleCase,operatingHours}=require('./commerce_logic');
+const {isActiveStoreAdmin}=require('./store_roles');
 
 function displayStoreName(value) {
   return typeof value === 'string' ? titleCase(value) : '';
@@ -81,7 +82,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
       });
       tx.set(store.collection('members').doc(owner.uid), {
         storeId: store.id, userId: owner.uid, email: owner.email ?? null,
-        role: 'owner', isActive: true, joinedAt: timestamp, updatedAt: timestamp,
+        role: 'admin', isActive: true, joinedAt: timestamp, updatedAt: timestamp,
       });
       for (const category of ['Dairy', 'Bakery', 'Vegetables', 'Fruits', 'Meat', 'Household', 'Others']) {
         const id = category.toLowerCase();
@@ -121,8 +122,8 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
       if (!current.exists) throw new HttpsError('not-found', 'This store no longer exists.');
       const data = current.data();
       const member = await tx.get(store.collection('members').doc(owner.uid));
-      if (data.ownerUid !== owner.uid || member.data()?.role !== 'owner' || member.data()?.isActive !== true) {
-        throw new HttpsError('permission-denied', 'Only the shop owner can edit these details.');
+      if (!isActiveStoreAdmin(member.data())) {
+        throw new HttpsError('permission-denied', 'Store admin access is required to edit these details.');
       }
       const nameChanged = normalizedStoreName(data.name) !== normalized;
       const nextRef = db.collection('storeNames').doc(nameKey);

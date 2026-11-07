@@ -22,17 +22,25 @@ service cloud.firestore {
         && get(memberPath(storeId)).data.isActive == true;
     }
 
-    function hasStoreRole(storeId, roles) {
+    function isStoreAdmin(storeId) {
       return isActiveMember(storeId)
-        && get(memberPath(storeId)).data.role in roles;
+        // Read compatibility for stores created before the two-role migration.
+        && get(memberPath(storeId)).data.role in ['admin', 'owner', 'manager', 'staff'];
     }
 
     function managesInventory(storeId) {
-      return hasStoreRole(storeId, ['owner', 'admin', 'manager', 'staff']);
+      return isStoreAdmin(storeId);
     }
 
     function managesStore(storeId) {
-      return hasStoreRole(storeId, ['owner', 'admin']);
+      return isStoreAdmin(storeId);
+    }
+
+    function validCategoryReference(storeId, data) {
+      return data.get('categoryId', '') is string
+        && data.categoryId.matches('^[^/]{1,256}$')
+        && !(data.categoryId in ['.', '..'])
+        && existsAfter(/databases/$(database)/documents/stores/$(storeId)/categories/$(data.categoryId));
     }
 
     function validReportSchedules(data) {
@@ -46,12 +54,6 @@ service cloud.firestore {
           && data.reportEmailSchedules.waste.size() <= 4
           && data.reportEmailSchedules.sales.hasOnly(['daily', 'weekly', 'monthly', 'yearly'])
           && data.reportEmailSchedules.waste.hasOnly(['daily', 'weekly', 'monthly', 'yearly']));
-    }
-
-    function isBootstrapOwner(storeId) {
-      return signedIn()
-        && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid
-          == request.auth.uid;
     }
 
     function validCartItem(storeId, batchId) {
@@ -237,31 +239,31 @@ service cloud.firestore {
       allow delete: if false;
 
       match /members/{uid} {
-        allow get: if owns(uid) || isActiveMember(storeId);
-        allow list: if (signedIn() && resource.data.userId == request.auth.uid) || isActiveMember(storeId);
-        allow create: if signedIn() && (
-          (owns(uid)
-            && request.resource.data.role == 'owner'
-            && getAfter(/databases/$(database)/documents/stores/$(storeId)).data.ownerUid == request.auth.uid)
-          || (hasStoreRole(storeId, ['owner'])
-            && request.resource.data.role in ['admin', 'manager', 'staff'])
-          || (owns(uid)
-            && request.resource.data.role == 'admin'
-            && request.auth.token.email_verified == true
-            && request.resource.data.invitationId is string
-            && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.status == 'pending'
-            && get(/databases/$(database)/documents/stores/$(storeId)/adminInvites/$(request.resource.data.invitationId)).data.emailLowercase
-              == request.auth.token.email.lower())
-        );
-        allow update: if validReportSchedules(request.resource.data) && ((owns(uid) && isActiveMember(storeId)
+        function acceptingAdminInvitation() {
+          let data = request.resource.data;
+          let invite = /databases/$(database)/documents/stores/$(storeId)/adminInvites/$(data.invitationId);
+          return owns(uid) && request.auth.token.email_verified == true
+            && data.storeId == storeId && data.userId == uid
+            && data.role == 'admin' && data.isActive == true
+            && data.email is string && data.email.lower() == request.auth.token.email.lower()
+            && data.invitationId is string
+            && get(invite).data.status == 'pending'
+            && get(invite).data.role == 'admin'
+            && get(invite).data.storeId == storeId
+            && get(invite).data.emailLowercase == request.auth.token.email.lower()
+            && getAfter(invite).data.status == 'accepted'
+            && getAfter(invite).data.acceptedBy == uid;
+        }
+        allow get: if owns(uid) || managesStore(storeId);
+        allow list: if (signedIn() && resource.data.userId == request.auth.uid) || managesStore(storeId);
+        allow create: if acceptingAdminInvitation();
+        // Access changes go through a transaction in setStoreAdminActive, so an
+        // admin cannot remove themself or race another removal to strand a shop.
+        allow update: if validReportSchedules(request.resource.data) && ((owns(uid) && managesStore(storeId)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reportsByEmail', 'reportEmailSchedules', 'updatedAt'])
             && request.resource.data.reportsByEmail is bool)
-          || (hasStoreRole(storeId, ['owner'])
-            && request.resource.data.role == resource.data.role)
-          || (hasStoreRole(storeId, ['admin'])
-            && resource.data.role != 'owner'
-            && request.resource.data.role == resource.data.role));
-        allow delete: if hasStoreRole(storeId, ['owner']) && uid != request.auth.uid;
+          || acceptingAdminInvitation());
+        allow delete: if false;
       }
 
       match /adminInvites/{inviteId} {
@@ -269,17 +271,24 @@ service cloud.firestore {
           || (signedIn()
             && resource.data.emailLowercase
               == request.auth.token.email.lower());
-        allow create: if managesStore(storeId)
-          && request.resource.data.storeId == storeId
-          && request.resource.data.role == 'admin'
-          && request.resource.data.status == 'pending';
-        allow update: if managesStore(storeId) || (
+        // The callable verifies that the invited account exists before writing.
+        allow create: if false;
+        allow update: if (managesStore(storeId)
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])) || (
           signedIn()
+          && request.auth.token.email_verified == true
           && resource.data.status == 'pending'
+          && resource.data.role == 'admin'
+          && resource.data.storeId == storeId
           && resource.data.emailLowercase
             == request.auth.token.email.lower()
           && request.resource.data.status == 'accepted'
           && request.resource.data.acceptedBy == request.auth.uid
+          && getAfter(memberPath(storeId)).data.isActive == true
+          && getAfter(memberPath(storeId)).data.role in ['admin', 'owner', 'manager', 'staff']
+          && getAfter(memberPath(storeId)).data.userId == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'acceptedBy', 'acceptedAt', 'updatedAt'])
         );
@@ -288,7 +297,7 @@ service cloud.firestore {
 
       match /categories/{categoryId} {
         allow read: if signedIn();
-        allow create, update: if (managesInventory(storeId) || isBootstrapOwner(storeId))
+        allow create, update: if managesInventory(storeId)
           && request.resource.data.storeId == storeId
           && request.resource.data.name is string
           && request.resource.data.name.size() > 0
@@ -304,7 +313,12 @@ service cloud.firestore {
 
       match /products/{productId} {
         allow read: if signedIn();
-        allow write: if managesInventory(storeId);
+        allow create: if managesInventory(storeId)
+          && validCategoryReference(storeId, request.resource.data);
+        allow update: if managesInventory(storeId)
+          && (request.resource.data.get('categoryId', null) == resource.data.get('categoryId', null)
+            || validCategoryReference(storeId, request.resource.data));
+        allow delete: if managesInventory(storeId);
       }
 
       match /inventoryArchive/{batchId} {
@@ -317,16 +331,21 @@ service cloud.firestore {
       match /inventoryBatches/{batchId} {
         allow read: if signedIn();
         allow create: if managesInventory(storeId)
+          && validCategoryReference(storeId, request.resource.data)
           && request.resource.data.quantityOnHand is int && request.resource.data.quantityOnHand > 0
           && request.resource.data.basePriceCents is int && request.resource.data.basePriceCents > 0;
         allow update: if managesInventory(storeId) && resource.data.expiryAt > request.time
+          && (request.resource.data.get('categoryId', null) == resource.data.get('categoryId', null)
+            || validCategoryReference(storeId, request.resource.data))
           && request.resource.data.quantityOnHand is int && request.resource.data.quantityOnHand >= 0
           && request.resource.data.basePriceCents is int && request.resource.data.basePriceCents > 0;
         allow delete: if false;
       }
       match /inventoryEvents/{eventId} {
         allow read: if managesInventory(storeId);
-        allow create: if managesInventory(storeId) && request.resource.data.eventType in ['received', 'adjusted'];
+        allow create: if managesInventory(storeId)
+          && validCategoryReference(storeId, request.resource.data)
+          && request.resource.data.eventType in ['received', 'adjusted'];
         allow update, delete: if false;
       }
 
@@ -373,7 +392,7 @@ service cloud.firestore {
         }
       }
 
-      // One private customer conversation per store; active owner/admin share the inbox.
+      // One private customer conversation per store; active admins share the inbox.
       match /conversations/{customerId} {
         allow get: if chatReadable(storeId, customerId);
         allow list: if managesStore(storeId);
