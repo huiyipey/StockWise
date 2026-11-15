@@ -27,7 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>StockWise uses your photo library to add product images.</string>
+	<string>StockWise uses selected photos for product images, receipts, chats and images you send to the AI assistant.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>StockWise uses the camera when you choose to take a photo or scan a product barcode.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
