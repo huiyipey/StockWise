@@ -7,6 +7,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// Keep the GTK application and forwarded Dart arguments.
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
@@ -54,6 +55,7 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+// Create the Flutter project and forward its launch arguments.
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
@@ -73,6 +75,7 @@ static void my_application_activate(GApplication* application) {
                            self);
   gtk_widget_realize(GTK_WIDGET(view));
 
+// Register the native plugins used by this Flutter view.
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
   gtk_widget_grab_focus(GTK_WIDGET(view));

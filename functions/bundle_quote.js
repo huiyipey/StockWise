@@ -3,10 +3,13 @@ const {createHash} = require('node:crypto');
 // Selected units and automatic free units are kept separate so cart rows,
 // order lines and inventory deductions describe the same physical quantities.
 function bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, titleCase, shelfLife}) {
+  // Normalize a saved timestamp for stock calculations.
   const when = value => value?.toDate ? value.toDate() : new Date(value);
   const byId = new Map(inventory.map(batch => [batch.id, batch]));
   const stock = new Map(), automatic = [], issues = [], states = [];
+  // Require active, unexpired stock with available units.
   const sellable = batch => batch && batch.status === 'active' && when(batch.expiryAt) > now;
+  // Subtract reserved units from the stock on hand.
   const available = batch => Math.max(0, batch.quantityOnHand - (batch.quantityReserved || 0));
   for (const item of [...cart].sort((a, b) => a.batchId.localeCompare(b.batchId))) {
     const batch = byId.get(item.batchId), quantity = item.quantity;
@@ -17,12 +20,15 @@ function bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, tit
     states.push({batch, quantity, normal: quantity, locked: 0, price: sellingPrice(batch), rewards: []});
   }
 
+  // Count the qualifying groups for this bundle offer.
   const groupsFor = (quantity, price, promotion) => promotion.requirement === 'spend'
     ? Math.floor(quantity * price / promotion.thresholdSpendCents)
     : Math.floor(quantity / promotion.thresholdQuantity);
+  // Calculate the price charged for a rewarded unit.
   const rewardPrice = (price, promotion) => promotion.reward === 'free' ? 0
     : promotion.reward === 'percentage' ? Math.max(1, Math.round(price * (100 - promotion.rewardPercentage) / 100))
       : Math.max(0, price - promotion.rewardAmountCents);
+  // Build the promotion label saved with the quoted line.
   const labelFor = (batch, promotion) => {
     if (promotion.label) return promotion.label;
     const buy = promotion.requirement === 'spend' ? `Spend RM ${(promotion.thresholdSpendCents / 100).toFixed(2)} on ${titleCase(batch.productName)}`
@@ -100,6 +106,7 @@ function bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, tit
   }
 
   const lines = [], cartSummaries = [];
+  // Merge units with the same product and quoted price.
   const addLine = (batch, quantity, price, extra) => {
     if (!quantity) return;
     lines.push({batchId: batch.id, productId: batch.productId, productName: batch.productName, categoryId: batch.categoryId || 'others',
@@ -131,4 +138,5 @@ function bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, tit
     discountCents: lines.reduce((sum, line) => sum + line.discountCents, 0), promotionWarnings, promotionReviewToken};
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {bundleQuote};

@@ -12,23 +12,28 @@ const apiKey=config.client[0].api_key[0].current_key;
 const bucket=config.project_info.storage_bucket;
 const client=new OAuth2Client();
 const db=new Firestore({projectId:project,preferRest:true,auth:new GoogleAuth({authClient:client})});
-initializeApp({projectId:project,credential:{getAccessToken:async()=>({access_token:await token(),expires_in:3500})}});
+initializeApp({projectId:project,credential:{/* Provide the authenticated token to this Firebase client. */ getAccessToken:async()=>({access_token:await token(),expires_in:3500})}});
+// Keep these checks scoped to disposable test records.
 const id='profile_test_'+randomUUID().replaceAll('-','');
 const users=[],objects=[];
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aPioAAAAASUVORK5CYII=','base64');
+// Create a disposable account for the verification checks.
 async function signUp(){
  const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:id+randomUUID()+'@example.invalid',password:randomUUID()+'Aa9!',returnSecureToken:true})});
  const d=await r.json();assert.equal(r.status,200,JSON.stringify(d));users.push(d);return d;
 }
+// Upload the small test image using this account.
 async function upload(path,user,body=png,type='image/png'){
  objects.push(path);
  return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o?name=${encodeURIComponent(path)}`,{method:'POST',headers:{Authorization:`Firebase ${user.idToken}`,'Content-Type':type},body});
 }
+// Apply the test document update using the selected account.
 async function patch(path,user,fields){
  return fetch(`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${path}`,{method:'PATCH',headers:{Authorization:`Bearer ${user.idToken}`,'Content-Type':'application/json'},body:JSON.stringify({fields})});
 }
 (async()=>{
  client.setCredentials({access_token:await token(),expiry_date:Date.now()+3500000});
+ // Run this operation and handle any reported failure.
  try{
   const customer=await signUp(),staff=await signUp(),outsider=await signUp();
   const store=db.collection('stores').doc(id);
@@ -58,6 +63,7 @@ async function patch(path,user,fields){
   assert.equal((await patch(pref,staff,{reportEmails:{stringValue:'false'}})).status,403,'Non-boolean denied');
   assert.equal((await patch(pref,staff,{reportEmails:{booleanValue:true}})).status,200,'Own opt-in');
   console.log('PASS: receipt upload/read/link, cross-user denials, size/type rejection, avatars, profile ownership and email preferences.');
+ // Clean up temporary test resources.
  } finally{
   for(const path of new Set(objects)){
    assert.ok(path.startsWith(`stores/${id}/`) || users.some(u=>path===`user-avatars/${u.localId}/test.png`));

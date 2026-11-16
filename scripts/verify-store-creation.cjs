@@ -10,18 +10,20 @@ const {token, project} = require('./cloud-access.cjs');
 const {storeNameKey} = require('../functions/store_creation');
 const config = require('../android/app/google-services.json');
 const apiKey = config.client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const authClient = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient})});
 const recovery = process.argv[2] === '--cleanup';
 const suffix = recovery ? process.argv[3] : randomUUID().replaceAll('-', '').slice(0, 12);
 assert.match(suffix, /^[a-f0-9]{12}$/);
+// Keep these checks scoped to disposable test records.
 const prefix = `Store creation test ${suffix}`;
 const names = ['race', 'legacy', 'other', 'renamed', 'rename race', 'create rename race'].map(name => `${prefix} ${name}`);
 const legacyId = `store_creation_test_${suffix}_legacy`;
 const directId = `store_creation_test_${suffix}_direct`;
 const storeIds = new Set([legacyId, directId]);
 const users = [];
+// Create a disposable account for the verification checks.
 async function signup() {
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -32,6 +34,7 @@ async function signup() {
   users.push(data);
   return data;
 }
+// Invoke the selected backend action using the test account.
 async function call(data, user, method = 'createStore') {
   const response = await fetch(`https://asia-southeast1-${project}.cloudfunctions.net/${method}`, {
     method: 'POST', headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
@@ -41,6 +44,7 @@ async function call(data, user, method = 'createStore') {
   if (result.result?.id) storeIds.add(result.result.id);
   return {status: response.status, ...result};
 }
+// Read a document using the signed-in test client.
 async function clientDocument(path, user, fields, mask) {
   const query = mask ? `?updateMask.fieldPaths=${encodeURIComponent(mask)}` : '';
   const response = await fetch(`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/${path}${query}`, {
@@ -51,6 +55,7 @@ async function clientDocument(path, user, fields, mask) {
 }
 (async () => {
   authClient.setCredentials({access_token: await token(), expiry_date: Date.now() + 3500000});
+  // Run this operation and handle any reported failure.
   try {
     console.log(`Temporary test run: ${suffix}`);
     if (recovery) {
@@ -92,10 +97,11 @@ async function clientDocument(path, user, fields, mask) {
     assert.equal(created.shopAddress, record.shopAddress);
     assert.equal((await db.collection('stores').where('nameKey', '==', storeNameKey(names[0])).get()).size, 1);
     assert.equal((await db.collection('storeNames').doc(storeNameKey(names[0])).get()).data().storeId, store.id);
-    assert.equal((await store.collection('members').doc(winner.localId).get()).data().role, 'owner');
+    assert.equal((await store.collection('members').doc(winner.localId).get()).data().role, 'admin');
     assert.equal((await store.collection('categories').get()).size, 7);
     assert.equal((await store.collection('settings').doc('commerce').get()).data().deliveryFeeCents, 500);
-    assert.deepEqual((await store.collection('settings').doc('inventory').get()).data().expiryWarningDays, [2, 3, 7]);
+    assert.equal((await store.collection('settings').doc('inventory').get()).exists, false);
+    assert.equal('minimumOrderCents' in (await store.collection('settings').doc('commerce').get()).data(), false);
     const profile = (await db.collection('users').doc(winner.localId).get()).data();
     assert.equal(profile.retainedSetting, 'preserve');
     assert.equal(profile.activeStoreId, store.id);
@@ -129,6 +135,7 @@ async function clientDocument(path, user, fields, mask) {
     assert.equal(otherCreated.status, 200);
     console.log('PASS: live rules prevent direct name/address edits; different names accepted.');
 
+    // Build the Firestore update used by the test.
     const change = (input, user = winner) => call({storeId: store.id, name: names[3], shopAddress: '90 Updated Road\nUpdated City 50000', ...input}, user, 'updateStore');
     assert.equal((await change({}, null)).status, 401);
     assert.equal((await change({}, outsider)).status, 403);
@@ -182,6 +189,7 @@ async function clientDocument(path, user, fields, mask) {
     assert.deepEqual(createRace.map(r => r.status).sort(), [200, 409], JSON.stringify(createRace));
     assert.equal((await db.collection('stores').where('nameKey', '==', storeNameKey(names[5])).get()).size, 1);
     console.log('PASS: concurrent rename-versus-rename and create-versus-rename reserve each name once.');
+  // Clean up temporary test resources.
   } finally {
     // Recover successful writes even if a callable response was lost.
     for (const name of names) {

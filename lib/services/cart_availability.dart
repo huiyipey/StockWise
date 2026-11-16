@@ -1,5 +1,6 @@
 import '../models/app_models.dart';
 
+// Explain why the selected cart item is unavailable.
 String? cartUnavailableReason(
   CartLine line,
   InventoryBatch? item,

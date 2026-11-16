@@ -2,4 +2,5 @@
 function wantsReportEmail(preferences) {
   return preferences?.reportEmails !== false;
 }
+// Export the helpers used by the app backend and tests.
 module.exports = {wantsReportEmail};

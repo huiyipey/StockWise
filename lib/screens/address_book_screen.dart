@@ -7,6 +7,7 @@ import '../widgets/profile_ui.dart';
 import '../widgets/profile_tag.dart';
 import 'edit_address_screen.dart';
 
+// Manage the customer address book and default address.
 class AddressBookScreen extends StatefulWidget {
   const AddressBookScreen({
     super.key,
@@ -20,12 +21,15 @@ class AddressBookScreen extends StatefulWidget {
   State<AddressBookScreen> createState() => _AddressBookScreenState();
 }
 
+// Manage the address book screen values and actions.
 class _AddressBookScreenState extends State<AddressBookScreen> {
+  // Keep this component's values, selections, and request state.
   late final repository = widget.repository ?? AddressBookService.instance;
   late final book = repository.watch();
   bool busy = false;
   String? operationMessage, error;
 
+  // Open the address editor and save the returned address.
   Future<void> edit(AddressBook data, [SavedAddress? address]) async {
     final saved = await Navigator.push<bool>(
       context,
@@ -46,6 +50,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     }
   }
 
+  // Run an address action with shared success and error feedback.
   Future<void> operation(
     Future<void> Function() action,
     String message, {
@@ -78,6 +83,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     }
   }
 
+  // Confirm before removing this saved address.
   Future<void> delete(SavedAddress address) async {
     if (await showProfileConfirmation(
           context: context,
@@ -96,6 +102,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
     }
   }
 
+  // Build the address book screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -105,12 +112,14 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
           body: SafeArea(
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: 'Address Book',
                   back: true,
                   onBack: busy ? null : () => Navigator.maybePop(context),
                 ),
                 Expanded(
+                  // Refresh this section when its live data changes.
                   child: StreamBuilder<AddressBook>(
                     stream: book,
                     builder: (context, snapshot) {
@@ -179,6 +188,7 @@ class _AddressBookScreenState extends State<AddressBookScreen> {
                           for (final address in data.addresses)
                             Padding(
                               padding: const EdgeInsets.only(bottom: 14),
+                              // Keep related profile details together.
                               child: ProfilePanel(
                                 key: ValueKey('saved-${address.id}'),
                                 child: Column(

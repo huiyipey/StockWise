@@ -19,6 +19,7 @@ import 'home_screen.dart';
 import 'shop_screen.dart';
 import 'profile_screen.dart';
 
+// Choose a shop and apply its current account role.
 class StoreGateScreen extends StatefulWidget {
   const StoreGateScreen({
     super.key,
@@ -42,8 +43,12 @@ class StoreGateScreen extends StatefulWidget {
   State<StoreGateScreen> createState() => _StoreGateScreenState();
 }
 
+// Manage the store gate screen values and actions.
 class _StoreGateScreenState extends State<StoreGateScreen> {
+  // Keep this component's values, selections, and request state.
   bool creating = false, checkingInvites = false, selecting = false;
+  final search = TextEditingController();
+  String query = '';
   String? deleting;
   StreamSubscription<List<StoreInfo>>? _storesSubscription;
   StreamSubscription<List<StoreMembership>>? _membershipsSubscription;
@@ -52,12 +57,14 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
   bool _storesFailed = false, _membershipsFailed = false;
   int _streamVersion = 0;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     _streams();
   }
 
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(covariant StoreGateScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -67,6 +74,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     }
   }
 
+  // Listen for shop details and membership changes.
   void _streams() {
     unawaited(_storesSubscription?.cancel());
     unawaited(_membershipsSubscription?.cancel());
@@ -131,6 +139,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
             );
   }
 
+  // Close admin pages after access or shop availability changes.
   void _closeStoreRoutes(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -141,13 +150,16 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     });
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
+    search.dispose();
     unawaited(_storesSubscription?.cancel());
     unawaited(_membershipsSubscription?.cancel());
     super.dispose();
   }
 
+  // Accept valid pending invitations for the signed-in account.
   Future<void> _checkInvites() async {
     if (checkingInvites) return;
     setState(() => checkingInvites = true);
@@ -177,6 +189,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     }
   }
 
+  // Build the store gate screen layout.
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: StoreSession.instance,
@@ -209,6 +222,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     },
   );
 
+  // Filter the visible stores without changing their membership data.
   Widget _content(
     List<StoreInfo> stores,
     Map<String, String> roles, {
@@ -218,7 +232,12 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     builder: (context, constraints) {
       final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
       final cardHeight = math.max(420.0 * scale, constraints.maxHeight - 260);
+      final term = query.trim().toLowerCase();
+      final visibleStores = stores
+          .where((store) => store.name.toLowerCase().contains(term))
+          .toList();
       return SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.fromLTRB(20, 46, 20, 16),
         child: Center(
           child: ConstrainedBox(
@@ -226,6 +245,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Show the StockWise logo at the shared auth size.
                 const AuthBrand(),
                 const SizedBox(height: 48),
                 Container(
@@ -272,6 +292,62 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                             ? _emptyState()
                             : Column(
                                 children: [
+                                  TextField(
+                                    key: const ValueKey('store-search'),
+                                    controller: search,
+                                    enabled: !creating && !selecting,
+                                    textAlignVertical: TextAlignVertical.center,
+                                    textInputAction: TextInputAction.search,
+                                    style: const TextStyle(
+                                      color: AuthColors.ink,
+                                      fontSize: 14,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search stores',
+                                      filled: true,
+                                      fillColor: AuthColors.background,
+                                      prefixIcon: const Icon(
+                                        Icons.search_rounded,
+                                        color: AuthColors.muted,
+                                      ),
+                                      suffixIcon: query.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              tooltip: 'Clear store search',
+                                              onPressed: _clearSearch,
+                                              icon: const Icon(
+                                                Icons.close_rounded,
+                                              ),
+                                            ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                          color: AuthColors.border,
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                          color: AuthColors.border,
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                          color: AuthColors.green,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 14,
+                                            vertical: 14,
+                                          ),
+                                    ),
+                                    onChanged: (value) =>
+                                        setState(() => query = value),
+                                  ),
+                                  const SizedBox(height: 18),
                                   const Align(
                                     alignment: Alignment.centerLeft,
                                     child: Text(
@@ -285,16 +361,21 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
                                   ),
                                   const SizedBox(height: 16),
                                   Expanded(
-                                    child: ListView.separated(
-                                      padding: EdgeInsets.zero,
-                                      itemCount: stores.length,
-                                      separatorBuilder: (_, index) =>
-                                          const SizedBox(height: 12),
-                                      itemBuilder: (_, index) => _storeTile(
-                                        stores[index],
-                                        roles[stores[index].id] ?? 'customer',
-                                      ),
-                                    ),
+                                    child: visibleStores.isEmpty
+                                        ? _noMatches()
+                                        : ListView.separated(
+                                            padding: EdgeInsets.zero,
+                                            itemCount: visibleStores.length,
+                                            separatorBuilder: (_, index) =>
+                                                const SizedBox(height: 12),
+                                            itemBuilder: (_, index) =>
+                                                _storeTile(
+                                                  visibleStores[index],
+                                                  roles[visibleStores[index]
+                                                          .id] ??
+                                                      'customer',
+                                                ),
+                                          ),
                                   ),
                                 ],
                               ),
@@ -351,6 +432,35 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     },
   );
 
+  void _clearSearch() {
+    search.clear();
+    setState(() => query = '');
+  }
+
+  // Keep a failed search separate from a store list that is genuinely empty.
+  Widget _noMatches() => Center(
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'No stores match your search.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: AuthColors.muted, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            key: const ValueKey('clear-store-search'),
+            onPressed: _clearSearch,
+            style: TextButton.styleFrom(foregroundColor: AuthColors.green),
+            child: const Text('Clear search'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  // Build a selectable shop row.
   Widget _storeTile(StoreInfo store, String role) => !isStoreAdminRole(role)
       ? _storeCard(store, role)
       : Dismissible(
@@ -406,6 +516,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
           },
           child: _storeCard(store, role),
         );
+  // Build the shop card and its role label.
   Widget _storeCard(StoreInfo store, String role) => Material(
     color: AuthColors.background,
     shape: RoundedRectangleBorder(
@@ -494,6 +605,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     ),
   );
 
+  // Show the create-store action when no shops are available.
   Widget _emptyState() => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
@@ -529,6 +641,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     ],
   );
 
+  // Show the store loading error and retry action.
   Widget _errorState() => Column(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
@@ -555,8 +668,10 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     ],
   );
 
+  // Apply this shop role and open its home page.
   Future<void> _selectStore(StoreInfo store, String role) async {
     if (selecting) return;
+    FocusScope.of(context).unfocus();
     if (widget.onSelect != null) {
       widget.onSelect!(store, role);
       return;
@@ -590,6 +705,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     }
   }
 
+  // Open the new-shop form and refresh the store list.
   Future<void> _createStore() async {
     if (creating) return;
     setState(() => creating = true);
@@ -616,6 +732,7 @@ class _StoreGateScreenState extends State<StoreGateScreen> {
     }
   }
 
+  // Show Admin or Customer for this shop.
   String _roleLabel(String role) =>
       isStoreAdminRole(role) ? 'Admin' : 'Customer';
 }

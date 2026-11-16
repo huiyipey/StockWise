@@ -1,6 +1,7 @@
 const MAX_IMAGE_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 4 * MAX_IMAGE_BYTES;
 
+// Detect supported image types from their file signatures.
 function imageType(bytes) {
   if (bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return ['image/png', 'png'];
   if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return ['image/jpeg', 'jpg'];
@@ -8,6 +9,7 @@ function imageType(bytes) {
   return null;
 }
 
+// Attach bounded product images to the confirmation email.
 async function orderImages(bucket, storeId, items) {
   const imagesByPath = new Map(), attachments = [];
   if (!bucket) return {imagesByPath, attachments};
@@ -45,4 +47,5 @@ async function orderImages(bucket, storeId, items) {
   return {imagesByPath, attachments};
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {orderImages};

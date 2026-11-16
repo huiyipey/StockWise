@@ -8,13 +8,15 @@ const {token, project} = require('./cloud-access.cjs');
 
 initializeApp({
   projectId: project,
-  credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})},
+  credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})},
 });
 
 (async () => {
   const manager = getAuth().projectConfigManager();
+  // Read the current password policy before proposing changes.
   const before = await manager.getProjectConfig();
   const previous = before.passwordPolicyConfig || {};
+  // Require strong new passwords while preserving existing constraints.
   const desired = {
     enforcementState: 'ENFORCE',
     forceUpgradeOnSignin: false,
@@ -27,11 +29,14 @@ initializeApp({
       requireNonAlphanumeric: true,
     },
   };
+  // Preview the requested policy without applying it.
   if (!process.argv.includes('--apply')) {
     console.log(JSON.stringify({project,previous,desired,mode: 'preview'}));
     return;
   }
+  // Apply the policy only after the explicit apply flag.
   await manager.updateProjectConfig({passwordPolicyConfig: desired});
+  // Read back the saved policy and verify the requested rules.
   const verified = await manager.getProjectConfig();
   const policy = verified.passwordPolicyConfig;
   const c = policy?.constraints;

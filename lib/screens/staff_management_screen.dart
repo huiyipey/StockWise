@@ -6,6 +6,7 @@ import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 import '../widgets/profile_tag.dart';
 
+// Invite admins and manage active shop access.
 class StaffManagementScreen extends StatefulWidget {
   const StaffManagementScreen({
     super.key,
@@ -23,7 +24,9 @@ class StaffManagementScreen extends StatefulWidget {
   State<StaffManagementScreen> createState() => _StaffManagementScreenState();
 }
 
+// Manage the staff management screen values and actions.
 class _StaffManagementScreenState extends State<StaffManagementScreen> {
+  // Keep this component's values, selections, and request state.
   bool inviting = false;
   final pending = <String>{};
   String? error;
@@ -37,6 +40,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
           ? FirestoreService.instance.currentUserId
           : null);
 
+  // Build the staff management screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -44,12 +48,14 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Store Admins',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
               Expanded(
+                // Refresh this section when its live data changes.
                 child: StreamBuilder<List<Map<String, dynamic>>>(
                   stream: members,
                   builder: (context, memberSnapshot) {
@@ -66,6 +72,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       );
                     }
+                    // Refresh this section when its live data changes.
                     return StreamBuilder<List<Map<String, dynamic>>>(
                       stream: invites,
                       builder: (context, inviteSnapshot) {
@@ -91,6 +98,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                               busy: inviting,
                               onPressed: inviting ? null : invite,
                             ),
+                            // Group related account or shop settings.
                             const ProfileSection('Store Team'),
                             for (final row in rows)
                               memberCard(row, activeAdmins: activeAdmins),
@@ -100,10 +108,12 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
                                 error: true,
                               ),
                             if (invitations.isNotEmpty) ...[
+                              // Group related account or shop settings.
                               const ProfileSection('Pending Invitations'),
                               for (final invitation in invitations)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
+                                  // Keep related profile details together.
                                   child: ProfilePanel(
                                     child: Column(
                                       crossAxisAlignment:
@@ -175,6 +185,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     ),
   );
 
+  // Show the admin role and current access state.
   Widget memberCard(Map<String, dynamic> member, {required int activeAdmins}) {
     final id = member['id'] as String? ?? '';
     final isActive = member['isActive'] == true;
@@ -182,6 +193,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     final protected = ownMembership || (isActive && activeAdmins <= 1);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
+      // Keep related profile details together.
       child: ProfilePanel(
         padding: 14,
         child: Row(
@@ -232,6 +244,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     );
   }
 
+  // Enable or disable another admin within the access rules.
   Future<void> changeAccess(String id, bool value) async {
     if (pending.contains(id)) return;
     setState(() {
@@ -256,6 +269,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
     }
   }
 
+  // Open the existing-account admin invitation dialog.
   Future<void> invite() async {
     if (inviting) return;
     final email = await showDialog<String>(
@@ -303,27 +317,33 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   }
 }
 
+// Group the invite admin dialog values and actions.
 class _InviteAdminDialog extends StatefulWidget {
   const _InviteAdminDialog();
   @override
   State<_InviteAdminDialog> createState() => _InviteAdminDialogState();
 }
 
+// Manage the invite admin dialog values and actions.
 class _InviteAdminDialogState extends State<_InviteAdminDialog> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   final email = TextEditingController();
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     email.dispose();
     super.dispose();
   }
 
+  // Check the existing account and send its Admin invitation.
   void submit() {
     if (form.currentState?.validate() ?? false) {
       Navigator.pop(context, email.text.trim().toLowerCase());
     }
   }
 
+  // Build the invite admin dialog layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Dialog(
@@ -331,6 +351,7 @@ class _InviteAdminDialogState extends State<_InviteAdminDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(22),
+        // Group the inputs under one validation key.
         child: Form(
           key: form,
           child: Column(

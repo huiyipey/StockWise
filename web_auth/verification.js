@@ -1,5 +1,6 @@
 'use strict';
 (() => {
+  // Read the public Firebase settings and action parameters.
   const config = window.STOCKWISE_AUTH_CONFIG;
   const query = new URLSearchParams(location.search);
   const mode = query.get('mode');
@@ -11,6 +12,7 @@
     location.replace(target.href);
     return;
   }
+  // Find the status card and its feedback controls.
   const card = document.querySelector('.card');
   const symbol = document.getElementById('symbol');
   const title = document.getElementById('title');
@@ -20,6 +22,7 @@
   const code = query.get('oobCode');
   // Remove the one-time link from browser history before making any network request.
   history.replaceState(null, '', location.pathname);
+  // Display success, invalid-link, or connection feedback.
   function show(success, offline = false) {
     card.setAttribute('aria-busy', 'false');
     symbol.className = success ? 'symbol' : 'symbol error';
@@ -33,6 +36,7 @@
     hint.textContent = success ? 'You can now close this tab.' : 'Already verified? Open StockWise and tap "I\'ve verified my email".';
     retry.hidden = !offline;
   }
+  // Apply the one-time email action and show the result.
   async function verify() {
     retry.hidden = true;
     if (mode === 'returnToApp') {
@@ -52,6 +56,7 @@
       show(response.ok, response.status >= 500 || response.status === 429);
     } catch (_) { show(false, true); }
   }
+  // Allow a failed network verification to be retried.
   retry.addEventListener('click', verify);
   verify();
 })();

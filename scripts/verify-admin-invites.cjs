@@ -8,11 +8,13 @@ const {GoogleAuth, OAuth2Client} = backendRequire('google-auth-library');
 const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const client = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient: client})});
+// Keep these checks scoped to disposable test records.
 const storeId = `invite_test_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
 const users = [];
+// Create a disposable account for the verification checks.
 async function signUp() {
   const email = `stockwise-invite-test-${randomUUID()}@example.invalid`;
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
@@ -24,6 +26,7 @@ async function signUp() {
   users.push(data);
   return data;
 }
+// Invoke the selected backend action using the test account.
 async function call(email, user) {
   const response = await fetch(`https://asia-southeast1-${project}.cloudfunctions.net/createAdminInvite`, {
     method: 'POST', headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
@@ -34,6 +37,7 @@ async function call(email, user) {
 (async () => {
   client.setCredentials({access_token: await token(), expiry_date: Date.now() + 3500000});
   const store = db.collection('stores').doc(storeId);
+  // Run this operation and handle any reported failure.
   try {
     const owner = await signUp();
     const target = await signUp();
@@ -59,6 +63,7 @@ async function call(email, user) {
     assert.equal((await call(target.email, owner)).status, 409);
     assert.equal((await call(owner.email, owner)).status, 409);
     console.log('PASS: live registered account lookup, nonexistent email rejection, normalized invitation and admin-only access.');
+  // Clean up temporary test resources.
   } finally {
     assert.ok(storeId.startsWith('invite_test_'));
     await db.recursiveDelete(store);

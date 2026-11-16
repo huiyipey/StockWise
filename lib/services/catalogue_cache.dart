@@ -6,14 +6,17 @@ import 'package:flutter/foundation.dart';
 import '../models/app_models.dart';
 import 'local_database.dart';
 
+// Use live catalogue data with an account-scoped cache fallback.
 enum CatalogueSource { saved, live, pending, unavailable }
 
+// Use live catalogue data with an account-scoped cache fallback.
 class CatalogueStatus {
   const CatalogueStatus(this.source, {this.savedAt});
   final CatalogueSource source;
   final DateTime? savedAt;
 }
 
+// Use live catalogue data with an account-scoped cache fallback.
 class RemoteCatalogue<T> {
   const RemoteCatalogue(
     this.values, {
@@ -35,13 +38,16 @@ class CatalogueCache extends ChangeNotifier {
   final LocalDatabase database;
   final Duration connectionGrace;
   final _statuses = <(LocalScope, String), CatalogueStatus>{};
+  // Watch which data source is currently used by this view.
   CatalogueStatus? status(LocalScope scope, [String dataset = 'inventory']) =>
       _statuses[(scope, dataset)];
+  // Remove stale cache status for this view.
   void clearStatus() {
     _statuses.clear();
     notifyListeners();
   }
 
+  // Publish the current catalogue source and cache age.
   void _status(
     LocalScope scope,
     String dataset,
@@ -53,6 +59,7 @@ class CatalogueCache extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Watch live inventory and fall back to a valid cached snapshot.
   Stream<List<InventoryBatch>> inventory(
     LocalScope scope,
     Stream<RemoteCatalogue<InventoryBatch>> remote,
@@ -63,6 +70,7 @@ class CatalogueCache extends ChangeNotifier {
     () => database.inventory(scope),
     (values) => database.saveInventory(scope, values),
   );
+  // Watch live categories and fall back to a valid cached snapshot.
   Stream<List<StoreCategory>> categories(
     LocalScope scope,
     Stream<RemoteCatalogue<StoreCategory>> remote,
@@ -74,6 +82,7 @@ class CatalogueCache extends ChangeNotifier {
     (values) => database.saveCategories(scope, values),
   );
 
+  // Save remote updates and use scoped cache data after failures.
   Stream<List<T>> _watch<T>(
     LocalScope scope,
     String dataset,
@@ -86,6 +95,7 @@ class CatalogueCache extends ChangeNotifier {
     Timer? emptyCacheTimer;
     bool cancelled = false, hasData = false;
     DateTime? savedAt;
+    // Start listening to the remote catalogue.
     Future<void> start() async {
       LocalSnapshot<T>? cached;
       try {

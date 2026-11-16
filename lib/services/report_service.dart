@@ -5,10 +5,12 @@ import '../models/report_data.dart';
 import 'store_session.dart';
 import 'report_export.dart';
 
+// Request store reports and save the selected export format.
 class ReportService {
   static final _functions = FirebaseFunctions.instanceFor(
     region: 'asia-southeast1',
   );
+  // Load all bounded request parts and merge their records.
   static Future<Map<String, dynamic>> load(
     String kind,
     String start,
@@ -16,6 +18,7 @@ class ReportService {
     Future<Map<String, dynamic>> Function(String, String, String)? request,
   }) async {
     final storeId = StoreSession.instance.storeId;
+    // Request this shop report from the backend.
     Future<Map<String, dynamic>> call(
       String kind,
       String start,
@@ -58,18 +61,26 @@ class ReportService {
     };
   }
 
+  // Read the earliest shop history date for report limits.
   static Future<DateTime?> registeredAt() async {
-    final known = StoreSession.instance.store?.createdAt;
+    final known = StoreSession.instance.store?.reportingStartsAt;
     if (known != null) return known;
     final id = StoreSession.instance.storeId;
     if (id == null) return null;
     final data =
         (await FirebaseFirestore.instance.collection('stores').doc(id).get())
             .data();
-    final value = data?['createdAt'];
-    return value is Timestamp ? value.toDate() : null;
+    final created = data?['createdAt'];
+    final imported = data?['reportingHistoryStartsAt'];
+    final registeredAt = created is Timestamp ? created.toDate() : null;
+    final historyAt = imported is Timestamp ? imported.toDate() : null;
+    if (historyAt == null) return registeredAt;
+    return registeredAt == null || historyAt.isBefore(registeredAt)
+        ? historyAt
+        : registeredAt;
   }
 
+  // Build and save the selected report export.
   static Future<bool> download(Map<String, dynamic> data) async {
     final output = await ReportExportFile.build(data);
     final file = await FlutterFileDialog.saveFile(

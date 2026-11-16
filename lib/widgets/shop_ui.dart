@@ -6,9 +6,11 @@ import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'customer_ui.dart';
 
+// Build the shared shop assistant banner component.
 class ShopAssistantBanner extends StatelessWidget {
   const ShopAssistantBanner({super.key, required this.onTap});
   final VoidCallback onTap;
+  // Render the shop assistant banner component.
   @override
   Widget build(BuildContext context) => Material(
     color: InventoryColors.soft,
@@ -57,11 +59,13 @@ class ShopAssistantBanner extends StatelessWidget {
   );
 }
 
+// Build the shared shop section title component.
 class ShopSectionTitle extends StatelessWidget {
   const ShopSectionTitle(this.title, {super.key, this.count, this.subtitle});
   final String title;
   final int? count;
   final String? subtitle;
+  // Render the shop section title component.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,6 +100,7 @@ class ShopSectionTitle extends StatelessWidget {
   );
 }
 
+// Build the shared shop state card component.
 class ShopStateCard extends StatelessWidget {
   const ShopStateCard({
     super.key,
@@ -111,6 +116,7 @@ class ShopStateCard extends StatelessWidget {
   final String? message, actionLabel;
   final VoidCallback? onAction;
   final bool busy;
+  // Render the shop state card component.
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
@@ -158,6 +164,7 @@ class ShopStateCard extends StatelessWidget {
   );
 }
 
+// Build the shared shop product card component.
 class ShopProductCard extends StatelessWidget {
   const ShopProductCard({
     super.key,
@@ -179,6 +186,7 @@ class ShopProductCard extends StatelessWidget {
   final DateTime now;
   final ImageProvider? image;
 
+  // Reserve stable space for the promotion label.
   static double promotionFooterHeight(
     BuildContext context,
     double cardWidth,
@@ -202,6 +210,7 @@ class ShopProductCard extends StatelessWidget {
     return height;
   }
 
+  // Render the shop product card component.
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
@@ -216,8 +225,11 @@ class ShopProductCard extends StatelessWidget {
     ),
   );
 
+  // Build the larger On Promotion product card.
   Widget _featured(BuildContext context) => _layout(context, large: true);
+  // Build a compact Everyday Products card.
   Widget _grid(BuildContext context) => _layout(context, large: false);
+  // Place the photo, product details, and add action.
   Widget _layout(BuildContext context, {required bool large}) => Column(
     mainAxisSize: large ? MainAxisSize.max : MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,11 +332,13 @@ class ShopProductCard extends StatelessWidget {
     ],
   );
 
+  // Show the current available quantity and unit.
   Widget _available() => Text(
     '${item.availableQuantity} ${item.unitLabel} available',
     style: const TextStyle(fontSize: 11, color: InventoryColors.muted),
   );
 
+  // Show the current and original product prices.
   Widget _price() => Wrap(
     spacing: 7,
     runSpacing: 3,
@@ -349,6 +363,7 @@ class ShopProductCard extends StatelessWidget {
         ),
     ],
   );
+  // Apply the red warning only when the expiry colour is red.
   Widget _expiry() {
     final days = item.daysUntilExpiryFrom(now);
     final color = item.expiryColourAt(now) == ShelfLifeColour.red
@@ -370,6 +385,7 @@ class ShopProductCard extends StatelessWidget {
     );
   }
 
+  // Build the product add button with its stock state.
   Widget _addButton() => IconButton(
     key: ValueKey('shop-add-${item.id}'),
     tooltip: 'Add ${item.productName} to cart',
@@ -396,6 +412,7 @@ class ShopProductCard extends StatelessWidget {
   );
 }
 
+// Build the shared shop product photo component.
 class ShopProductPhoto extends StatefulWidget {
   const ShopProductPhoto({super.key, required this.item, this.image});
   final InventoryBatch item;
@@ -404,14 +421,18 @@ class ShopProductPhoto extends StatefulWidget {
   State<ShopProductPhoto> createState() => _ShopProductPhotoState();
 }
 
+// Manage the shop product photo values and actions.
 class _ShopProductPhotoState extends State<ShopProductPhoto> {
+  // Keep this component's values, selections, and request state.
   late Future<String?> url;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     resolve();
   }
 
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(ShopProductPhoto oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -421,6 +442,7 @@ class _ShopProductPhotoState extends State<ShopProductPhoto> {
     }
   }
 
+  // Load the stored image or receipt download URL.
   void resolve() {
     final path = widget.item.imagePath;
     url = widget.image != null || path == null || path.isEmpty
@@ -430,6 +452,7 @@ class _ShopProductPhotoState extends State<ShopProductPhoto> {
         : FirestoreService.instance.imageUrl(path);
   }
 
+  // Render the shop product photo component.
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(14),
@@ -453,6 +476,7 @@ class _ShopProductPhotoState extends State<ShopProductPhoto> {
             ),
     ),
   );
+  // Show fallback artwork when no image is available.
   Widget placeholder() => const Center(
     child: Icon(Icons.image_outlined, size: 37, color: Color(0xFFA3B39F)),
   );

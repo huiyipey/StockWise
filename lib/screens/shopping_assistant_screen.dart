@@ -11,6 +11,7 @@ import '../widgets/shop_ui.dart';
 import '../widgets/profile_ui.dart' show ProfilePanel, ProfileNotice;
 import 'item_detail_screen.dart';
 
+// Ask questions, compare products, and attach an image.
 class ShoppingAssistantScreen extends StatefulWidget {
   final Stream<List<InventoryBatch>>? inventoryStream;
   final AssistantRequester? onAsk;
@@ -26,7 +27,9 @@ class ShoppingAssistantScreen extends StatefulWidget {
       _ShoppingAssistantScreenState();
 }
 
+// Manage the shopping assistant screen values and actions.
 class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
+  // Keep this component's values, selections, and request state.
   final question = TextEditingController();
   final scroll = ScrollController();
   final latestMessage = GlobalKey();
@@ -41,6 +44,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   bool busy = false, started = false;
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     question.dispose();
@@ -48,6 +52,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     super.dispose();
   }
 
+  // Send the question, selected products, and optional image.
   Future<void> _ask([String? prompt]) async {
     if (busy || pickingImage) return;
     final text = prompt ?? question.text.trim();
@@ -145,6 +150,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     }
   }
 
+  // Choose and validate an image before attaching it.
   Future<void> _pickImage() async {
     if (busy || pickingImage) return;
     FocusScope.of(context).unfocus();
@@ -216,6 +222,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     }
   }
 
+  // Build the shopping assistant screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -223,6 +230,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Ask StockWise',
                 back: true,
@@ -237,6 +245,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                 ),
               ),
               Expanded(
+                // Follow live stock quantities, prices, and expiry updates.
                 child: StreamBuilder<List<InventoryBatch>>(
                   stream: inventory,
                   builder: (context, snapshot) {
@@ -251,6 +260,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                       children: [
                         if (messages.isEmpty) ...[
+                          // Keep related profile details together.
                           ProfilePanel(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,6 +341,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                             if (product == null) return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
+                              // Keep related profile details together.
                               child: ProfilePanel(
                                 padding: 0,
                                 child: InkWell(
@@ -409,6 +420,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
                           ),
                           const SizedBox(height: 16),
                         ],
+                        // Keep related profile details together.
                         ProfilePanel(
                           padding: 0,
                           child: Theme(
@@ -709,6 +721,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     ),
   );
 
+  // Explain how an attached image is sent to the AI service.
   void _showPrivacy(BuildContext context) => showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -758,6 +771,7 @@ class _ShoppingAssistantScreenState extends State<ShoppingAssistantScreen> {
     ),
   );
 
+  // Display one assistant or customer message.
   Widget _messageCard(Map<String, String> message) {
     final user = message['role'] == 'You';
     final failed = message['error'] == 'true';

@@ -6,15 +6,18 @@ const {initializeApp} = backendRequire('firebase-admin/app');
 const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+// Keep these checks scoped to disposable test records.
 const users = [];
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const prefix = `projects/${project}/databases/(default)/documents`;
+// Send a test HTTP request and read its response.
 async function request(url, body, idToken, method = 'POST') {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(idToken ? {Authorization: `Bearer ${idToken}`} : {})}, body: body ? JSON.stringify(body) : undefined});
   const text = await response.text();
   return {status: response.status, data: text ? JSON.parse(text) : null};
 }
+// Create a disposable account for the verification checks.
 async function signUp() {
   const email = `stockwise-address-test-${randomUUID()}@example.invalid`;
   const password = randomUUID() + 'Aa9!';
@@ -22,10 +25,14 @@ async function signUp() {
   assert.equal(result.status, 200, 'Temporary sign-up failed');
   const user = {...result.data, password}; users.push(user); return user;
 }
+// Convert the supplied values to Firestore string fields.
 const strings = data => Object.fromEntries(Object.entries(data).map(([key, value]) => [key, {stringValue: value}]));
+// Build the structured address used by the test.
 const addressData = label => strings({label, name: 'Test Recipient', phone: '0123456789', addressLine1: `12 ${label} Street`, city: 'Kuala Lumpur', state: 'Kuala Lumpur', postalCode: '50000', countryCode: 'MY'});
+// Submit the grouped Firestore test writes.
 async function commit(writes, user) { return request(base + ':commit', {writes}, user.idToken); }
 (async () => {
+  // Run this operation and handle any reported failure.
   try {
     const owner = await signUp(); const other = await signUp();
     const path = `users/${owner.localId}`;
@@ -60,6 +67,7 @@ async function commit(writes, user) { return request(base + ':commit', {writes},
     assert.equal((await commit([{delete: `${name}/addresses/home`}, {update: {name, fields: {}}, updateMask: {fieldPaths: ['defaultAddressId']}}], owner)).status, 200);
     assert.equal((await request(`${base}/${path}`, null, owner.idToken, 'GET')).data.fields.defaultAddressId, undefined);
     console.log('PASS: live saved addresses/default persistence, editing, deletion and account privacy.');
+  // Clean up temporary test resources.
   } finally {
     const access = await token();
     for (const user of users) {

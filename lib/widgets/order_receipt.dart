@@ -5,6 +5,7 @@ import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'order_ui.dart';
 
+// Display the uploaded receipt with image loading and zoom actions.
 class OrderReceipt extends StatefulWidget {
   const OrderReceipt({
     super.key,
@@ -24,39 +25,49 @@ class OrderReceipt extends StatefulWidget {
   State<OrderReceipt> createState() => _OrderReceiptState();
 }
 
+// Manage the order receipt values and actions.
 class _OrderReceiptState extends State<OrderReceipt> {
+  // Keep this component's values, selections, and request state.
   Future<ImageProvider>? image;
   int revision = 0;
+  // Check whether a receipt path is saved.
   bool get uploaded => widget.path?.trim().isNotEmpty == true;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     resolve();
   }
 
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(covariant OrderReceipt oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.path != oldWidget.path) resolve();
   }
 
+  // Load the stored image or receipt download URL.
   void resolve() {
     image = uploaded
         ? (widget.imageResolver ?? defaultImage)(widget.path!)
         : null;
   }
 
+  // Build the receipt image with loading and error states.
   Future<ImageProvider> defaultImage(String path) async => NetworkImage(
     path.startsWith('http')
         ? path
         : (await FirestoreService.instance.imageUrl(path))!,
   );
+  // Retry the failed lookup or image load.
   void retry() => setState(() {
     revision++;
     resolve();
   });
 
+  // Render the order receipt component.
   @override
+  // Group the related order details in one card.
   Widget build(BuildContext context) => OrderPanel(
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,6 +101,7 @@ class _OrderReceiptState extends State<OrderReceipt> {
             child: Container(
               height: 180,
               color: InventoryColors.background,
+              // Show loading, errors, or the completed request.
               child: FutureBuilder<ImageProvider>(
                 future: image,
                 builder: (context, snapshot) {
@@ -174,6 +186,7 @@ class _OrderReceiptState extends State<OrderReceipt> {
     ),
   );
 
+  // Show the receipt error and retry action.
   Widget failure() => Center(
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -194,8 +207,10 @@ class _OrderReceiptState extends State<OrderReceipt> {
   );
 }
 
+// Build the shared receipt loading component.
 class _ReceiptLoading extends StatelessWidget {
   const _ReceiptLoading();
+  // Render the receipt loading component.
   @override
   Widget build(BuildContext context) => const Center(
     child: Column(

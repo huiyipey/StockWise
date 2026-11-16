@@ -1,5 +1,6 @@
 const {orderConfirmation} = require('../functions/order_email_template');
 
+// Build the clearly labelled sample order confirmation.
 function sampleConfirmation(options = {}) {
   return orderConfirmation({name: 'StockWise Demo Store'}, {
     orderNumber: 'SW-PREVIEW-001', status: 'to_pay', paymentStatus: 'unpaid',
@@ -16,6 +17,7 @@ function sampleConfirmation(options = {}) {
   ], {...options, preview: true});
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {sampleConfirmation};
 if (require.main === module) {
   const fs = require('node:fs'), path = require('node:path');

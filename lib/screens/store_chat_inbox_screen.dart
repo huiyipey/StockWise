@@ -7,6 +7,7 @@ import '../widgets/profile_ui.dart';
 import '../widgets/profile_tag.dart';
 import 'store_chat_screen.dart';
 
+// Show customer conversations and unread message counts.
 class StoreChatInboxScreen extends StatefulWidget {
   const StoreChatInboxScreen({super.key, required this.repository});
   final StoreChatRepository repository;
@@ -14,8 +15,11 @@ class StoreChatInboxScreen extends StatefulWidget {
   State<StoreChatInboxScreen> createState() => _StoreChatInboxScreenState();
 }
 
+// Manage the store chat inbox screen values and actions.
 class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
+  // Keep this component's values, selections, and request state.
   late final conversations = widget.repository.watchConversations();
+  // Build the store chat inbox screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -23,12 +27,14 @@ class _StoreChatInboxScreenState extends State<StoreChatInboxScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Customer Messages',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
               Expanded(
+                // Follow conversations and their unread message counts.
                 child: StreamBuilder<List<StoreConversation>>(
                   stream: conversations,
                   builder: (context, snapshot) {
@@ -213,10 +219,13 @@ class _ConversationMessages extends StatefulWidget {
   State<_ConversationMessages> createState() => _ConversationMessagesState();
 }
 
+// Manage the conversation messages values and actions.
 class _ConversationMessagesState extends State<_ConversationMessages> {
+  // Keep this component's values, selections, and request state.
   late Stream<List<StoreChatMessage>> messages = widget.repository
       .watchMessages(widget.customerId);
 
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(covariant _ConversationMessages oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -226,6 +235,7 @@ class _ConversationMessagesState extends State<_ConversationMessages> {
     }
   }
 
+  // Build the conversation messages layout.
   @override
   Widget build(BuildContext context) => StreamBuilder<List<StoreChatMessage>>(
     stream: messages,

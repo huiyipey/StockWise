@@ -6,19 +6,23 @@ const {initializeApp} = backendRequire('firebase-admin/app');
 const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+// Keep these checks scoped to disposable test records.
 const users = [];
 const attachmentObjects = [];
 const bucket = `${project}.firebasestorage.app`;
 const storeIds = [`chat_test_${randomUUID()}`, `chat_test_${randomUUID()}`];
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const prefix = `projects/${project}/databases/(default)/documents`;
+// Convert the supplied values to Firestore string fields.
 const strings = data => Object.fromEntries(Object.entries(data).map(([key, value]) => [key, {stringValue: value}]));
+// Send a test HTTP request and read its response.
 async function request(url, body, idToken, method = 'POST') {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(idToken ? {Authorization: `Bearer ${idToken}`} : {})}, body: body ? JSON.stringify(body) : undefined});
   const text = await response.text();
   return {status: response.status, data: text ? JSON.parse(text) : null};
 }
+// Create a disposable account for the verification checks.
 async function signUp(name) {
   const email = `stockwise-chat-test-${randomUUID()}@example.invalid`;
   const password = randomUUID() + 'Aa9!';
@@ -28,23 +32,30 @@ async function signUp(name) {
   await adminSet(`users/${user.localId}`, {displayName: name});
   return user;
 }
+// Submit the grouped Firestore test writes.
 async function commit(user, writes) { return request(base + ':commit', {writes}, user.idToken); }
+// Build the isolated customer conversation path.
 const conversationPath = (store, customer) => `stores/${store}/conversations/${customer.localId}`;
+// Read the disposable document using the supplied test account.
 const read = (user, path) => request(`${base}/${path}`, null, user.idToken, 'GET');
+// Apply the test document update using the selected account.
 const patch = (path, data, transforms = []) => ({
   update: {name: `${prefix}/${path}`, fields: data}, updateMask: {fieldPaths: Object.keys(data)},
   ...(transforms.length ? {updateTransforms: transforms.map(fieldPath => ({fieldPath, setToServerValue: 'REQUEST_TIME'}))} : {}),
 });
+// Write the fixture with the isolated administrative test client.
 async function adminSet(path, data) {
   const fields = Object.fromEntries(Object.entries(data).map(([key, value]) => [key,
     typeof value === 'boolean' ? {booleanValue: value} : {stringValue: value}]));
   const result = await request(`${base}/${path}`, {fields}, await token(), 'PATCH');
   assert.equal(result.status, 200, 'Temporary fixture setup failed');
 }
+// Remove the fixture with the isolated administrative test client.
 async function adminDelete(path, access) {
   const result = await request(`${base}/${path}`, null, access, 'DELETE');
   assert.ok([200, 204, 404].includes(result.status), 'Temporary fixture cleanup failed');
 }
+// Delete the temporary shop and its test records.
 async function deleteTestStore(store) {
   assert.ok(store.startsWith('chat_test_'));
   const access = await token();
@@ -70,6 +81,7 @@ async function deleteTestStore(store) {
   }
   await adminDelete(`stores/${store}`, access);
 }
+// Build the atomic message and conversation test updates.
 function sendWrites(store, customer, sender, text, {first = false, role = sender === customer ? 'customer' : 'admin', senderId = sender.localId, senderName = sender.name, messageId = randomUUID(), attachment} = {}) {
   const path = conversationPath(store, customer);
   const preview = text || (attachment ? `${attachment.contentType.startsWith('image/') ? 'Photo' : 'File'}: ${attachment.fileName}` : '');
@@ -87,6 +99,7 @@ function sendWrites(store, customer, sender, text, {first = false, role = sender
   ];
 }
 
+// Create attachment metadata for the test conversation.
 function attachmentFixture(store, customer, sender, {type = 'image/png', name = 'photo.png', data} = {}) {
   const bytes = data || Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==', 'base64');
   const id = randomUUID();
@@ -95,6 +108,7 @@ function attachmentFixture(store, customer, sender, {type = 'image/png', name = 
   return {id, bytes, path, attachment: {storagePath: path, fileName: name, contentType: type, size: bytes.length},
     metadata: {senderId: sender.localId, customerId: customer.localId, messageId: id}};
 }
+// Upload the disposable file for this conversation.
 async function uploadAttachment(fixture, user, metadata = fixture.metadata) {
   const start = await fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o?name=${encodeURIComponent(fixture.path)}`, {
     method: 'POST', headers: {
@@ -112,27 +126,32 @@ async function uploadAttachment(fixture, user, metadata = fixture.metadata) {
   }, body: fixture.bytes});
   return finished.status;
 }
+// Check access to the disposable conversation attachment.
 async function attachmentRead(fixture, user) {
   return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fixture.path)}?alt=media`, {
     headers: user ? {Authorization: `Firebase ${user.idToken}`} : {},
   });
 }
+// Delete the temporary conversation attachment.
 async function attachmentDelete(fixture, user) {
   return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(fixture.path)}`, {
     method: 'DELETE', headers: {Authorization: `Firebase ${user.idToken}`},
   });
 }
+// Check whether the message write is allowed or rejected.
 async function expectSend(user, writes, expected = 200) {
   const result = await commit(user, writes);
   assert.equal(result.status, expected, `Chat commit expected ${expected}, got ${result.status}: ${result.data?.error?.message || ''}`);
   return result;
 }
+// Query the test collection using the chosen account.
 async function query(user, store, customer) {
   return request(`${base}/${customer ? conversationPath(store, customer) : `stores/${store}`}:runQuery`, {
     structuredQuery: {from: [{collectionId: customer ? 'messages' : 'conversations'}], orderBy: [{field: {fieldPath: customer ? 'sentAt' : 'lastMessageAt'}, direction: 'DESCENDING'}]},
   }, user.idToken);
 }
 (async () => {
+  // Run this operation and handle any reported failure.
   try {
     const customer = await signUp('Chat Customer');
     const other = await signUp('Other Customer');
@@ -239,6 +258,7 @@ async function query(user, store, customer) {
     assert.equal((await attachmentRead(document, admin)).status, 403, 'Revoked admin cannot read their own published attachment');
     assert.equal((await attachmentRead(firstPhoto, admin)).status, 403, 'Revoked admin cannot read customer photos');
     console.log('PASS: live private customer/admin chat, inbox/history queries, persistent replies/read markers, roles and spoof/edit protections.');
+  // Clean up temporary test resources.
   } finally {
     const access = await token();
     for (const object of attachmentObjects) {

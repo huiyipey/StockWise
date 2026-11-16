@@ -4,13 +4,18 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'image_upload.dart';
 
+// Save profile fields, profile photos, and password changes.
 class ProfileService {
+  // Read the currently signed-in account.
   static User get user => FirebaseAuth.instance.currentUser!;
+  // Build the current account profile reference.
   static DocumentReference<Map<String, dynamic>> get profile =>
       FirebaseFirestore.instance.collection('users').doc(user.uid);
+  // Build the account preference reference for one shop.
   static DocumentReference<Map<String, dynamic>> preference(String storeId) =>
       profile.collection('storePreferences').doc(storeId);
 
+  // Save validated profile values and an optional photo.
   static Future<void> save({
     required String name,
     required String phone,
@@ -51,6 +56,7 @@ class ProfileService {
     }
   }
 
+  // Reauthenticate and then update the account password.
   static Future<void> changePassword(String current, String next) async {
     if (next.length < 8) throw ArgumentError('Use at least 8 characters.');
     final email = user.email;

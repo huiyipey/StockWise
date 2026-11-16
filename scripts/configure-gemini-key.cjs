@@ -2,6 +2,7 @@
 if (process.stdin.isTTY) process.stdin.setRawMode(true);
 const readline = require('node:readline');
 const {api, project} = require('./cloud-access.cjs');
+// Read the private AI key and save it in Secret Manager.
 async function main(key) {
   if (!key || key.length > 512) throw Error('A valid Gemini API key is required.');
   const headers = {'x-goog-api-key': key, 'Content-Type': 'application/json'};

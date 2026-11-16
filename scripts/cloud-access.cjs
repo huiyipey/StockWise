@@ -3,18 +3,21 @@
 const path = require('node:path');
 const auth = require(path.join(process.env.APPDATA, 'npm/node_modules/firebase-tools/lib/auth.js'));
 const project = 'stockwise-190a9';
+// Refresh and reuse the isolated Firebase CLI access token.
 async function token() {
   const account = auth.getAllAccounts().find(a => a.user.email === 'huiyipey@gmail.com');
   if (!account) throw Error('Sign in to Firebase CLI as huiyipey@gmail.com first.');
   const result = await auth.getAccessToken(account.tokens.refresh_token, ['https://www.googleapis.com/auth/cloud-platform']);
   return result.access_token;
 }
+// Call the Google API using the configured account.
 async function api(url, method = 'GET', body) {
   const response = await fetch(url, {method, headers: {Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : undefined});
   const data = await response.json();
   if (!response.ok) throw Error(`${response.status}: ${data.error?.message || 'Cloud request failed'}`);
   return data;
 }
+// Export the helpers used by the app backend and tests.
 module.exports = {api, token, project};
 if (require.main === module) {
   (async () => {

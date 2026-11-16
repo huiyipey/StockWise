@@ -20,6 +20,7 @@ import '../widgets/customer_ui.dart';
 import 'order_detail_screen.dart';
 import 'address_book_screen.dart';
 
+// Collect delivery details and place the quoted order.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({
     super.key,
@@ -45,7 +46,9 @@ class CheckoutScreen extends StatefulWidget {
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
+// Manage the checkout screen values and actions.
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  // Keep this component's values, selections, and request state.
   final formKey = GlobalKey<FormState>();
   final scroll = ScrollController();
   final anchors = <String, GlobalKey>{};
@@ -65,7 +68,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Timer? quoteDebounce;
   int quoteRevision = 0;
   String? acceptedPromotionReviewToken;
+  // Check whether checkout uses the authoritative cart quote.
   bool get usesQuote => widget.quoteLoader != null || widget.placeOrder == null;
+  // Reload prices, promotions, and delivery fees for this address.
   Future<void> refreshQuote() async {
     if (!usesQuote) return;
     final revision = ++quoteRevision;
@@ -94,6 +99,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  // Wait briefly before requesting another checkout quote.
   void scheduleQuote() {
     if (!usesQuote) return;
     quoteDebounce?.cancel();
@@ -111,6 +117,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       manualDetails = false,
       loadingAddresses = true;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -168,6 +175,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     addressSubscription?.cancel();
@@ -189,6 +197,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
+  // Fill the form from a saved delivery address.
   void fillAddress(SavedAddress saved) {
     selectedAddressId = saved.id;
     manualDetails = false;
@@ -203,10 +212,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     scheduleQuote();
   }
 
+  // Recheck delivery fees after the postcode changes.
   void locationChanged() {
     if (mounted) setState(() {});
   }
 
+  // Refresh checkout after delivery fields are edited.
   void deliveryEdited(String _) => setState(() {
     userSelectedAddress = true;
     manualDetails = true;
@@ -214,6 +225,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     scheduleQuote();
   });
 
+  // Open the address book and refresh the selected address.
   Future<void> manageAddresses() async {
     final previousDefault = book.defaultAddress?.id;
     await Navigator.push(
@@ -237,6 +249,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  // Select a saved address for this order.
   Future<void> chooseAddress() async {
     final selected = await showOrderChoices(
       context: context,
@@ -267,6 +280,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
+  // Select one of the supported payment methods.
   Future<void> choosePayment() async {
     final selected = await showOrderChoices(
       context: context,
@@ -280,11 +294,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (mounted && selected != null) setState(() => payment = selected);
   }
 
+  // Read the quoted product subtotal in cents.
   int get subtotal =>
       (quote?['subtotalCents'] as num?)?.toInt() ??
       widget.lines.fold<int>(0, (sum, line) => sum + line.lineTotalCents);
+  // Read the quoted delivery fee in cents.
   int get shipping =>
       (quote?['deliveryFeeCents'] as num?)?.toInt() ?? (usesQuote ? 0 : 500);
+  // Check that checkout is valid and ready to submit.
   bool get canPlace =>
       !location.lookingUp &&
       (!usesQuote ||
@@ -293,6 +310,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               quote != null &&
               quote?['deliveryFeeCents'] != null));
 
+  // Build the checkout screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -303,12 +321,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             bottom: false,
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: 'Checkout',
                   back: true,
                   onBack: placing ? null : () => Navigator.maybePop(context),
                 ),
                 Expanded(
+                  // Group the inputs under one validation key.
                   child: Form(
                     key: formKey,
                     child: ListView(
@@ -320,6 +340,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           OrderNotice(addressError!, error: true),
                           const SizedBox(height: 16),
                         ],
+                        // Group the related order details in one card.
                         OrderPanel(
                           padding: 20,
                           child: Column(
@@ -487,6 +508,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           const Center(child: CircularProgressIndicator()),
                         if (usesQuote) QuoteLines(quote: quote),
                         if (!usesQuote || quote != null)
+                          // Show the product subtotal, delivery fee, and total.
                           OrderTotals(
                             subtotal: subtotal,
                             delivery:
@@ -545,6 +567,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     ),
   );
 
+  // Build a styled field with its validation message.
   Widget field(
     String id,
     String label,
@@ -588,6 +611,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     ),
   );
 
+  // Build the postcode-aware delivery address fields.
   StoreAddress get structuredAddress => StoreAddress(
     line1: address.text,
     line2: address2.text,
@@ -596,6 +620,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     state: state.text,
   );
 
+  // Show the validation message for this field.
   String? fieldError(String id, String? value) {
     switch (id) {
       case 'name':
@@ -634,6 +659,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  // Submit the validated order using the latest quote.
   Future<void> place() async {
     if (placing || !canPlace) return;
     if (!(formKey.currentState?.validate() ?? false)) {
@@ -776,6 +802,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 }
 
+// Collect delivery details and place the quoted order.
 class PlacedOrderReceiptPage extends StatefulWidget {
   const PlacedOrderReceiptPage({super.key, required this.orderId});
   final String orderId;
@@ -783,11 +810,15 @@ class PlacedOrderReceiptPage extends StatefulWidget {
   State<PlacedOrderReceiptPage> createState() => _PlacedOrderReceiptPageState();
 }
 
+// Manage the placed order receipt page values and actions.
 class _PlacedOrderReceiptPageState extends State<PlacedOrderReceiptPage> {
+  // Keep this component's values, selections, and request state.
   late Future<StoreOrder?> order = FirestoreService.instance.getOrder(
     widget.orderId,
   );
+  // Build the placed order receipt page layout.
   @override
+  // Show loading, errors, or the completed request.
   Widget build(BuildContext context) => FutureBuilder<StoreOrder?>(
     future: order,
     builder: (context, snapshot) {
@@ -803,6 +834,7 @@ class _PlacedOrderReceiptPageState extends State<PlacedOrderReceiptPage> {
           body: SafeArea(
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: 'Order Details',
                   back: true,

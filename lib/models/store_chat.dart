@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'chat_attachment.dart';
 
+// Read a stored chat timestamp with a safe fallback.
 DateTime? _date(dynamic value) => value is Timestamp ? value.toDate() : null;
 
+// Keep the store conversation values used by the app.
 class StoreConversation {
   final String customerId;
   final String customerName;
@@ -22,6 +24,7 @@ class StoreConversation {
     this.adminReadAt,
   });
 
+  // Read the saved record fields with safe defaults.
   factory StoreConversation.fromData(String id, Map<String, dynamic> data) =>
       StoreConversation(
         customerId: id,
@@ -33,6 +36,7 @@ class StoreConversation {
         adminReadAt: _date(data['adminReadAt']),
       );
 
+  // Check whether this viewer has unread messages.
   bool hasUnread({required bool isAdmin}) {
     if (lastMessageAt == null ||
         lastSenderRole == (isAdmin ? 'admin' : 'customer')) {
@@ -42,6 +46,7 @@ class StoreConversation {
     return readAt == null || lastMessageAt!.isAfter(readAt);
   }
 
+  // Return the unread count for this viewer.
   int unreadMessageCount(
     Iterable<StoreChatMessage> messages, {
     required bool isAdmin,
@@ -62,6 +67,7 @@ class StoreConversation {
   }
 }
 
+// Keep the store chat message values used by the app.
 class StoreChatMessage {
   final String id;
   final String senderId;
@@ -81,6 +87,7 @@ class StoreChatMessage {
     this.attachment,
   });
 
+  // Read the saved record fields with safe defaults.
   factory StoreChatMessage.fromData(String id, Map<String, dynamic> data) =>
       StoreChatMessage(
         id: id,
@@ -97,6 +104,7 @@ class StoreChatMessage {
       );
 }
 
+// Convert chat failures to short user-facing messages.
 String? chatMessageError(String text, {bool hasAttachment = false}) {
   if (text.trim().isEmpty && !hasAttachment) return 'Please enter a message.';
   if (text.trim().length > 2000) return 'Use 2,000 characters or fewer.';

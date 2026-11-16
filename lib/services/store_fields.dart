@@ -14,6 +14,7 @@ typedef StoreUpdater =
       required StoreAddress address,
     });
 
+// Validate the shop name length and required value.
 String? storeNameError(String? value) {
   final name = (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
   if (name.length < 2) return 'Enter a store name of at least 2 characters';
@@ -21,6 +22,7 @@ String? storeNameError(String? value) {
   return null;
 }
 
+// Validate the required shop address.
 String? shopAddressError(String? value) {
   final address = (value ?? '').trim();
   if (address.isEmpty) return 'Enter the shop address';
@@ -28,6 +30,7 @@ String? shopAddressError(String? value) {
   return null;
 }
 
+// Validate a required address line.
 String? addressLineError(String? value, {bool required = true}) {
   final line = (value ?? '').trim();
   if (required && line.isEmpty) return 'Enter Address 1';
@@ -35,10 +38,12 @@ String? addressLineError(String? value, {bool required = true}) {
   return null;
 }
 
+// Require a valid Malaysian postcode.
 String? postcodeError(String? value) => RegExp(r'^\d{5}$').hasMatch(value ?? '')
     ? null
     : 'Enter a 5-digit postcode';
 
+// Require a city within the supported length.
 String? cityError(String? value) {
   if ((value ?? '').trim().isEmpty) return 'Enter the city';
   if (value!.trim().length > 80) return 'Use 80 characters or fewer';

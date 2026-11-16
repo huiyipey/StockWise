@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'auth_ui.dart';
 
+// Build the shared store primary button component.
 class StorePrimaryButton extends StatelessWidget {
   const StorePrimaryButton({
     super.key,
@@ -14,6 +15,7 @@ class StorePrimaryButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool busy;
 
+  // Render the store primary button component.
   @override
   Widget build(BuildContext context) => FilledButton(
     onPressed: busy ? null : onPressed,
@@ -43,6 +45,7 @@ class StorePrimaryButton extends StatelessWidget {
   );
 }
 
+// Build the shared store address field component.
 class StoreAddressField extends StatelessWidget {
   const StoreAddressField({
     super.key,
@@ -74,8 +77,10 @@ class StoreAddressField extends StatelessWidget {
   final Widget? suffix;
   final String? error;
 
+  // Render the store address field component.
   @override
   Widget build(BuildContext context) {
+    // Build the rounded store-form input border.
     OutlineInputBorder border(Color color) => OutlineInputBorder(
       borderRadius: BorderRadius.circular(13),
       borderSide: BorderSide(color: color),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+// Build the shared expiry date filter component.
 class ExpiryDateFilter extends StatelessWidget {
   final DateTimeRange? range;
   final bool ascending;
@@ -17,6 +18,7 @@ class ExpiryDateFilter extends StatelessWidget {
     required this.onToggleSort,
   });
 
+  // Render the expiry date filter component.
   @override
   Widget build(BuildContext context) => Row(
     children: [

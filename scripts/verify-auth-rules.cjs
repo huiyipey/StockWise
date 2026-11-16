@@ -10,12 +10,13 @@ const {project, token} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
 initializeApp({
   projectId: project,
-  credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})},
+  credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})},
 });
 const auth = getAuth(), created = new Set();
 const email = 'stockwise-auth-test-' + randomUUID() + '@example.invalid';
 const missing = 'stockwise-missing-' + randomUUID() + '@example.invalid';
 
+// Call the Firebase Auth endpoint used by this test.
 async function identity(action, body) {
   const response = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:' + action + '?key=' + apiKey, {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -25,6 +26,7 @@ async function identity(action, body) {
   if (action === 'signUp' && data.localId) created.add(data.localId);
   return {status: response.status, data};
 }
+// Request the registration or saved-product lookup under test.
 async function lookup(value) {
   const response = await fetch('https://asia-southeast1-' + project + '.cloudfunctions.net/checkRegisteredEmail', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -34,6 +36,7 @@ async function lookup(value) {
 }
 
 (async () => {
+  // Run this operation and handle any reported failure.
   try {
     const absent = await lookup(missing);
     assert.equal(absent.status, 200);
@@ -68,6 +71,7 @@ async function lookup(value) {
     created.delete(registered.data.localId);
     assert.deepEqual((await lookup(email)).data.result, {registered: false});
     console.log('PASS: live registered/missing/deleted lookup, all 5 password rules, valid signup and legacy login.');
+  // Clean up temporary test resources.
   } finally {
     const failures = [];
     for (const uid of created) {

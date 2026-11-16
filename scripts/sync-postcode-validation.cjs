@@ -2,6 +2,7 @@
 // No customer records or credentials are exported.
 const {createHash} = require('node:crypto');
 
+// Validate the pinned dataset and build the postcode-to-state index.
 function buildPostcodeValidation(postcodes = require('../functions/data/malaysia_postcodes.json')) {
   const states = {};
   for (const [code, location] of Object.entries(postcodes)) {
@@ -19,6 +20,7 @@ function buildPostcodeValidation(postcodes = require('../functions/data/malaysia
   return result;
 }
 
+// Publish the validated postcode index used by address rules.
 async function main() {
   const path = require('node:path');
   const backend = require('node:module').createRequire(path.resolve(__dirname, '../functions/package.json'));
@@ -35,5 +37,6 @@ async function main() {
   } finally { await db.terminate(); }
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {buildPostcodeValidation};
 if (require.main === module) main().catch(error => {console.error(error.message); process.exitCode = 1;});

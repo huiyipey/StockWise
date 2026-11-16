@@ -14,11 +14,13 @@ abstract final class AuthColors {
   static const error = Color(0xFFBB513D);
 }
 
+// Build the shared auth page component.
 class AuthPage extends StatelessWidget {
   const AuthPage({super.key, required this.child, this.footer});
   final Widget child;
   final Widget? footer;
 
+  // Render the auth page component.
   @override
   Widget build(BuildContext context) {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
@@ -43,6 +45,7 @@ class AuthPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (!keyboardOpen) ...[
+                      // Show the StockWise logo at the shared auth size.
                       const AuthBrand(),
                       const SizedBox(height: 48),
                     ],
@@ -62,9 +65,11 @@ class AuthPage extends StatelessWidget {
   }
 }
 
+// Build the shared auth brand component.
 class AuthBrand extends StatelessWidget {
   const AuthBrand({super.key});
 
+  // Render the auth brand component.
   @override
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
@@ -93,6 +98,7 @@ class AuthBrand extends StatelessWidget {
   );
 }
 
+// Build the shared auth card component.
 class AuthCard extends StatelessWidget {
   const AuthCard({
     super.key,
@@ -106,6 +112,7 @@ class AuthCard extends StatelessWidget {
   final List<Widget> children;
   final Widget? leading;
 
+  // Render the auth card component.
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
@@ -145,6 +152,7 @@ class AuthCard extends StatelessWidget {
   );
 }
 
+// Build the shared auth field component.
 class AuthField extends StatelessWidget {
   const AuthField({
     super.key,
@@ -174,8 +182,10 @@ class AuthField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final TextInputAction textInputAction;
 
+  // Render the auth field component.
   @override
   Widget build(BuildContext context) {
+    // Build the rounded border for this authentication field.
     OutlineInputBorder border(Color color) => OutlineInputBorder(
       borderRadius: BorderRadius.circular(13),
       borderSide: BorderSide(color: color, width: 1),
@@ -267,10 +277,12 @@ class AuthField extends StatelessWidget {
   }
 }
 
+// Build the shared auth error component.
 class AuthError extends StatelessWidget {
   const AuthError(this.message, {super.key});
   final String? message;
 
+  // Render the auth error component.
   @override
   Widget build(BuildContext context) => ConstrainedBox(
     constraints: const BoxConstraints(minHeight: 18),
@@ -291,9 +303,11 @@ class AuthError extends StatelessWidget {
   );
 }
 
+// Build the shared auth reset confirmation component.
 class AuthResetConfirmation extends StatelessWidget {
   const AuthResetConfirmation({super.key});
 
+  // Render the auth reset confirmation component.
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
@@ -343,6 +357,7 @@ class AuthResetConfirmation extends StatelessWidget {
   );
 }
 
+// Build the shared auth button component.
 class AuthButton extends StatelessWidget {
   const AuthButton({
     super.key,
@@ -356,6 +371,7 @@ class AuthButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool busy;
 
+  // Render the auth button component.
   @override
   Widget build(BuildContext context) => ElevatedButton(
     onPressed: busy ? null : onPressed,
@@ -394,6 +410,7 @@ class AuthButton extends StatelessWidget {
   );
 }
 
+// Build the shared auth account link component.
 class AuthAccountLink extends StatelessWidget {
   const AuthAccountLink({
     super.key,
@@ -405,6 +422,7 @@ class AuthAccountLink extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
 
+  // Render the auth account link component.
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -433,6 +451,7 @@ class AuthAccountLink extends StatelessWidget {
   );
 }
 
+// Build the shared auth status screen component.
 class AuthStatusScreen extends StatelessWidget {
   const AuthStatusScreen({
     super.key,
@@ -444,6 +463,7 @@ class AuthStatusScreen extends StatelessWidget {
   final String message;
   final bool error;
 
+  // Render the auth status screen component.
   @override
   Widget build(BuildContext context) => AuthPage(
     child: Padding(

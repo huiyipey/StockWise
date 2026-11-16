@@ -9,32 +9,43 @@ import 'postcode_lookup.dart';
 import 'profile_fields.dart';
 import 'store_fields.dart';
 
+// Define the saved-address operations used by the screens.
 abstract class AddressBookRepository {
+  // Watch saved addresses for the current account.
   Stream<AddressBook> watch();
+  // Save the validated address or attachment.
   Future<void> save(SavedAddress address, {bool makeDefault = false});
+  // Make this the account default delivery address.
   Future<void> setDefault(String id);
+  // Delete the selected saved address.
   Future<void> delete(String id);
 }
 
+// Require a non-empty address field.
 String? addressRequired(String? value) =>
     value == null || value.trim().isEmpty ? 'Required' : null;
 
+// Validate the receiver Malaysian phone number.
 String? addressPhoneError(String? value) =>
     addressRequired(value) ?? profilePhoneError(value);
 
+// Require a supported five-digit Malaysian postcode.
 String? addressPostalError(String? value) => postcodeError(value?.trim());
 
+// Read and save account-scoped delivery addresses.
 class AddressBookService implements AddressBookRepository {
   AddressBookService._();
   static final instance = AddressBookService._();
   final _db = FirebaseFirestore.instance;
 
+  // Require the signed-in account address collection.
   DocumentReference<Map<String, dynamic>> get _userRef {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) throw StateError('Please sign in.');
     return _db.collection('users').doc(uid);
   }
 
+  // Watch the account addresses and selected default.
   @override
   Stream<AddressBook> watch() {
     final user = _userRef;
@@ -42,6 +53,7 @@ class AddressBookService implements AddressBookRepository {
       List<SavedAddress>? rows;
       String? defaultId;
       var profileReady = false;
+      // Publish the latest saved address book.
       void emit() {
         if (rows != null && profileReady) {
           controller.add(
@@ -73,6 +85,7 @@ class AddressBookService implements AddressBookRepository {
     });
   }
 
+  // Save the validated address and preserve a valid default.
   @override
   Future<void> save(SavedAddress address, {bool makeDefault = false}) async {
     final data = address.toData();
@@ -129,6 +142,7 @@ class AddressBookService implements AddressBookRepository {
     });
   }
 
+  // Make this the account default delivery address.
   @override
   Future<void> setDefault(String id) async {
     final user = _userRef;
@@ -145,6 +159,7 @@ class AddressBookService implements AddressBookRepository {
     });
   }
 
+  // Delete the address and replace its default when needed.
   @override
   Future<void> delete(String id) async {
     final user = _userRef;

@@ -31,7 +31,9 @@ class CreateStoreDialog extends StatefulWidget {
   State<CreateStoreDialog> createState() => _CreateStoreDialogState();
 }
 
+// Manage the create store dialog values and actions.
 class _CreateStoreDialogState extends State<CreateStoreDialog> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   late StoreHours hours =
       widget.initialStore?.operatingHours ?? const StoreHours();
@@ -63,11 +65,14 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
       collapsed = false,
       confirmingLeave = false,
       allowExit = false;
+  // Check whether an existing record is being edited.
   bool get editing => widget.initialStore != null;
+  // Compare the edited fields with their initial values.
   bool get hasUnsavedChanges =>
       initialValues.entries.any((entry) => entry.key.text != entry.value) ||
       initialHours != hours.toMap().toString();
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -85,6 +90,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     debounce?.cancel();
@@ -96,6 +102,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     super.dispose();
   }
 
+  // Clear stale location values before a new postcode lookup.
   void _postcodeChanged(String value) {
     debounce?.cancel();
     lookupVersion++;
@@ -112,6 +119,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     }
   }
 
+  // Look up the city and state for the entered postcode.
   Future<void> _lookup(String value, {bool preserveCity = false}) async {
     final version = ++lookupVersion;
     setState(() {
@@ -147,6 +155,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     }
   }
 
+  // Validate the shop fields, then create or update the shop.
   Future<void> _save() async {
     if (saving || lookingUp) return;
     setState(() => submitted = true);
@@ -231,6 +240,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     }
   }
 
+  // Confirm before discarding entered form information.
   Future<void> _requestLeave() async {
     if (saving || confirmingLeave || allowExit) return;
     if (!hasUnsavedChanges) {
@@ -302,6 +312,8 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     }
   }
 
+  // Build the shop name, address, and operating-hours fields.
+  // Group the inputs under one validation key.
   Widget _fields() => Form(
     key: form,
     onChanged: () => setState(() {}),
@@ -344,6 +356,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
               ],
             ),
           ),
+        // Enter the store name.
         StoreAddressField(
           fieldKey: 'store-name',
           label: 'Store Name',
@@ -352,11 +365,13 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
           enabled: !saving,
           validator: storeNameError,
         ),
+        // Choose open hours and any closed weekdays.
         StoreHoursEditor(
           value: hours,
           enabled: !saving,
           onChanged: (value) => setState(() => hours = value),
         ),
+        // Enter the address 1.
         StoreAddressField(
           fieldKey: 'address-1',
           label: 'Address 1',
@@ -367,6 +382,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
           keyboardType: TextInputType.streetAddress,
           validator: addressLineError,
         ),
+        // Enter the address 2.
         StoreAddressField(
           fieldKey: 'address-2',
           label: 'Address 2',
@@ -378,6 +394,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
           keyboardType: TextInputType.streetAddress,
           validator: (value) => addressLineError(value, required: false),
         ),
+        // Enter the postcode.
         StoreAddressField(
           fieldKey: 'postcode',
           label: 'Postcode',
@@ -424,6 +441,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
               child: const Text('Retry lookup'),
             ),
           ),
+        // Enter the city.
         StoreAddressField(
           fieldKey: 'city',
           label: 'City',
@@ -432,6 +450,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
           enabled: !saving && resolvedPostcode == postcode.text,
           validator: cityError,
         ),
+        // Enter the state.
         StoreAddressField(
           fieldKey: 'state',
           label: 'State',
@@ -457,6 +476,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     ),
   );
 
+  // Build the save and cancel actions.
   Widget _actions() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     mainAxisSize: MainAxisSize.min,
@@ -500,6 +520,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     ],
   );
 
+  // Build the create store dialog layout.
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !saving && (allowExit || !hasUnsavedChanges),
@@ -509,6 +530,7 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     child: editing ? _editDialog() : InventoryTheme(child: _createPage()),
   );
 
+  // Show the shop editor as a dialog.
   Widget _editDialog() => Dialog(
     backgroundColor: Colors.white,
     surfaceTintColor: Colors.transparent,
@@ -572,11 +594,13 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
     ),
   );
 
+  // Show the new-shop form as a full page.
   Widget _createPage() => Scaffold(
     backgroundColor: AuthColors.background,
     body: SafeArea(
       child: Column(
         children: [
+          // Show the page title, shop name, and header actions.
           InventoryHeader(
             title: 'Create Store',
             back: true,
@@ -592,8 +616,10 @@ class _CreateStoreDialogState extends State<CreateStoreDialog> {
                   constraints: const BoxConstraints(maxWidth: 440),
                   child: Column(
                     children: [
+                      // Show the StockWise logo at the shared auth size.
                       const AuthBrand(),
                       const SizedBox(height: 36),
+                      // Group the authentication form and its heading.
                       AuthCard(
                         title: 'Store Details',
                         subtitle: 'Add your store name and address.',

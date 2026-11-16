@@ -5,6 +5,7 @@ import '../services/firestore_service.dart';
 import '../screens/barcode_scanner_screen.dart';
 import 'inventory_ui.dart';
 
+// Build the shared promotion editor component.
 class PromotionEditor extends StatefulWidget {
   const PromotionEditor({
     super.key,
@@ -23,7 +24,9 @@ class PromotionEditor extends StatefulWidget {
   State<PromotionEditor> createState() => _PromotionEditorState();
 }
 
+// Manage the promotion editor values and actions.
 class _PromotionEditorState extends State<PromotionEditor> {
+  // Keep this component's values, selections, and request state.
   late String type = widget.initial['type'] as String? ?? 'percentage';
   late String requirement =
       widget.initial['requirement'] as String? ?? 'quantity';
@@ -48,14 +51,18 @@ class _PromotionEditorState extends State<PromotionEditor> {
         ? _number(widget.initial['rewardPercentage'])
         : _money(widget.initial['rewardAmountCents']),
   );
+  // Format a saved numeric value for the promotion input.
   String _number(dynamic value) => value == null ? '' : '$value';
+  // Format the promotion amount for editing.
   String _money(dynamic value) =>
       value is num ? (value / 100).toStringAsFixed(2) : '';
+  // Convert entered currency to integer cents.
   int _cents(String value) {
     final number = double.tryParse(value);
     return number == null || !number.isFinite ? 0 : (number * 100).round();
   }
 
+  // Collect the current promotion values for the parent form.
   Map<String, dynamic> get data {
     final result = <String, dynamic>{
       'type': type,
@@ -78,7 +85,9 @@ class _PromotionEditorState extends State<PromotionEditor> {
     return result;
   }
 
+  // Handle an edited value and notify the parent form.
   void changed() => widget.onChanged(data);
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     discount.dispose();
@@ -88,6 +97,7 @@ class _PromotionEditorState extends State<PromotionEditor> {
     super.dispose();
   }
 
+  // Build the promotion dropdown using the shared field style.
   Widget select(
     String label,
     String value,
@@ -107,6 +117,7 @@ class _PromotionEditorState extends State<PromotionEditor> {
       }),
     ),
   );
+  // Build a styled field with its validation message.
   Widget field(
     String key,
     String label,
@@ -150,6 +161,7 @@ class _PromotionEditorState extends State<PromotionEditor> {
       },
     ),
   );
+  // Render the promotion editor component.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -273,6 +285,7 @@ class _PromotionEditorState extends State<PromotionEditor> {
   );
 }
 
+// Choose the product rewarded by a bundle promotion.
 Future<InventoryBatch?> chooseBundleProduct(
   BuildContext context, {
   Stream<List<InventoryBatch>>? products,
@@ -286,6 +299,7 @@ Future<InventoryBatch?> chooseBundleProduct(
   builder: (_) => _BundleProductSheet(products: products),
 );
 
+// Build the shared bundle product sheet component.
 class _BundleProductSheet extends StatefulWidget {
   const _BundleProductSheet({this.products});
   final Stream<List<InventoryBatch>>? products;
@@ -293,16 +307,20 @@ class _BundleProductSheet extends StatefulWidget {
   State<_BundleProductSheet> createState() => _BundleProductSheetState();
 }
 
+// Manage the bundle product sheet values and actions.
 class _BundleProductSheetState extends State<_BundleProductSheet> {
+  // Keep this component's values, selections, and request state.
   final query = TextEditingController();
   late final source =
       widget.products ?? FirestoreService.instance.watchInventory();
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     query.dispose();
     super.dispose();
   }
 
+  // Render the bundle product sheet component.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: SafeArea(
@@ -348,6 +366,7 @@ class _BundleProductSheetState extends State<_BundleProductSheet> {
               ),
               const SizedBox(height: 12),
               Expanded(
+                // Follow live stock quantities, prices, and expiry updates.
                 child: StreamBuilder<List<InventoryBatch>>(
                   stream: source,
                   builder: (context, snapshot) {

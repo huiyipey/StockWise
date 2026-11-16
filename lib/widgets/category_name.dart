@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../services/store_session.dart';
 import '../models/category_label.dart';
 
+// Build the shared category name component.
 class CategoryName extends StatelessWidget {
   final String id;
   final TextStyle? style;
   const CategoryName(this.id, {super.key, this.style});
+  // Render the category name component.
   @override
   Widget build(BuildContext context) =>
       StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(

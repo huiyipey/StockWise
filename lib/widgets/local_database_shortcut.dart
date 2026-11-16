@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'inventory_ui.dart';
 
+// Build the shared local database shortcut component.
 class LocalDatabaseShortcut extends StatefulWidget {
   const LocalDatabaseShortcut({
     super.key,
@@ -16,10 +17,13 @@ class LocalDatabaseShortcut extends StatefulWidget {
   State<LocalDatabaseShortcut> createState() => _LocalDatabaseShortcutState();
 }
 
+// Manage the local database shortcut values and actions.
 class _LocalDatabaseShortcutState extends State<LocalDatabaseShortcut> {
+  // Keep this component's values, selections, and request state.
   Timer? reset;
   int taps = 0;
   bool opening = false;
+  // Count quick taps and open the viewer after the sixth.
   Future<void> tap() async {
     if (opening) return;
     reset?.cancel();
@@ -37,12 +41,14 @@ class _LocalDatabaseShortcutState extends State<LocalDatabaseShortcut> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     reset?.cancel();
     super.dispose();
   }
 
+  // Render the local database shortcut component.
   @override
   Widget build(BuildContext context) => Semantics(
     hint: 'Tap six times in a row to open the local database',

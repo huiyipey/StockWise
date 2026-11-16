@@ -4,6 +4,7 @@ import '../services/postcode_lookup.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
+// Set fixed or postcode-based delivery fees.
 class DeliveryFeeScreen extends StatefulWidget {
   const DeliveryFeeScreen({super.key, this.loader, this.onSave});
   final Future<Map<String, dynamic>> Function()? loader;
@@ -12,24 +13,29 @@ class DeliveryFeeScreen extends StatefulWidget {
   State<DeliveryFeeScreen> createState() => _DeliveryFeeScreenState();
 }
 
+// Manage the delivery fee screen values and actions.
 class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   final fixed = TextEditingController(text: '5.00');
   final rows =
       <({TextEditingController postcode, TextEditingController amount})>[];
   String mode = 'fixed', initial = '', error = '';
   bool loading = true, saving = false, complete = false;
+  // Read the current delivery settings for change detection.
   Map<String, dynamic> get raw => {
     'mode': mode,
     'fixed': fixed.text,
     'rows': rows.map((r) => '${r.postcode.text}:${r.amount.text}').join('|'),
   };
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     load();
   }
 
+  // Fill the form from the stored delivery fee settings.
   Future<void> load() async {
     try {
       final data =
@@ -61,6 +67,7 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     fixed.dispose();
@@ -71,6 +78,7 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
     super.dispose();
   }
 
+  // Format integer cents as a MYR price.
   String? money(String? text) {
     final value = double.tryParse(text ?? '');
     return value == null || !value.isFinite || value < 0
@@ -78,6 +86,7 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
         : null;
   }
 
+  // Validate fees and postcode rows before saving.
   Future<void> save() async {
     if (saving || !(form.currentState?.validate() ?? false)) return;
     setState(() {
@@ -132,6 +141,7 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
     }
   }
 
+  // Build the delivery fee screen layout.
   @override
   Widget build(BuildContext context) => ProfileFormPage(
     title: 'Manage Delivery Fee',
@@ -147,13 +157,16 @@ class _DeliveryFeeScreenState extends State<DeliveryFeeScreen> {
         ? const Center(child: CircularProgressIndicator())
         : SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+            // Group the inputs under one validation key.
             child: Form(
               key: form,
               onChanged: () => setState(() {}),
+              // Keep related profile details together.
               child: ProfilePanel(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    // Choose the delivery fee type.
                     InventoryChoiceField(
                       key: const ValueKey('delivery-fee-type'),
                       label: 'Delivery Fee Type',

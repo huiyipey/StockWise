@@ -3,6 +3,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../widgets/inventory_ui.dart';
 
+// Scan a barcode and return it to the item editor.
 class BarcodeScannerScreen extends StatefulWidget {
   const BarcodeScannerScreen({super.key});
 
@@ -10,7 +11,9 @@ class BarcodeScannerScreen extends StatefulWidget {
   State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
 }
 
+// Manage the barcode scanner screen values and actions.
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
+  // Keep this component's values, selections, and request state.
   final controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
     formats: const [
@@ -28,18 +31,21 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   bool detected = false;
   bool unavailable = false;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     controller.addListener(_cameraStateChanged);
   }
 
+  // Update the scanner when camera availability changes.
   void _cameraStateChanged() {
     if (mounted && unavailable && controller.value.isRunning) {
       setState(() => unavailable = false);
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     controller.removeListener(_cameraStateChanged);
@@ -47,6 +53,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     super.dispose();
   }
 
+  // Build the barcode scanner screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -54,6 +61,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Scan barcode',
                 back: true,
@@ -119,6 +127,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     ),
   );
 
+  // Return the first usable barcode and stop repeated detection.
   void _onDetect(BarcodeCapture capture) {
     if (detected) return;
     final value = capture.barcodes
@@ -132,8 +141,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   }
 }
 
+// Scan a barcode and return it to the item editor.
 class ScannerUnavailable extends StatelessWidget {
   const ScannerUnavailable({super.key});
+  // Build the scanner unavailable layout.
   @override
   Widget build(BuildContext context) => const ColoredBox(
     color: Color(0xFF23332C),

@@ -4,6 +4,7 @@ import '../models/app_models.dart';
 import '../models/category_label.dart';
 import '../services/firestore_service.dart';
 
+// Build the shared category filter component.
 class CategoryFilter extends StatefulWidget {
   final List<String> categoryIds;
   final String selected;
@@ -22,9 +23,12 @@ class CategoryFilter extends StatefulWidget {
   State<CategoryFilter> createState() => _CategoryFilterState();
 }
 
+// Manage the category filter values and actions.
 class _CategoryFilterState extends State<CategoryFilter> {
+  // Keep this component's values, selections, and request state.
   late final categories = FirestoreService.instance.watchCategoryRecords();
 
+  // Render the category filter component.
   @override
   Widget build(BuildContext context) => StreamBuilder<List<StoreCategory>>(
     stream: categories,

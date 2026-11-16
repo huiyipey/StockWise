@@ -4,17 +4,21 @@ const {quoteCart,deliveryFee,orderingOpen,orderingClosedMessage,titleCase,operat
 const postcodes=require('./data/malaysia_postcodes.json');
 const {isValidMalaysianPhone}=require('./malaysian_phone');
 const {isActiveStoreAdmin}=require('./store_roles');
+const {inventorySnapshot}=require('./inventory_snapshot');
+// Require authentication and a valid shop identifier.
 function storeRef(db,request) {
   if(!request.auth)throw new HttpsError('unauthenticated','Please sign in.');
   const id=request.data?.storeId;
   if(typeof id!=='string'||!/^[-\w]{1,128}$/.test(id))throw new HttpsError('invalid-argument','Select a store.');
   return db.collection('stores').doc(id);
 }
+// Require an active Admin membership in this shop.
 async function team(tx,store,uid) {
   const member=(await tx.get(store.collection('members').doc(uid))).data();
   if(!isActiveStoreAdmin(member))throw new HttpsError('permission-denied','Store admin access is required.');
   return member;
 }
+// Validate the receiver phone and structured Malaysian address.
 function receiverDetails(value) {
   const result={};
   for(const key of ['name','phone','email','addressLine1','addressLine2','city','state','postalCode'])result[key]=typeof value?.[key]==='string'?value[key].trim():'';
@@ -29,8 +33,11 @@ function receiverDetails(value) {
   if(result.email.length>250)throw new HttpsError('invalid-argument','Use 250 characters or fewer for the email.');
   return result;
 }
+// Create the authoritative checkout, inventory, and shop actions.
 function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucket}) {
+  // Convert unexpected business failures to readable callable errors.
   const wrap=fn=>async request=>{try{return await fn(request);}catch(e){if(e instanceof HttpsError)throw e;throw new HttpsError('failed-precondition',e.message||'Please refresh and try again.');}};
+  // Read the cart and stock inside the current transaction.
   async function readQuote(tx,store,uid) {
     const [shop,settings,cart,batches]=await Promise.all([tx.get(store),tx.get(store.collection('settings').doc('commerce')),
       tx.get(store.collection('carts').doc(uid).collection('items')),tx.get(store.collection('inventoryBatches').where('status','==','active'))]);
@@ -41,6 +48,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
     return {shop:shop.data(),settings:settings.data()||{},cart,inventory,quote:quoteCart(source,inventory,{now:now()})};
   }
   return {
+    // Calculate current cart prices, offers, and delivery availability.
     quoteCart:wrap(async request=>{
       const store=storeRef(db,request);
       return db.runTransaction(async tx=>{
@@ -51,6 +59,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
           message:!open?orderingClosedMessage(data.shop,now()):fee===null?'Delivery is not configured for this postcode. Please contact the store.':null};
       });
     }),
+    // Validate the latest quote and save the order atomically.
     placeOrder:wrap(async request=>{
       const store=storeRef(db,request), uid=request.auth.uid;
       const receiver=receiverDetails(request.data.receiver), payment=request.data.paymentMethod;
@@ -59,6 +68,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
       if(typeof requestId!=='string'||!/^[-\w]{1,80}$/.test(requestId))throw new HttpsError('invalid-argument','Refresh checkout.');
       const id=`${createHash('sha256').update(uid).digest('hex').slice(0,16)}-${requestId}`, order=store.collection('orders').doc(id);
       return db.runTransaction(async tx=>{
+        // Return the existing order when the same checkout is retried.
         const old=await tx.get(order);if(old.exists)return {id,orderNumber:old.data().orderNumber};
         const data=await readQuote(tx,store,uid);
         if(!orderingOpen(data.shop,now()))throw new HttpsError('failed-precondition',orderingClosedMessage(data.shop,now()));
@@ -66,15 +76,18 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         if(fee===null)throw new HttpsError('failed-precondition','Delivery is not configured for this postcode. Please contact the store.');
         if(data.quote.promotionWarnings.length && request.data.acceptedPromotionReviewToken!==data.quote.promotionReviewToken)
           throw new HttpsError('failed-precondition','Promotion availability changed. Review the unavailable offers before placing your order.');
+        // Require the reviewed total and current promotion consent.
         const total=data.quote.subtotalCents+fee;
         if(request.data.expectedTotalCents!==total)throw new HttpsError('failed-precondition','Your order total changed. Refresh checkout and review the new total.');
         const timestamp=serverTimestamp(), orderNumber=`SW-${now().getTime().toString().slice(-10)}`;
+        // Deduct paid and free units together and record each stock movement.
         for(const change of data.quote.stock){
           const batch=data.inventory.find(b=>b.id===change.id), remaining=batch.quantityOnHand-change.quantity;
           tx.update(store.collection('inventoryBatches').doc(change.id),{quantityOnHand:remaining,status:remaining===0?'depleted':'active',updatedAt:timestamp});
           tx.set(store.collection('inventoryEvents').doc(`${id}-${change.id}`),{storeId:store.id,batchId:change.id,productId:batch.productId,
             productName:batch.productName,categoryId:batch.categoryId,eventType:'sold',quantity:change.quantity,quantityDelta:-change.quantity,actorUid:uid,orderId:id,occurredAt:timestamp});
         }
+        // Save the order item snapshots and clear the purchased cart.
         data.quote.lines.forEach((line,index)=>tx.set(order.collection('items').doc(String(index)),{...line,storeId:store.id,expiryAt:Timestamp.fromDate(line.expiryAt)}));
         data.cart.docs.forEach(doc=>tx.delete(doc.ref));
         tx.set(order,{storeId:store.id,orderNumber,userId:uid,status:'to_pay',paymentStatus:'unpaid',fulfillmentType:'delivery',receiver,
@@ -84,6 +97,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         return {id,orderNumber};
       });
     }),
+    // Validate the transition and restore stock when an order is cancelled.
     updateOrderStatus:wrap(async request=>{
       const store=storeRef(db,request), order=store.collection('orders').doc(request.data.orderId);
       return db.runTransaction(async tx=>{
@@ -92,21 +106,24 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         const data=saved.data(), next=request.data.status;
         if(data.status===next)return {status:next};
         if(request.data.expectedStatus!==data.status)throw new HttpsError('aborted','This order changed. Refresh and try again.');
+        // Keep completed orders final and require receipts before shipping.
         const statuses=['to_pay','to_ship','to_receive','completed'];
         if(['cancelled','completed'].includes(data.status)||!['cancelled',...statuses].includes(next)||
           (next==='cancelled'?data.status!=='to_pay':statuses.indexOf(next)<statuses.indexOf(data.status)))throw new HttpsError('failed-precondition','This order cannot move to that status.');
         if(next!=='cancelled'&&!data.receiptPath)throw new HttpsError('failed-precondition','A payment receipt is required before shipping.');
         const reason=typeof request.data.reason==='string'?request.data.reason.trim():'';
         if(next==='cancelled'&&(!reason||reason.length>500))throw new HttpsError('invalid-argument','Enter a cancellation reason of 1-500 characters.');
+        // Read every affected batch before writing cancellation restocks.
         const rows=next==='cancelled'?(await tx.get(order.collection('items'))).docs.map(d=>d.data()):[];
         const quantities=new Map();for(const line of rows)quantities.set(line.batchId,(quantities.get(line.batchId)||0)+line.quantity);
         const savedBatches=new Map();for(const id of quantities.keys())savedBatches.set(id,await tx.get(store.collection('inventoryBatches').doc(id)));
         const archives=new Map();for(const [id,snap]of savedBatches)if(!snap.exists)archives.set(id,(await tx.get(store.collection('inventoryArchive').doc(id))).data());
         const stamp=serverTimestamp();
+        // Restore sold units and record their return when cancelling.
         for(const [id,quantity]of quantities){
           const snap=savedBatches.get(id), line=rows.find(l=>l.batchId===id), old=snap.data();
           if(snap.exists)tx.update(snap.ref,{quantityOnHand:old.quantityOnHand+quantity,status:'active',updatedAt:stamp});
-          else tx.set(snap.ref,{...(archives.get(id)||{}),storeId:store.id,productId:line.productId,productName:line.productName,categoryId:line.categoryId||'others',imagePath:line.imagePath||null,
+          else tx.set(snap.ref,{...inventorySnapshot(archives.get(id)),storeId:store.id,productId:line.productId,productName:line.productName,categoryId:line.categoryId||'others',imagePath:line.imagePath||null,
             expiryAt:line.expiryAt,unitLabel:line.unitLabel||'unit',basePriceCents:Math.max(1,archives.get(id)?.basePriceCents||line.regularUnitPriceCents||line.unitPriceCents),quantityOnHand:quantity,quantityReserved:0,
             promotionEnabled:false,promotionPriceCents:null,status:'active',createdAt:stamp,updatedAt:stamp,notifyOnExpiry:true});
           tx.set(store.collection('inventoryEvents').doc(`cancel-${order.id}-${id}`),{storeId:store.id,batchId:id,productId:line.productId,productName:line.productName,
@@ -116,10 +133,11 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         tx.update(order,{status:next,paymentStatus,...(next==='cancelled'?{cancellationReason:reason,cancelledAt:stamp}:{}),updatedAt:stamp});
         tx.set(store.collection('notifications').doc(`order-${order.id}-${next}`),{storeId:store.id,recipientUid:data.userId,type:'order_status',
           title:`Order ${data.orderNumber} updated`,body:`Status: ${titleCase(next.replaceAll('_',' '))}${next==='cancelled'?`. ${reason}`:''}`,
-          relatedCollection:'orders',relatedDocumentId:order.id,isRead:false,createdAt:stamp});
+          relatedCollection:'orders',relatedDocumentId:order.id,createdAt:stamp});
         return {status:next,paymentStatus,cancellationReason:reason};
       });
     }),
+    // Deduct discarded units and record the waste event atomically.
     discardInventory:wrap(async request=>{
       const store=storeRef(db,request), ref=store.collection('inventoryBatches').doc(request.data.batchId), quantity=request.data.quantity;
       if(!Number.isInteger(quantity)||quantity<1)throw new HttpsError('invalid-argument','Enter a valid quantity.');
@@ -135,6 +153,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         return {quantityOnHand:remaining};
       });
     }),
+    // Archive a batch and record any remaining stock movement.
     removeInventory:wrap(async request=>{
       const store=storeRef(db,request),ref=store.collection('inventoryBatches').doc(request.data.batchId);
       return db.runTransaction(async tx=>{
@@ -142,10 +161,11 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         const b=snap.data(),expired=b.expiryAt.toDate()<=now(),quantity=b.quantityOnHand;
         if(expired&&quantity>0)tx.set(store.collection('inventoryEvents').doc(`expiry-${ref.id}`),{storeId:store.id,batchId:ref.id,productId:b.productId,
           productName:b.productName,categoryId:b.categoryId,eventType:'expired',quantity,quantityDelta:-quantity,actorUid:request.auth.uid,occurredAt:serverTimestamp()});
-        tx.set(store.collection('inventoryArchive').doc(ref.id),{...b,removedAt:serverTimestamp(),removalReason:'deleted'});
+        tx.set(store.collection('inventoryArchive').doc(ref.id),{...inventorySnapshot(b),removedAt:serverTimestamp(),removalReason:'deleted'});
         tx.delete(ref);return {removed:true,wasteRecorded:expired&&quantity>0};
       });
     }),
+    // Require Admin access before saving delivery fee settings.
     saveDeliveryFees:wrap(async request=>{
       const store=storeRef(db,request),mode=request.data.mode,fees=request.data.postcodeFees||{},fixed=request.data.fixedCents;
       if(!['fixed','postcode'].includes(mode)||!Number.isSafeInteger(fixed)||fixed<0||fixed>1000000||typeof fees!=='object'||Array.isArray(fees)||Object.keys(fees).length>5000||
@@ -154,6 +174,7 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
         {storeId:store.id,deliveryFeeMode:mode,deliveryFeeCents:fixed,postcodeFees:fees,updatedAt:serverTimestamp()},{merge:true});});
       return {saved:true};
     }),
+    // Delete the confirmed shop and its related records.
     deleteStore:wrap(async request=>{
       const store=storeRef(db,request);const data=await db.runTransaction(async tx=>{
         await team(tx,store,request.auth.uid);const snap=await tx.get(store);
@@ -168,4 +189,5 @@ function commerceHandlers({db,serverTimestamp,Timestamp,now=()=>new Date(),bucke
     }),
   };
 }
+// Export the helpers used by the app backend and tests.
 module.exports={commerceHandlers,receiverDetails,storeRef,team};

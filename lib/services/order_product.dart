@@ -1,5 +1,6 @@
 import '../models/app_models.dart';
 
+// Find an active, in-stock product matching the saved order line.
 InventoryBatch? sellingOrderProduct(
   OrderLine line,
   Iterable<InventoryBatch> inventory,

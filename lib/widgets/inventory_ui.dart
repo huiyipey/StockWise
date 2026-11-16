@@ -10,6 +10,7 @@ import 'stockwise_ui.dart';
 import 'auth_ui.dart' show AuthColors;
 import 'glass_bottom_nav.dart' show NavItem;
 
+// Keep the inventory and customer shop colour palette.
 abstract final class InventoryColors {
   static const background = AuthColors.background;
   static const ink = Color(0xFF18382C);
@@ -21,6 +22,7 @@ abstract final class InventoryColors {
   static const amber = Color(0xFFA26124);
 }
 
+// Show inventory success or error feedback.
 SnackBar inventoryFeedback(
   String message, {
   bool error = false,
@@ -65,6 +67,7 @@ void showInventoryOverlayFeedback(
   final overlay = Overlay.of(context, rootOverlay: true);
   var dismissed = false;
   late final OverlayEntry entry;
+  // Remove the feedback overlay when its timer ends.
   void dismiss() {
     if (dismissed) return;
     dismissed = true;
@@ -89,6 +92,7 @@ void showInventoryOverlayFeedback(
   overlay.insert(entry);
 }
 
+// Build the shared inventory overlay feedback component.
 class _InventoryOverlayFeedback extends StatefulWidget {
   const _InventoryOverlayFeedback({
     required this.message,
@@ -101,20 +105,25 @@ class _InventoryOverlayFeedback extends StatefulWidget {
       _InventoryOverlayFeedbackState();
 }
 
+// Manage the inventory overlay feedback values and actions.
 class _InventoryOverlayFeedbackState extends State<_InventoryOverlayFeedback> {
+  // Keep this component's values, selections, and request state.
   late final Timer timer;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     timer = Timer(const Duration(seconds: 4), widget.onDismiss);
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     timer.cancel();
     super.dispose();
   }
 
+  // Render the inventory overlay feedback component.
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
@@ -156,6 +165,7 @@ class InventoryTheme extends StatelessWidget {
   final Widget child;
   final bool enlargedFields;
 
+  // Render the inventory theme component.
   @override
   Widget build(BuildContext context) {
     final base = Theme.of(context);
@@ -315,34 +325,41 @@ class InventoryInputBorder extends UnderlineInputBorder {
   const InventoryInputBorder({
     super.borderSide = const BorderSide(color: InventoryColors.line),
   });
+  // Copy this border with the requested style changes.
   @override
   InventoryInputBorder copyWith({
     BorderSide? borderSide,
     BorderRadius? borderRadius,
   }) => InventoryInputBorder(borderSide: borderSide ?? this.borderSide);
+  // Scale the border dimensions.
   @override
   InventoryInputBorder scale(double t) =>
       InventoryInputBorder(borderSide: borderSide.scale(t));
+  // Interpolate from another compatible border.
   @override
   ShapeBorder? lerpFrom(ShapeBorder? a, double t) => a is InventoryInputBorder
       ? InventoryInputBorder(
           borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
         )
       : super.lerpFrom(a, t);
+  // Interpolate toward another compatible border.
   @override
   ShapeBorder? lerpTo(ShapeBorder? b, double t) => b is InventoryInputBorder
       ? InventoryInputBorder(
           borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
         )
       : super.lerpTo(b, t);
+  // Draw the outside edge of the rounded field.
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
       Path()..addRRect(BorderRadius.circular(12).toRRect(rect));
+  // Draw the inside edge of the rounded field.
   @override
   Path getInnerPath(Rect rect, {TextDirection? textDirection}) => Path()
     ..addRRect(
       BorderRadius.circular(12).toRRect(rect.deflate(borderSide.width)),
     );
+  // Paint the custom border or chart grid.
   @override
   void paint(
     Canvas canvas,
@@ -407,6 +424,7 @@ InputDecoration inventoryEditorDecoration(
   ),
 );
 
+// Build the shared inventory choice field component.
 class InventoryChoiceField extends StatelessWidget {
   const InventoryChoiceField({
     super.key,
@@ -421,6 +439,7 @@ class InventoryChoiceField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final bool enabled;
 
+  // Render the inventory choice field component.
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
@@ -453,6 +472,7 @@ class InventoryChoiceField extends StatelessWidget {
   );
 }
 
+// Build the shared inventory header component.
 class InventoryHeader extends StatelessWidget {
   const InventoryHeader({
     super.key,
@@ -472,6 +492,7 @@ class InventoryHeader extends StatelessWidget {
   final Widget? trailing;
   final bool enlarged;
 
+  // Render the inventory header component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
@@ -537,6 +558,7 @@ class InventoryHeader extends StatelessWidget {
   );
 }
 
+// Build the shared inventory button component.
 class InventoryButton extends StatelessWidget {
   const InventoryButton({
     super.key,
@@ -557,6 +579,7 @@ class InventoryButton extends StatelessWidget {
   final double fontSize;
   final double? height;
 
+  // Render the inventory button component.
   @override
   Widget build(BuildContext context) => FilledButton(
     onPressed: busy ? null : onPressed,
@@ -616,6 +639,7 @@ class InventoryDateActions extends StatelessWidget {
   final VoidCallback onCancel, onConfirm;
   final double topPadding;
 
+  // Render the inventory date actions component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.fromLTRB(18, topPadding, 18, 20),
@@ -647,6 +671,7 @@ class InventoryDateActions extends StatelessWidget {
   );
 }
 
+// Build the shared inventory bottom nav component.
 class InventoryBottomNav extends StatelessWidget {
   const InventoryBottomNav({
     super.key,
@@ -657,11 +682,13 @@ class InventoryBottomNav extends StatelessWidget {
   final int currentIndex;
   final List<NavItem> items;
   final double fontSize;
+  // Allow enough height for the chosen navigation text size.
   static double heightFor(TextScaler textScaler, double fontSize) =>
       (22 + 4 + textScaler.scale(fontSize) * 1.2 * 2 + 24).clamp(
         76,
         double.infinity,
       );
+  // Render the inventory bottom nav component.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -742,6 +769,7 @@ class InventoryBottomNav extends StatelessWidget {
   }
 }
 
+// Build the shared inventory empty component.
 class InventoryEmpty extends StatelessWidget {
   const InventoryEmpty({
     super.key,
@@ -754,6 +782,7 @@ class InventoryEmpty extends StatelessWidget {
   final String? body;
   final IconData icon;
   final bool enlarged;
+  // Render the inventory empty component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 42),
@@ -791,6 +820,7 @@ class InventoryEmpty extends StatelessWidget {
   );
 }
 
+// Resolve the stored category name with a safe fallback.
 String inventoryCategoryName(String id, List<StoreCategory> records) {
   for (final record in records) {
     if (record.id == id) return categoryTitleCase(record.name);
@@ -799,6 +829,7 @@ String inventoryCategoryName(String id, List<StoreCategory> records) {
   return name.isEmpty ? 'Other' : categoryTitleCase(name);
 }
 
+// Build the shared inventory batch tile component.
 class InventoryBatchTile extends StatelessWidget {
   const InventoryBatchTile({
     super.key,
@@ -811,6 +842,7 @@ class InventoryBatchTile extends StatelessWidget {
   final String categoryName;
   final VoidCallback onTap;
   final bool enlarged;
+  // Render the inventory batch tile component.
   @override
   Widget build(BuildContext context) {
     final days = item.daysUntilExpiry;
@@ -914,6 +946,7 @@ class InventoryBatchTile extends StatelessWidget {
   }
 }
 
+// Open the category filter selection sheet.
 Future<String?> showInventoryCategorySheet({
   required BuildContext context,
   required Map<String, String> choices,
@@ -1027,6 +1060,7 @@ Future<String?> showInventoryCategorySheet({
   ),
 );
 
+// Build the shared inventory filters component.
 class InventoryFilters extends StatelessWidget {
   const InventoryFilters({
     super.key,
@@ -1053,6 +1087,7 @@ class InventoryFilters extends StatelessWidget {
   final VoidCallback onSort;
   final bool ascending, compact;
 
+  // Render the inventory filters component.
   @override
   Widget build(BuildContext context) {
     final selected = ids.contains(category) ? category : 'all';
@@ -1066,6 +1101,7 @@ class InventoryFilters extends StatelessWidget {
       'all': 'All Categories',
       for (final id in ordered) id: inventoryCategoryName(id, records),
     };
+    // Apply a category selected from the filter sheet.
     Future<void> selectCategory() async {
       final value = await showInventoryCategorySheet(
         context: context,
@@ -1228,6 +1264,7 @@ class InventoryFilters extends StatelessWidget {
   }
 }
 
+// Build the shared inventory filter pill component.
 class _InventoryFilterPill extends StatelessWidget {
   const _InventoryFilterPill({
     super.key,
@@ -1256,6 +1293,7 @@ class _InventoryFilterPill extends StatelessWidget {
   final double fontSize, minWidth;
   final FontWeight? fontWeight;
 
+  // Render the inventory filter pill component.
   @override
   Widget build(BuildContext context) => TextButton(
     onPressed: onPressed,

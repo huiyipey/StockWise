@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart' show showProfileConfirmation;
 
+// Add, rename, archive, reorder, and delete categories.
 class CategoryManagementScreen extends StatefulWidget {
   final Stream<List<StoreCategory>>? categoryStream;
   final Future<void> Function(List<StoreCategory>)? orderSaver;
@@ -25,11 +26,14 @@ class CategoryManagementScreen extends StatefulWidget {
       _CategoryManagementScreenState();
 }
 
+// Manage the category management screen values and actions.
 class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
+  // Keep this component's values, selections, and request state.
   bool busy = false, confirmingDelete = false;
   List<StoreCategory>? pendingOrder;
   late final categories =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
+  // Open the add-or-rename category dialog.
   Future<void> _edit([StoreCategory? category]) async {
     var name = categoryTitleCase(category?.name ?? '');
     final form = GlobalKey<FormState>();
@@ -47,6 +51,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
           ),
           content: SizedBox(
             width: 350,
+            // Group the inputs under one validation key.
             child: Form(
               key: form,
               child: TextFormField(
@@ -105,6 +110,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     );
   }
 
+  // Save the entered category name and show any validation error.
   Future<void> _saveCategory(String name, String? id, bool active) =>
       widget.categorySaver?.call(categoryTitleCase(name), id, active) ??
       FirestoreService.instance.saveCategory(
@@ -113,6 +119,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         active: active,
       );
 
+  // Save the archive or restore action.
   Future<void> _save(
     Future<void> Function() operation, {
     String? failureMessage,
@@ -146,6 +153,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     }
   }
 
+  // Confirm deletion and let the server reject categories in use.
   Future<void> _delete(StoreCategory category) async {
     if (busy || confirmingDelete) return;
     confirmingDelete = true;
@@ -169,6 +177,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     );
   }
 
+  // Save the new category display order.
   Future<void> _reorder(
     List<StoreCategory> items,
     int oldIndex,
@@ -189,6 +198,7 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
     if (mounted) setState(() => pendingOrder = null);
   }
 
+  // Build the category management screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -196,12 +206,14 @@ class _CategoryManagementScreenState extends State<CategoryManagementScreen> {
         body: SafeArea(
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Categories',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
               Expanded(
+                // Follow category names and archive-state changes.
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
                   builder: (context, snapshot) {

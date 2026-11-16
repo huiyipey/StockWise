@@ -2,12 +2,14 @@
 const {api, token, project} = require('./cloud-access.cjs');
 const nodemailer = require('../functions/node_modules/nodemailer');
 const {sampleConfirmation} = require('./order-email-sample.cjs');
+// Write only the sender setup outcome for the private setup window.
 function saveSetupResult(result) {
   const fs = require('node:fs'), path = require('node:path');
   const folder = path.resolve(__dirname, '../tmp/order-confirmation-email-2026-11-03');
   fs.mkdirSync(folder, {recursive: true});
   fs.writeFileSync(path.join(folder, 'gmail-setup-result.json'), JSON.stringify({...result, checkedAt: new Date().toISOString()}, null, 2));
 }
+// Save the private Gmail configuration and check its test recipient.
 async function configure(input) {
   const user = String(input.email || '').trim().toLowerCase();
   const password = String(input.password || '').replace(/\s/g, '');
@@ -19,7 +21,7 @@ async function configure(input) {
   const backend = require('node:module').createRequire(require('node:path').resolve(__dirname, '../functions/package.json'));
   const {initializeApp, deleteApp} = backend('firebase-admin/app');
   const {getAuth} = backend('firebase-admin/auth');
-  const app = initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, 'gmail-setup');
+  const app = initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, 'gmail-setup');
   let customer;
   try { customer = await getAuth(app).getUserByEmail(testEmail); }
   catch (_) { throw Error('Enter an existing StockWise customer login email for the delivery test.'); }

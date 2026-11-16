@@ -6,6 +6,7 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+<!-- Set the app display name and bundle identity. -->
 	<key>CFBundleDisplayName</key>
 	<string>Stock Wise</string>
 	<key>CFBundleExecutable</key>
@@ -26,10 +27,13 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+<!-- Explain photo access for products, receipts, chat, and assistant images. -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>StockWise uses selected photos for product images, receipts, chats and images you send to the AI assistant.</string>
+<!-- Explain camera access for photos and barcode scanning. -->
 	<key>NSCameraUsageDescription</key>
 	<string>StockWise uses the camera when you choose to take a photo or scan a product barcode.</string>
+<!-- Connect the Flutter scene to the iOS lifecycle. -->
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -57,6 +61,7 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+<!-- Keep the app layout in portrait orientation. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

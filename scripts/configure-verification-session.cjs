@@ -2,6 +2,7 @@
 // UID-bound continuation tokens. No project-wide Token Creator grant is added.
 const {api, project} = require('./cloud-access.cjs');
 (async () => {
+  // Read the verification function service account.
   const fn = await api(`https://cloudfunctions.googleapis.com/v2/projects/${project}/locations/asia-southeast1/functions/manageEmailVerification`);
   const account = fn.serviceConfig?.serviceAccountEmail;
   if (!account || !account.endsWith('.gserviceaccount.com')) throw Error('Deploy manageEmailVerification first.');
@@ -10,12 +11,15 @@ const {api, project} = require('./cloud-access.cjs');
   const member = 'serviceAccount:'+account;
   const role = 'roles/iam.serviceAccountTokenCreator';
   const present = policy.bindings?.some(b => b.role === role && !b.condition && b.members.includes(member));
+  // Show the current state until the apply flag is provided.
   if (!process.argv.includes('--apply')) {
     console.log(JSON.stringify({project, configured: !!present, mode: 'preview'}));
     return;
   }
+  // Enable signing support before adding the scoped permission.
   const service = `https://serviceusage.googleapis.com/v1/projects/${project}/services/iamcredentials.googleapis.com`;
   if ((await api(service)).state !== 'ENABLED') await api(service+':enable', 'POST', {});
+  // Grant token signing only to this service account itself.
   if (!present) {
     policy.bindings ||= [];
     let binding = policy.bindings.find(b => b.role === role && !b.condition);

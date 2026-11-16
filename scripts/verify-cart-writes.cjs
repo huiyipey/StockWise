@@ -9,30 +9,37 @@ const {initializeApp} = backend('firebase-admin/app');
 const {getAuth} = backend('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const key = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const suffix = randomUUID();
 const store = `cart_write_test_${suffix}`;
 const uid = `cart-write-test-${suffix}`;
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+// Keep these checks scoped to disposable test records.
 const prefix = `projects/${project}/databases/(default)/documents`;
 const cleanup = new Set();
 let createdUser = false, access;
+// Encode the test values as Firestore REST fields.
 const fields = data => Object.fromEntries(Object.entries(data).map(([k,v]) => [k,
   v instanceof Date ? {timestampValue: v.toISOString()} : v === null ? {nullValue: null} :
   typeof v === 'number' ? {integerValue: String(v)} : typeof v === 'boolean' ? {booleanValue:v} : {stringValue:v}]));
+// Send a test HTTP request and read its response.
 async function request(url, body, auth, method = 'POST') {
   const r = await fetch(url, {method, headers: {'Content-Type':'application/json', ...(auth ? {Authorization:`Bearer ${auth}`} : {})}, body: body ? JSON.stringify(body) : undefined});
   const text = await r.text(); return {status:r.status, data:text ? JSON.parse(text) : null};
 }
+// Create the disposable records needed by this test case.
 async function seed(doc, data) {
   assert.ok(doc.startsWith(`stores/${store}`)); cleanup.add(doc);
   assert.equal((await request(`${base}/${doc}`, {fields:fields(data)}, access, 'PATCH')).status,200,'Fixture seed failed');
 }
+// Apply the test document update using the selected account.
 const patch = (doc, data, transforms = []) => ({update:{name:`${prefix}/${doc}`,fields:data}, updateMask:{fieldPaths:Object.keys(data)},
   ...(transforms.length ? {updateTransforms: transforms.map(fieldPath => ({fieldPath,setToServerValue:'REQUEST_TIME'}))} : {})});
+// Submit the grouped Firestore test writes.
 const commit = (auth, writes) => request(`${base}:commit`, {writes}, auth);
 
 (async()=>{
+  // Run this operation and handle any reported failure.
   try {
     access = await token();
     await getAuth().createUser({uid,email:`${uid}@example.invalid`,password:`${suffix}Aa9!`,emailVerified:true}); createdUser=true;
@@ -78,6 +85,7 @@ const commit = (auth, writes) => request(`${base}:commit`, {writes}, auth);
     data.unitPriceCents={integerValue:'1800'};
     assert.equal((await commit(auth,[patch(item,data,['addedAt','updatedAt'])])).status,200,'Current snapshot price must work');
     console.log('PASS: current snapshot pricing succeeds where stale display pricing fails.');
+  // Clean up temporary test resources.
   } finally {
     if(access) {
       for(const doc of [...cleanup].sort((a,b)=>b.split('/').length-a.split('/').length)) {

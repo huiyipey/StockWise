@@ -7,6 +7,7 @@ import 'theme/app_theme.dart';
 import 'services/push_service.dart';
 import 'services/local_data_session.dart';
 
+// Initialize app services before showing the first screen.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
@@ -16,9 +17,11 @@ Future<void> main() async {
   PushService.instance.initialize().catchError((Object _) {});
 }
 
+// Apply the shared theme and account entry gate.
 class StockWiseApp extends StatelessWidget {
   const StockWiseApp({super.key});
 
+  // Render the stock wise app component.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

@@ -5,24 +5,30 @@ import 'package:sqflite/sqflite.dart';
 
 import '../models/app_models.dart';
 
+// Pair the account and shop identifiers for cache isolation.
 @immutable
 class LocalScope {
   const LocalScope(this.userId, this.storeId);
   final String userId, storeId;
+  // Use both identifiers when querying the local cache.
   List<String> get arguments => [userId, storeId];
+  // Compare the user and shop identifiers.
   @override
   bool operator ==(Object other) =>
       other is LocalScope && userId == other.userId && storeId == other.storeId;
+  // Match the hash to the local user and shop scope.
   @override
   int get hashCode => Object.hash(userId, storeId);
 }
 
+// Store disposable catalogue caches and saved view preferences.
 class LocalSnapshot<T> {
   const LocalSnapshot(this.values, this.savedAt);
   final List<T> values;
   final DateTime savedAt;
 }
 
+// Store disposable catalogue caches and saved view preferences.
 class CatalogueViewPreferences {
   const CatalogueViewPreferences({
     this.category = 'all',
@@ -32,6 +38,7 @@ class CatalogueViewPreferences {
   final bool ascending;
 }
 
+// Limit inspection to the permitted cache tables.
 enum LocalTable {
   inventory('inventory_cache', 'Inventory', 'batch_id'),
   categories('category_cache', 'Categories', 'sort_order, category_id'),
@@ -42,12 +49,14 @@ enum LocalTable {
   final String sqlName, label, orderBy;
 }
 
+// Store disposable catalogue caches and saved view preferences.
 class LocalTableSummary {
   const LocalTableSummary(this.table, this.count);
   final LocalTable table;
   final int count;
 }
 
+// Store disposable catalogue caches and saved view preferences.
 class LocalTablePage {
   const LocalTablePage({
     required this.table,
@@ -61,6 +70,7 @@ class LocalTablePage {
   final List<String> columns;
   final List<Map<String, Object?>> rows;
   final int total, page, pageSize;
+  // Check whether another page of cached rows exists.
   bool get hasNext => (page + 1) * pageSize < total;
 }
 
@@ -79,7 +89,9 @@ class LocalDatabase extends ChangeNotifier {
   final DateTime Function() _now;
   Future<Database>? _opening;
   String? _userId;
+  // Read the account that currently owns this cache.
   String? get userId => _userId;
+  // Check whether SQLite is supported on this platform.
   bool get supported =>
       factory != null ||
       (!kIsWeb &&
@@ -88,10 +100,13 @@ class LocalDatabase extends ChangeNotifier {
             TargetPlatform.iOS,
             TargetPlatform.macOS,
           }.contains(defaultTargetPlatform));
+  // Restrict cache access to the active account.
   bool owns(LocalScope scope) =>
       scope.userId.isNotEmpty && scope.userId == _userId;
 
+  // Reuse the current SQLite connection.
   Future<Database> get _database => _opening ??= _open();
+  // Create the local tables and indexes when needed.
   Future<Database> _open() async {
     final engine = factory ?? databaseFactory;
     final location = path ?? '${await engine.getDatabasesPath()}/$fileName';
@@ -162,6 +177,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Delete cached data that has passed its lifetime.
   Future<void> _prune(DatabaseExecutor db) async {
     final now = _now();
     for (final entry in {
@@ -190,6 +206,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Replace one scoped dataset inside a transaction.
   Future<void> _replace(
     LocalScope scope,
     String table,
@@ -229,6 +246,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Replace the local inventory snapshot for this scope.
   Future<void> saveInventory(LocalScope scope, List<InventoryBatch> values) =>
       _replace(
         scope,
@@ -262,6 +280,7 @@ class LocalDatabase extends ChangeNotifier {
             .toList(),
       );
 
+  // Replace the local category snapshot for this scope.
   Future<void> saveCategories(LocalScope scope, List<StoreCategory> values) =>
       _replace(
         scope,
@@ -279,6 +298,7 @@ class LocalDatabase extends ChangeNotifier {
             .toList(),
       );
 
+  // Read a valid scoped snapshot and its saved time.
   Future<LocalSnapshot<Map<String, Object?>>?> _read(
     LocalScope scope,
     String table,
@@ -314,6 +334,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Read a fresh local inventory snapshot for this scope.
   Future<LocalSnapshot<InventoryBatch>?> inventory(LocalScope scope) async {
     final saved = await _read(
       scope,
@@ -364,6 +385,7 @@ class LocalDatabase extends ChangeNotifier {
     return LocalSnapshot(values, saved.savedAt);
   }
 
+  // Read a fresh local category snapshot for this scope.
   Future<LocalSnapshot<StoreCategory>?> categories(LocalScope scope) async {
     final saved = await _read(
       scope,
@@ -387,6 +409,7 @@ class LocalDatabase extends ChangeNotifier {
     return LocalSnapshot(values, saved.savedAt);
   }
 
+  // Remember the category and sort settings for this view.
   Future<void> saveView(
     LocalScope scope,
     String view,
@@ -415,6 +438,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Read saved category and sort preferences.
   Future<CatalogueViewPreferences?> view(LocalScope scope, String view) async {
     if (!supported || !owns(scope)) return null;
     try {
@@ -439,6 +463,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Clear cached data belonging to the removed shop.
   Future<void> removeStore(LocalScope scope) async {
     if (!supported || !owns(scope)) return;
     try {
@@ -462,6 +487,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Require the active account before showing cached rows.
   void _requireInspectionAccess(LocalScope scope) {
     if (!owns(scope)) {
       throw StateError('Sign in to view this account’s local data.');
@@ -473,6 +499,7 @@ class LocalDatabase extends ChangeNotifier {
     }
   }
 
+  // Count the rows in each permitted cache table.
   Future<List<LocalTableSummary>> inspectTables(LocalScope scope) async {
     _requireInspectionAccess(scope);
     final db = await _database;
@@ -494,6 +521,7 @@ class LocalDatabase extends ChangeNotifier {
     return result;
   }
 
+  // Read one bounded page from the selected cache table.
   Future<LocalTablePage> inspectTable(
     LocalScope scope,
     LocalTable table, {
@@ -539,6 +567,7 @@ class LocalDatabase extends ChangeNotifier {
     return result;
   }
 
+  // Close the shared local database connection.
   Future<void> close() async {
     final opening = _opening;
     _opening = null;

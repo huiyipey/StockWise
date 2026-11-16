@@ -12,6 +12,7 @@ import '../services/store_fields.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
+// Validate and save a customer delivery address.
 class EditAddressScreen extends StatefulWidget {
   const EditAddressScreen({
     super.key,
@@ -31,7 +32,9 @@ class EditAddressScreen extends StatefulWidget {
   State<EditAddressScreen> createState() => _EditAddressScreenState();
 }
 
+// Manage the edit address screen values and actions.
 class _EditAddressScreenState extends State<EditAddressScreen> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   late final label = TextEditingController(text: widget.address?.label ?? '');
   late final name = TextEditingController(
@@ -63,6 +66,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
       .toList();
   bool saving = false, completed = false, submitted = false;
   String? error;
+  // Keep all address controllers together for cleanup.
   List<TextEditingController> get controllers => [
     label,
     name,
@@ -73,13 +77,16 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     region,
     postal,
   ];
+  // Keep the address fields that can be edited.
   List<TextEditingController> get editableControllers =>
       controllers.where((controller) => controller != region).toList();
+  // Check whether the form has unsaved changes.
   bool get dirty =>
       editableControllers.indexed.any(
         (entry) => entry.$2.text != original[entry.$1],
       ) ||
       makeDefault != widget.isDefault;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -91,10 +98,12 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     if (postal.text.isNotEmpty) unawaited(postcodeLocation.loadExisting());
   }
 
+  // Refresh field validation after the address changes.
   void refresh() {
     if (mounted) setState(() {});
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     postcodeLocation.dispose();
@@ -104,6 +113,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     super.dispose();
   }
 
+  // Validate the phone and postcode-aware address before saving.
   Future<void> save() async {
     if (saving || postcodeLocation.lookingUp) return;
     setState(() => submitted = true);
@@ -162,6 +172,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     }
   }
 
+  // Build a styled field with its validation message.
   Widget field(
     String key,
     String title,
@@ -203,6 +214,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     ),
   );
 
+  // Build the edit address screen layout.
   @override
   Widget build(BuildContext context) => ProfileFormPage(
     title: widget.address == null ? 'Add address' : 'Edit address',
@@ -210,6 +222,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
     busy: saving,
     completed: completed,
     discardTitle: 'Discard address changes?',
+    // Group the inputs under one validation key.
     body: Form(
       key: form,
       autovalidateMode: submitted
@@ -218,6 +231,7 @@ class _EditAddressScreenState extends State<EditAddressScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
+          // Keep related profile details together.
           ProfilePanel(
             padding: 20,
             child: Column(

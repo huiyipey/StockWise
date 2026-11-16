@@ -38,6 +38,7 @@ List<Map<String, String>> recentAssistantConversation(
   return result;
 }
 
+// Send the validated question and product context to the server.
 Future<Map<String, dynamic>> askShoppingAssistant({
   required String storeId,
   required String question,

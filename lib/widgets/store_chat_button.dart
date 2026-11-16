@@ -6,6 +6,7 @@ import '../screens/store_chat_screen.dart';
 import '../services/store_chat_service.dart';
 import 'inventory_ui.dart' show InventoryColors;
 
+// Open the admin inbox or this customer conversation.
 void openStoreChat(BuildContext context, {StoreChatRepository? repository}) {
   final chat = repository ?? StoreChatService.forSelectedStore();
   Navigator.push(
@@ -18,6 +19,7 @@ void openStoreChat(BuildContext context, {StoreChatRepository? repository}) {
   );
 }
 
+// Build the shared store chat button component.
 class StoreChatButton extends StatefulWidget {
   final StoreChatRepository? repository;
   final bool inventoryStyle;
@@ -31,11 +33,14 @@ class StoreChatButton extends StatefulWidget {
   State<StoreChatButton> createState() => _StoreChatButtonState();
 }
 
+// Manage the store chat button values and actions.
 class _StoreChatButtonState extends State<StoreChatButton> {
+  // Keep this component's values, selections, and request state.
   late final repository =
       widget.repository ?? StoreChatService.forSelectedStore();
   late final conversations = repository.watchConversations();
 
+  // Render the store chat button component.
   @override
   Widget build(BuildContext context) => StreamBuilder<List<StoreConversation>>(
     stream: conversations,

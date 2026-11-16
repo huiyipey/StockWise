@@ -9,14 +9,17 @@ const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const config = require('../android/app/google-services.json');
 const apiKey = config.client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const authClient = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient})});
 const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
 const ids = [`feature_test_${suffix}_a`, `feature_test_${suffix}_b`];
+// Keep these checks scoped to disposable test records.
 const users = [];
+// Retry a transient test request within its bounded limit.
 async function fetchWithRetry(...args) {
   for (let attempt = 0; ; attempt++) {
+    // Run this operation and handle any reported failure.
     try { return await fetch(...args); }
     catch (error) {
       if (attempt >= 2) throw error;
@@ -24,12 +27,14 @@ async function fetchWithRetry(...args) {
     }
   }
 }
+// Create a disposable account for the verification checks.
 async function signUp() {
   const response = await fetchWithRetry(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:`stockwise-test-${randomUUID()}@example.invalid`, password:randomUUID()+'Aa9!', returnSecureToken:true})});
   const data = await response.json();
   if (!response.ok) throw Error(data.error?.message || 'Test sign-in failed');
   users.push(data); return data;
 }
+// Invoke the selected backend action using the test account.
 async function call(name, data, user) {
   const response = await fetchWithRetry(`https://asia-southeast1-${project}.cloudfunctions.net/${name}`, {method:'POST', headers:{'Content-Type':'application/json', ...(user ? {Authorization:`Bearer ${user.idToken}`} : {})}, body:JSON.stringify({data})});
   const result = await response.json();
@@ -96,6 +101,7 @@ async function call(name, data, user) {
     const write = await fetchWithRetry(`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/stores/${store.id}/categories/not-allowed`, {method:'PATCH',headers:{Authorization:`Bearer ${outsider.idToken}`,'Content-Type':'application/json'},body:JSON.stringify({fields:{storeId:{stringValue:store.id},name:{stringValue:'No access'},isActive:{booleanValue:true}}})});
     assert.equal(write.status,403);
     console.log('PASS: customer category write denied.');
+  // Clean up temporary test resources.
   } finally {
     for (const id of ids) {
       assert.ok(id.startsWith(`feature_test_${suffix}_`));

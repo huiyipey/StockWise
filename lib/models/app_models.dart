@@ -8,14 +8,17 @@ import 'shelf_life.dart';
 import 'promotion.dart';
 import 'store_role.dart';
 
+// Read a stored timestamp or date with a safe fallback.
 DateTime _date(dynamic value, {DateTime? fallback}) {
   if (value is Timestamp) return value.toDate();
   if (value is DateTime) return value;
   return fallback ?? DateTime.now();
 }
 
+// Read a numeric field with a safe default.
 int _int(dynamic value) => value is num ? value.round() : 0;
 
+// Store a category name, display order, and archive state.
 class StoreCategory {
   final String id;
   final String name;
@@ -28,6 +31,7 @@ class StoreCategory {
     this.sortOrder = 0,
   });
 
+  // Sort categories by their saved order, then by name.
   static int compare(StoreCategory a, StoreCategory b) {
     final order = a.sortOrder.compareTo(b.sortOrder);
     if (order != 0) return order;
@@ -35,6 +39,7 @@ class StoreCategory {
     return name != 0 ? name : a.id.compareTo(b.id);
   }
 
+  // Read this record from a Firestore document.
   factory StoreCategory.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
       StoreCategory(
         id: doc.id,
@@ -44,6 +49,7 @@ class StoreCategory {
       );
 }
 
+// Store the shop identity, address, hours, and status.
 class StoreInfo {
   final String id;
   final String name;
@@ -54,6 +60,7 @@ class StoreInfo {
   final String shopAddress;
   final StoreAddress? address;
   final DateTime? createdAt;
+  final DateTime? reportingHistoryStartsAt;
   final StoreHours operatingHours;
 
   const StoreInfo({
@@ -66,9 +73,20 @@ class StoreInfo {
     this.shopAddress = '',
     this.address,
     this.createdAt,
+    this.reportingHistoryStartsAt,
     this.operatingHours = const StoreHours(),
   });
 
+  // Include imported history without changing the shop registration date.
+  DateTime? get reportingStartsAt {
+    final imported = reportingHistoryStartsAt;
+    final registered = createdAt;
+    if (imported == null) return registered;
+    if (registered == null || imported.isBefore(registered)) return imported;
+    return registered;
+  }
+
+  // Read this record from a Firestore document.
   factory StoreInfo.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return StoreInfo(
@@ -88,10 +106,16 @@ class StoreInfo {
           ? data['createdAt'] as DateTime
           : null,
       operatingHours: StoreHours.fromMap(data['operatingHours']),
+      reportingHistoryStartsAt: data['reportingHistoryStartsAt'] is Timestamp
+          ? (data['reportingHistoryStartsAt'] as Timestamp).toDate()
+          : data['reportingHistoryStartsAt'] is DateTime
+          ? data['reportingHistoryStartsAt'] as DateTime
+          : null,
     );
   }
 }
 
+// Keep one account membership scoped to its shop.
 class StoreMembership {
   final String storeId;
   final String userId;
@@ -105,8 +129,10 @@ class StoreMembership {
     required this.isActive,
   });
 
+  // Check active administrative access in this shop.
   bool get isAdmin => isActive && isStoreAdminRole(role);
 
+  // Read this record from a Firestore document.
   factory StoreMembership.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return StoreMembership(
@@ -118,6 +144,7 @@ class StoreMembership {
   }
 }
 
+// Keep stock, pricing, promotion, and expiry values for one batch.
 class InventoryBatch {
   final String id;
   final String productId;
@@ -159,26 +186,37 @@ class InventoryBatch {
     this.promotion,
   });
 
+  // Subtract reserved units from the stock on hand.
   int get availableQuantity =>
       (quantityOnHand - quantityReserved).clamp(0, quantityOnHand);
+  // Use the promotion price when that price is enabled.
   int get sellingPriceCents => promotionEnabled && promotionPriceCents != null
       ? promotionPriceCents!
       : basePriceCents;
+  // Classify this batch using the current date.
   ShelfLifeType get shelfLife => shelfLifeAt(DateTime.now());
+  // Classify this batch using the supplied date.
   ShelfLifeType shelfLifeAt(DateTime now) => shelfLifeType(
     totalShelfLifeDays ?? calendarDaysBetween(receivedAt ?? now, expiryAt),
   );
+  // Use the current shelf-life warning colour.
   ShelfLifeColour get expiryColour => expiryColourAt(DateTime.now());
+  // Choose the expiry warning colour for the supplied date.
   ShelfLifeColour expiryColourAt(DateTime now) =>
       shelfLifeColour(shelfLifeAt(now), daysUntilExpiryFrom(now));
+  // Build the offer label shown on product cards.
   String get promotionLabel =>
       promotionEnabled ? Promotion.fromMap(promotion).label : '';
+  // Return the Buy X Get Y settings when present.
   bool get bundlePromotion =>
       promotionEnabled && promotion?['type'] == 'bundle';
+  // Check active status, available stock, and the expiry date.
   bool canSellAt(DateTime time) =>
       status == 'active' && availableQuantity > 0 && expiryAt.isAfter(time);
+  // Count the days remaining from today.
   int get daysUntilExpiry => daysUntilExpiryFrom(DateTime.now());
 
+  // Count the days remaining from the supplied date.
   int daysUntilExpiryFrom(DateTime date) {
     final expiry = expiryAt.toLocal();
     final today = date.toLocal();
@@ -190,6 +228,7 @@ class InventoryBatch {
     ).difference(DateTime.utc(today.year, today.month, today.day)).inDays;
   }
 
+  // Read this record from a Firestore document.
   factory InventoryBatch.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return InventoryBatch(
@@ -225,6 +264,7 @@ class InventoryBatch {
   }
 }
 
+// Keep the selected quantity and saved cart product fields.
 class CartLine {
   final String id;
   final String batchId;
@@ -246,8 +286,10 @@ class CartLine {
     required this.unitPriceCents,
   });
 
+  // Multiply the saved unit price by the selected quantity.
   int get lineTotalCents => quantity * unitPriceCents;
 
+  // Read this record from a Firestore document.
   factory CartLine.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return CartLine(
@@ -265,6 +307,7 @@ class CartLine {
   }
 }
 
+// Represent the saved order totals, status, and receiver.
 class StoreOrder {
   final String id;
   final String orderNumber;
@@ -298,15 +341,18 @@ class StoreOrder {
     this.cancellationReason,
   });
 
-  factory StoreOrder.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data() ?? const <String, dynamic>{};
+  // Read this record from a Firestore document.
+  factory StoreOrder.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) =>
+      StoreOrder.fromData(doc.id, doc.data() ?? const <String, dynamic>{});
+
+  factory StoreOrder.fromData(String id, Map<String, dynamic> data) {
     return StoreOrder(
-      id: doc.id,
-      orderNumber: data['orderNumber'] as String? ?? doc.id,
+      id: id,
+      orderNumber: data['orderNumber'] as String? ?? id,
       userId: data['userId'] as String? ?? '',
       status: data['status'] as String? ?? 'to_pay',
       paymentStatus: data['paymentStatus'] as String? ?? 'unpaid',
-      fulfillmentType: data['fulfillmentType'] as String? ?? 'pickup',
+      fulfillmentType: data['fulfillmentType'] as String? ?? 'delivery',
       receiver: Map<String, dynamic>.from(data['receiver'] as Map? ?? const {}),
       payment: Map<String, dynamic>.from(data['payment'] as Map? ?? const {}),
       subtotalCents: _int(data['subtotalCents']),
@@ -319,6 +365,7 @@ class StoreOrder {
   }
 }
 
+// Keep the product snapshot saved when an order was placed.
 class OrderLine {
   final String id;
   final String productId;
@@ -354,6 +401,7 @@ class OrderLine {
     this.totalShelfLifeDays,
   });
 
+  // Choose the expiry warning colour for the supplied date.
   ShelfLifeColour expiryColourAt(DateTime now) => shelfLifeColour(
     shelfLifeType(
       totalShelfLifeDays ??
@@ -362,10 +410,12 @@ class OrderLine {
     calendarDaysBetween(now, expiryAt),
   );
 
+  // Read this record from a Firestore document.
   factory OrderLine.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     return OrderLine.fromData(doc.id, doc.data() ?? const <String, dynamic>{});
   }
 
+  // Read the saved record fields with safe defaults.
   factory OrderLine.fromData(String id, Map<String, dynamic> data) {
     return OrderLine(
       id: id,
@@ -389,6 +439,7 @@ class OrderLine {
   }
 }
 
+// Represent an account alert and its read state.
 class AppNotification {
   final String id;
   final String type;
@@ -406,6 +457,7 @@ class AppNotification {
     this.readAt,
   });
 
+  // Read this record from a Firestore document.
   factory AppNotification.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return AppNotification(
@@ -419,6 +471,7 @@ class AppNotification {
   }
 }
 
+// Represent a recorded inventory movement or waste event.
 class InventoryEvent {
   final String id;
   final String productName;
@@ -436,6 +489,7 @@ class InventoryEvent {
     required this.occurredAt,
   });
 
+  // Read this record from a Firestore document.
   factory InventoryEvent.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return InventoryEvent(

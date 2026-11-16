@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'cart_item_data.dart';
 import '../models/store_hours.dart';
 import '../models/shelf_life.dart';
@@ -22,12 +21,37 @@ import 'order_product.dart';
 import 'store_session.dart';
 import 'local_database.dart';
 import 'catalogue_cache.dart';
+import 'inventory_receiving.dart';
+import 'image_upload.dart';
 
+// Read shop data and send validated business actions to Firebase.
 class FirestoreService {
-  FirestoreService._();
+  FirestoreService._()
+    : _db = FirebaseFirestore.instance,
+      _storage = FirebaseStorage.instance,
+      _auth = FirebaseAuth.instance,
+      _selectedStoreId = (() => StoreSession.instance.storeId);
+
+  // Exercise real transactions with isolated accounts and database clients.
+  @visibleForTesting
+  factory FirestoreService.forInventoryTesting({
+    required FirebaseFirestore firestore,
+    required FirebaseStorage storage,
+    required FirebaseAuth auth,
+    required String? Function() selectedStoreId,
+  }) =>
+      FirestoreService._withClients(firestore, storage, auth, selectedStoreId);
+
+  FirestoreService._withClients(
+    this._db,
+    this._storage,
+    this._auth,
+    this._selectedStoreId,
+  );
 
   static final FirestoreService instance = FirestoreService._();
   String? _pendingCheckoutId;
+  // Send the selected shop ID with a commerce request.
   Future<Map<String, dynamic>> callCommerce(
     String name,
     Map<String, dynamic> data,
@@ -48,13 +72,16 @@ class FirestoreService {
     }
   }
 
+  // Request authoritative prices, offers, and delivery totals.
   Future<Map<String, dynamic>> quoteCart(String postcode) =>
       callCommerce('quoteCart', {'postcode': postcode});
+  // Watch the selected shop delivery settings.
   Stream<Map<String, dynamic>> watchCommerceSettings() => _storeRef
       .collection('settings')
       .doc('commerce')
       .snapshots()
       .map((s) => s.data() ?? {});
+  // Save validated fixed or postcode-based fees on the server.
   Future<void> saveDeliveryFees({
     required String mode,
     required int fixedCents,
@@ -67,27 +94,32 @@ class FirestoreService {
     });
   }
 
+  // Save the current admin report-email switch.
   Future<void> setReportEmailPreference(bool enabled) =>
       _storeRef.collection('members').doc(_user.uid).update({
         'reportsByEmail': enabled,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+  // Watch this admin report-email switch for this shop.
   Stream<bool> watchReportEmailPreference() => _storeRef
       .collection('members')
       .doc(_user.uid)
       .snapshots()
       .map((s) => s.data()?['reportsByEmail'] as bool? ?? true);
+  // Watch the independent sales and waste email schedules.
   Stream<ReportEmailSchedule> watchReportEmailSchedule() => _storeRef
       .collection('members')
       .doc(_user.uid)
       .snapshots()
       .map((s) => ReportEmailSchedule.fromMember(s.data() ?? {}));
+  // Save this admin selected sales and waste schedules.
   Future<void> saveReportEmailSchedule(ReportEmailSchedule value) =>
       _storeRef.collection('members').doc(_user.uid).update({
         'reportsByEmail': value.enabled,
         'reportEmailSchedules': value.toMap(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
+  // Delete the named shop through the guarded server action.
   Future<void> deleteStore(StoreInfo store) async {
     try {
       await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
@@ -104,39 +136,47 @@ class FirestoreService {
     }
   }
 
+  // Watch one inventory batch in this shop.
   Stream<InventoryBatch?> watchInventoryBatch(String id) => _storeRef
       .collection('inventoryBatches')
       .doc(id)
       .snapshots()
       .map((s) => s.exists ? InventoryBatch.fromDoc(s) : null);
+  // Load one inventory batch from this shop.
   Future<InventoryBatch?> getInventoryBatch(String id) async {
     final s = await _storeRef.collection('inventoryBatches').doc(id).get();
     return s.exists ? InventoryBatch.fromDoc(s) : null;
   }
 
+  // Archive or remove the selected inventory batch.
   Future<void> removeInventory(InventoryBatch item) async {
     await callCommerce('removeInventory', {'batchId': item.id});
   }
 
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db;
+  final FirebaseStorage _storage;
+  final FirebaseAuth _auth;
+  final String? Function() _selectedStoreId;
 
+  // Require the currently signed-in Firebase account.
   User get _user {
     final user = _auth.currentUser;
     if (user == null) throw StateError('You must be signed in.');
     return user;
   }
 
+  // Require the selected shop identifier.
   String get _storeId {
-    final storeId = StoreSession.instance.storeId;
+    final storeId = _selectedStoreId();
     if (storeId == null) throw StateError('Select a store first.');
     return storeId;
   }
 
+  // Build the Firestore reference for the selected shop.
   DocumentReference<Map<String, dynamic>> get _storeRef =>
       _db.collection('stores').doc(_storeId);
 
+  // Create missing profile fields and accept valid admin invitations.
   Future<void> ensureUserProfile() async {
     final user = _user;
     final userRef = _db.collection('users').doc(user.uid);
@@ -170,6 +210,7 @@ class FirestoreService {
     }
   }
 
+  // Accept matching invitations without replacing existing preferences.
   Future<void> _acceptAdminInvitations(String emailLowercase) async {
     final invitations = await _db
         .collectionGroup('adminInvites')
@@ -222,6 +263,7 @@ class FirestoreService {
     }
   }
 
+  // Build an initial display name from the email address.
   String _nameFromEmail(String? email) {
     final local = (email ?? 'StockWise User').split('@').first;
     return local
@@ -231,6 +273,7 @@ class FirestoreService {
         .join(' ');
   }
 
+  // Watch shops available to the account.
   Stream<List<StoreInfo>> watchStores() => _db
       .collection('stores')
       .where('status', isEqualTo: 'active')
@@ -243,10 +286,12 @@ class FirestoreService {
         return stores;
       });
 
+  // Watch the selected shop details.
   Stream<StoreInfo?> watchSelectedStore() => _storeRef.snapshots().map(
     (snapshot) => snapshot.exists ? StoreInfo.fromDoc(snapshot) : null,
   );
 
+  // Save shop details through the validated server action.
   Future<StoreInfo> updateStore({
     required String storeId,
     required String name,
@@ -285,6 +330,7 @@ class FirestoreService {
     );
   }
 
+  // Watch the account memberships across shops.
   Stream<List<StoreMembership>> watchMyMemberships() {
     final userId = _user.uid;
     return _db
@@ -302,8 +348,10 @@ class FirestoreService {
         );
   }
 
+  // Read the current account identifier.
   String get currentUserId => _user.uid;
 
+  // Create the shop and its initial Admin membership.
   Future<StoreInfo> createStore({
     required String name,
     required StoreAddress address,
@@ -337,12 +385,14 @@ class FirestoreService {
     );
   }
 
+  // Remember the last shop selected by this account.
   Future<void> saveActiveStore(String storeId) =>
       _db.collection('users').doc(_user.uid).set({
         'activeStoreId': storeId,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+  // Watch the selected shop admin memberships.
   Stream<List<Map<String, dynamic>>> watchStoreMembers() => _storeRef
       .collection('members')
       .snapshots()
@@ -352,6 +402,7 @@ class FirestoreService {
         }).toList(),
       );
 
+  // Watch pending admin invitations for this shop.
   Stream<List<Map<String, dynamic>>> watchAdminInvites() => _storeRef
       .collection('adminInvites')
       .snapshots()
@@ -361,6 +412,7 @@ class FirestoreService {
         }).toList(),
       );
 
+  // Invite an existing account through the server.
   Future<void> inviteAdmin(String email) async {
     final normalized = email.trim().toLowerCase();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalized)) {
@@ -377,6 +429,7 @@ class FirestoreService {
         .call({'storeId': _storeId, 'email': normalized});
   }
 
+  // Change admin access with last-admin protection.
   Future<void> setMemberActive(String uid, bool isActive) async {
     await callCommerce('setStoreAdminActive', {
       'userId': uid,
@@ -384,11 +437,13 @@ class FirestoreService {
     });
   }
 
+  // Watch categories for the selected shop.
   Stream<List<String>> watchCategories() => watchCategoryRecords().map(
     (categories) =>
         categories.where((c) => c.active).map((c) => c.name).toList(),
   );
 
+  // Watch inventory with a local cache fallback.
   Stream<List<InventoryBatch>> watchInventory() {
     final scope = LocalScope(_user.uid, _storeId);
     final remote = _db
@@ -407,6 +462,7 @@ class FirestoreService {
     return CatalogueCache.instance.inventory(scope, remote);
   }
 
+  // Watch category records with a local cache fallback.
   Stream<List<StoreCategory>> watchCategoryRecords() {
     final scope = LocalScope(_user.uid, _storeId);
     final remote = _db
@@ -426,6 +482,7 @@ class FirestoreService {
     return CatalogueCache.instance.categories(scope, remote);
   }
 
+  // Add or rename a category without recreating deleted records.
   Future<void> saveCategory(
     String name, {
     String? id,
@@ -470,7 +527,6 @@ class FirestoreService {
       tx.set(ref, {
         'storeId': _storeId,
         'name': categoryTitleCase(trimmed),
-        'slug': categoryId,
         'isActive': active,
         'updatedAt': FieldValue.serverTimestamp(),
         if (!existing.exists) 'createdAt': FieldValue.serverTimestamp(),
@@ -479,10 +535,12 @@ class FirestoreService {
     });
   }
 
+  // Ask the server to delete an unused category.
   Future<void> deleteCategory(String id) async {
     await callCommerce('deleteCategory', {'categoryId': id});
   }
 
+  // Save the category display order.
   Future<void> reorderCategories(List<StoreCategory> categories) async {
     final write = _db.batch();
     for (var index = 0; index < categories.length; index++) {
@@ -494,6 +552,7 @@ class FirestoreService {
     await write.commit();
   }
 
+  // Watch active promotional inventory batches.
   Stream<List<InventoryBatch>> watchPromotions() => watchInventory().map(
     (items) => items
         .where(
@@ -506,22 +565,28 @@ class FirestoreService {
         .toList(),
   );
 
-  Future<String?> uploadProductImage(XFile? file, String productId) async {
+  // Upload a validated product image to this shop.
+  Future<String?> uploadProductImage(
+    XFile? file,
+    String productId, {
+    String? storeId,
+  }) async {
     if (file == null) return null;
-    final Uint8List bytes = await file.readAsBytes();
-    final extension = file.name.contains('.')
-        ? file.name.split('.').last.toLowerCase()
-        : 'jpg';
+    final selectedStoreId = storeId ?? _storeId;
+    final upload = await ImageUpload.read(file);
+    // Preserve images already referenced by other batches and order history.
     final ref = _storage.ref(
-      'stores/$_storeId/product-images/$productId/main.$extension',
+      'stores/$selectedStoreId/product-images/$productId/'
+      'inventory-${DateTime.now().microsecondsSinceEpoch}.${upload.extension}',
     );
     await ref.putData(
-      bytes,
-      SettableMetadata(contentType: file.mimeType ?? 'image/jpeg'),
+      upload.bytes,
+      SettableMetadata(contentType: upload.contentType),
     );
     return ref.fullPath;
   }
 
+  // Find saved product details for the scanned barcode.
   Future<BarcodeProduct?> findProductByBarcode(String barcode) async {
     final code = barcode.trim();
     if (code.isEmpty) return null;
@@ -531,12 +596,13 @@ class FirestoreService {
         .where('barcode', isEqualTo: code)
         .get();
     return latestBarcodeProduct(
-      snapshot.docs.map(
-        (doc) => BarcodeProduct.fromData(doc.id, store.id, doc.data()),
-      ),
+      snapshot.docs
+          .where((doc) => doc.data()['isActive'] != false)
+          .map((doc) => BarcodeProduct.fromData(doc.id, store.id, doc.data())),
     );
   }
 
+  // Convert the editor draft to validated inventory input.
   Future<void> saveInventoryDraft(InventoryItemInput input) =>
       saveInventoryItem(
         existing: input.existing,
@@ -555,6 +621,7 @@ class FirestoreService {
         image: input.image,
       );
 
+  // Save product details and the inventory batch together.
   Future<void> saveInventoryItem({
     InventoryBatch? existing,
     BarcodeProduct? reusedProduct,
@@ -571,6 +638,15 @@ class FirestoreService {
     required bool notifyOnExpiry,
     XFile? image,
   }) async {
+    final store = _storeRef;
+    final storeId = store.id;
+    final actorUid = _user.uid;
+    void checkScope() {
+      if (_auth.currentUser?.uid != actorUid || _selectedStoreId() != storeId) {
+        throw StateError('Reopen this item in the selected store.');
+      }
+    }
+
     if (name.trim().isEmpty) throw ArgumentError('Product name is required.');
     final productName = capitalizeProductName(name.trim());
     if (quantity < 1) throw ArgumentError('Enter a valid quantity.');
@@ -587,7 +663,7 @@ class FirestoreService {
     }
 
     if (reusedProduct != null &&
-        (reusedProduct.storeId != _storeId ||
+        (reusedProduct.storeId != storeId ||
             reusedProduct.barcode != barcode?.trim())) {
       throw ArgumentError('Look up the barcode again for the selected store.');
     }
@@ -597,107 +673,196 @@ class FirestoreService {
         category == '..') {
       throw ArgumentError('Choose a valid category.');
     }
-    final selectedCategory = await _storeRef
+    final selectedCategory = await store
         .collection('categories')
         .doc(category)
         .get(const GetOptions(source: Source.server));
     if (!selectedCategory.exists) {
       throw StateError('This category was deleted. Choose another category.');
     }
-    final productRef = existing == null
-        ? _storeRef.collection('products').doc(reusedProduct?.id)
-        : _storeRef
-              .collection('products')
-              .doc(reusedProduct?.id ?? existing.productId);
-    final batchRef = existing == null
-        ? _storeRef.collection('inventoryBatches').doc()
-        : _storeRef.collection('inventoryBatches').doc(existing.id);
-    final uploadedPath = await uploadProductImage(image, productRef.id);
-    final imagePath =
-        uploadedPath ?? reusedProduct?.imagePath ?? existing?.imagePath;
-    final categoryId = category;
-    final write = _db.batch();
-    final productData = <String, dynamic>{
-      'storeId': _storeId,
-      'name': productName,
-      'nameLowercase': productName.toLowerCase(),
-      'categoryId': categoryId,
-      'barcode': barcode?.trim().isEmpty == true ? null : barcode?.trim(),
-      'imagePath': imagePath,
-      'unitLabel': unitLabel.trim().isEmpty ? 'unit' : unitLabel.trim(),
-      'basePriceCents': basePriceCents,
-      'currency': 'MYR',
-      'isActive': true,
-      'createdBy': _user.uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    final inventoryData = <String, dynamic>{
-      'storeId': _storeId,
-      'productId': productRef.id,
-      'productName': productName,
-      'productNameLowercase': productName.toLowerCase(),
-      'categoryId': categoryId,
-      'barcode': barcode?.trim().isEmpty == true ? null : barcode?.trim(),
-      'imagePath': imagePath,
-      'unitLabel': unitLabel.trim().isEmpty ? 'unit' : unitLabel.trim(),
-      'expiryAt': Timestamp.fromDate(expiryAt),
-      'quantityOnHand': quantity,
-      'quantityReserved': existing?.quantityReserved ?? 0,
-      'basePriceCents': basePriceCents,
-      'promotionEnabled': promotionEnabled,
-      'promotionPriceCents': promotionEnabled ? promotionPriceCents : null,
-      'promotion': promotionEnabled ? promotion : null,
-      'receivedAt': Timestamp.fromDate(existing?.receivedAt ?? DateTime.now()),
-      'totalShelfLifeDays': calendarDaysBetween(
-        existing?.receivedAt ?? DateTime.now(),
-        expiryAt,
-      ),
-      'shelfLifeType': shelfLifeType(
-        calendarDaysBetween(existing?.receivedAt ?? DateTime.now(), expiryAt),
-      ).name,
-      'notifyOnExpiry': notifyOnExpiry,
-      'status': quantity == 0 ? 'depleted' : 'active',
-      'createdBy': _user.uid,
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
-    if (existing == null) {
-      if (reusedProduct == null) {
-        productData['createdAt'] = FieldValue.serverTimestamp();
+    final batches = store.collection('inventoryBatches');
+    final products = store.collection('products');
+    final identity = InventoryReceiptIdentity(
+      name: productName,
+      categoryId: category,
+      unitLabel: unitLabel,
+      barcode: barcode,
+      basePriceCents: basePriceCents,
+      expiryAt: expiryAt,
+    );
+    final code = barcode?.trim() ?? '';
+    final fallbackProduct = products.doc(
+      reusedProduct?.id ?? existing?.productId,
+    );
+    final uploadedPath = await uploadProductImage(
+      image,
+      fallbackProduct.id,
+      storeId: storeId,
+    );
+    final eventRef = store.collection('inventoryEvents').doc();
+    final receivingRevision = store
+        .collection('settings')
+        .doc('inventoryReceiving');
+
+    checkScope();
+    await _db.runTransaction((tx) async {
+      checkScope();
+      // Serialize receipts and edits so a retry repeats the catalogue lookup.
+      final revision = await tx.get(receivingRevision);
+      DocumentSnapshot<Map<String, dynamic>>? current;
+      DocumentReference<Map<String, dynamic>>? target;
+      if (existing != null) {
+        target = batches.doc(existing.id);
+        current = await tx.get(target);
+        if (!current.exists) {
+          throw StateError('This item was removed. Reopen the inventory page.');
+        }
+        if (!InventoryBatch.fromDoc(current).expiryAt.isAfter(DateTime.now())) {
+          throw StateError('Expired inventory cannot be edited.');
+        }
+      } else {
+        final candidates =
+            (await (code.isEmpty
+                        ? batches.where('categoryId', isEqualTo: category)
+                        : batches.where('barcode', isEqualTo: code))
+                    .get(const GetOptions(source: Source.server)))
+                .docs
+                .where(
+                  (doc) => identity.matches(
+                    InventoryBatch.fromDoc(doc),
+                    DateTime.now(),
+                  ),
+                )
+                .toList();
+        candidates.sort((a, b) => a.id.compareTo(b.id));
+        // Recheck older random-ID batches before choosing a new stock record.
+        for (final candidate in candidates) {
+          final saved = await tx.get(candidate.reference);
+          if (saved.exists &&
+              identity.matches(InventoryBatch.fromDoc(saved), DateTime.now())) {
+            target = candidate.reference;
+            current = saved;
+            break;
+          }
+        }
+        // Deterministic targets make simultaneous new receipts share one batch.
+        for (var suffix = 0; target == null && suffix < 100; suffix++) {
+          final ref = batches.doc(
+            '${identity.documentId}${suffix == 0 ? '' : '-$suffix'}',
+          );
+          final saved = await tx.get(ref);
+          if (!saved.exists ||
+              identity.matches(InventoryBatch.fromDoc(saved), DateTime.now())) {
+            target = ref;
+            current = saved;
+          }
+        }
+        if (target == null) {
+          throw StateError(
+            'Could not select a stock record. Please try again.',
+          );
+        }
       }
-      inventoryData['createdAt'] = FieldValue.serverTimestamp();
-    }
-    write.set(productRef, productData, SetOptions(merge: true));
-    write.set(batchRef, inventoryData, SetOptions(merge: true));
-    if (existing == null) {
-      write.set(_storeRef.collection('inventoryEvents').doc(), {
-        'storeId': _storeId,
-        'batchId': batchRef.id,
-        'productId': productRef.id,
-        'productName': productName,
-        'categoryId': categoryId,
-        'eventType': 'received',
-        'quantity': quantity,
-        'quantityDelta': quantity,
-        'actorUid': _user.uid,
-        'occurredAt': FieldValue.serverTimestamp(),
+      final batchRef = target;
+      final savedBatch = current!.exists
+          ? InventoryBatch.fromDoc(current)
+          : null;
+      final merging = existing == null && savedBatch != null;
+      final productRef = merging && savedBatch.productId.isNotEmpty
+          ? products.doc(savedBatch.productId)
+          : fallbackProduct;
+      final savedProduct = await tx.get(productRef);
+      final previousProduct = savedProduct.data() ?? <String, dynamic>{};
+      final previousBatch = current.data() ?? <String, dynamic>{};
+      final imagePath =
+          uploadedPath ??
+          reusedProduct?.imagePath ??
+          savedBatch?.imagePath ??
+          existing?.imagePath;
+      // Keep concurrent receipts and customer reservations when editing stock.
+      final quantityDelta = existing == null
+          ? quantity
+          : quantity - existing.quantityOnHand;
+      final nextQuantity = (savedBatch?.quantityOnHand ?? 0) + quantityDelta;
+      if (nextQuantity < (savedBatch?.quantityReserved ?? 0)) {
+        throw StateError('Quantity cannot be less than the reserved stock.');
+      }
+      final receivedAt = savedBatch?.receivedAt ?? DateTime.now();
+      final productData = <String, dynamic>{
+        'storeId': storeId,
+        'name': productName,
+        'categoryId': category,
+        'barcode': code.isEmpty ? null : code,
+        'imagePath': imagePath,
+        'unitLabel': unitLabel.trim().isEmpty ? 'unit' : unitLabel.trim(),
+        'basePriceCents': basePriceCents,
+        'currency': 'MYR',
+        'isActive': true,
+        'createdBy': previousProduct['createdBy'] ?? actorUid,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (!savedProduct.exists) 'createdAt': FieldValue.serverTimestamp(),
+      };
+      final inventoryData = merging
+          ? <String, dynamic>{
+              'quantityOnHand': nextQuantity,
+              'status': 'active',
+              'updatedAt': FieldValue.serverTimestamp(),
+              'imagePath': ?uploadedPath,
+              if (savedBatch.productId.isEmpty) 'productId': productRef.id,
+            }
+          : <String, dynamic>{
+              'storeId': storeId,
+              'productId': productRef.id,
+              'productName': productName,
+              'categoryId': category,
+              'barcode': code.isEmpty ? null : code,
+              'imagePath': imagePath,
+              'unitLabel': unitLabel.trim().isEmpty ? 'unit' : unitLabel.trim(),
+              'expiryAt': Timestamp.fromDate(expiryAt),
+              'quantityOnHand': nextQuantity,
+              'quantityReserved': savedBatch?.quantityReserved ?? 0,
+              'basePriceCents': basePriceCents,
+              'promotionEnabled': promotionEnabled,
+              'promotionPriceCents': promotionEnabled
+                  ? promotionPriceCents
+                  : null,
+              'promotion': promotionEnabled ? promotion : null,
+              'receivedAt': Timestamp.fromDate(receivedAt),
+              'totalShelfLifeDays': calendarDaysBetween(receivedAt, expiryAt),
+              'shelfLifeType': shelfLifeType(
+                calendarDaysBetween(receivedAt, expiryAt),
+              ).name,
+              'notifyOnExpiry': notifyOnExpiry,
+              'status': nextQuantity == 0 ? 'depleted' : 'active',
+              'createdBy': previousBatch['createdBy'] ?? actorUid,
+              'updatedAt': FieldValue.serverTimestamp(),
+              if (!current.exists) 'createdAt': FieldValue.serverTimestamp(),
+            };
+      checkScope();
+      tx.set(productRef, productData, SetOptions(merge: true));
+      tx.set(batchRef, inventoryData, SetOptions(merge: true));
+      tx.set(receivingRevision, {
+        'revision': ((revision.data()?['revision'] as num?)?.toInt() ?? 0) + 1,
+        'updatedAt': FieldValue.serverTimestamp(),
       });
-    } else if (quantity != existing.quantityOnHand) {
-      write.set(_storeRef.collection('inventoryEvents').doc(), {
-        'storeId': _storeId,
-        'batchId': batchRef.id,
-        'productId': productRef.id,
-        'productName': productName,
-        'categoryId': categoryId,
-        'eventType': 'adjusted',
-        'quantity': (quantity - existing.quantityOnHand).abs(),
-        'quantityDelta': quantity - existing.quantityOnHand,
-        'actorUid': _user.uid,
-        'occurredAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await write.commit();
+      if (quantityDelta != 0) {
+        tx.set(eventRef, {
+          'storeId': storeId,
+          'batchId': batchRef.id,
+          'productId': productRef.id,
+          'productName': productName,
+          'categoryId': category,
+          'eventType': existing == null ? 'received' : 'adjusted',
+          'quantity': quantityDelta.abs(),
+          'quantityDelta': quantityDelta,
+          'actorUid': actorUid,
+          'occurredAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
   }
 
+  // Discard the requested stock through the server transaction.
   Future<void> discardBatch(
     InventoryBatch batch, {
     required int quantity,
@@ -709,6 +874,7 @@ class FirestoreService {
     });
   }
 
+  // Watch this customer cart in the selected shop.
   Stream<List<CartLine>> watchCart() => _storeRef
       .collection('carts')
       .doc(_user.uid)
@@ -716,6 +882,7 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(CartLine.fromDoc).toList());
 
+  // Add stock to this customer cart within availability limits.
   Future<void> addToCart(InventoryBatch batch, {int quantity = 1}) async {
     if (quantity < 1) throw ArgumentError.value(quantity, 'quantity');
     if (batch.availableQuantity <= 0) {
@@ -759,6 +926,7 @@ class FirestoreService {
     });
   }
 
+  // Save a cart quantity within the available stock.
   Future<void> updateCartQuantity(CartLine line, int quantity) async {
     final ref = _storeRef
         .collection('carts')
@@ -796,6 +964,7 @@ class FirestoreService {
     });
   }
 
+  // Delete the selected line from this customer cart.
   Future<void> removeCartItem(String id) => _storeRef
       .collection('carts')
       .doc(_user.uid)
@@ -803,6 +972,7 @@ class FirestoreService {
       .doc(id)
       .delete();
 
+  // Place the quoted order with a stable retry identifier.
   Future<String> placeOrder({
     required String fulfillmentType,
     required Map<String, dynamic> receiver,
@@ -832,6 +1002,7 @@ class FirestoreService {
     return result['id'] as String;
   }
 
+  // Watch shop orders allowed for the current role.
   Stream<List<StoreOrder>> watchOrders({required bool admin}) {
     Query<Map<String, dynamic>> query = _storeRef.collection('orders');
     if (!admin) query = query.where('userId', isEqualTo: _user.uid);
@@ -842,6 +1013,7 @@ class FirestoreService {
     });
   }
 
+  // Watch the item snapshots saved with this order.
   Stream<List<OrderLine>> watchOrderLines(String orderId) => _storeRef
       .collection('orders')
       .doc(orderId)
@@ -849,6 +1021,7 @@ class FirestoreService {
       .snapshots()
       .map((snapshot) => snapshot.docs.map(OrderLine.fromDoc).toList());
 
+  // Load an order from the selected shop.
   Future<StoreOrder?> getOrder(String orderId) async {
     final doc = await _storeRef
         .collection('orders')
@@ -857,12 +1030,14 @@ class FirestoreService {
     return doc.exists ? StoreOrder.fromDoc(doc) : null;
   }
 
+  // Watch the latest state of this order.
   Stream<StoreOrder?> watchOrder(String orderId) => _storeRef
       .collection('orders')
       .doc(orderId)
       .snapshots()
       .map((snapshot) => snapshot.exists ? StoreOrder.fromDoc(snapshot) : null);
 
+  // Find a currently sellable product matching the order line.
   Future<InventoryBatch?> findSellingOrderProduct(OrderLine line) async {
     final batches = _storeRef.collection('inventoryBatches');
     final List<InventoryBatch> inventory;
@@ -882,6 +1057,7 @@ class FirestoreService {
     return sellingOrderProduct(line, inventory, DateTime.now());
   }
 
+  // Load the historical item saved with the order.
   Future<InventoryBatch?> findSavedOrderItem(OrderLine line) async {
     if (line.batchId.isEmpty) return null;
     var snapshot = await _storeRef
@@ -902,6 +1078,7 @@ class FirestoreService {
     return item;
   }
 
+  // Upload and save this order payment receipt.
   Future<String> uploadOrderReceipt(XFile file, String orderId) async {
     final bytes = await file.readAsBytes();
     final extension = file.name.contains('.')
@@ -922,6 +1099,7 @@ class FirestoreService {
     return ref.fullPath;
   }
 
+  // Submit the permitted status change to the server.
   Future<void> updateOrderStatus(
     StoreOrder order,
     String status, {
@@ -935,6 +1113,7 @@ class FirestoreService {
     });
   }
 
+  // Watch the signed-in account notifications.
   Stream<List<AppNotification>> watchNotifications() => _storeRef
       .collection('notifications')
       .where('recipientUid', isEqualTo: _user.uid)
@@ -945,11 +1124,13 @@ class FirestoreService {
         return notices;
       });
 
+  // Mark this notification as read.
   Future<void> markNotificationRead(String id) => _storeRef
       .collection('notifications')
       .doc(id)
       .update({'readAt': FieldValue.serverTimestamp()});
 
+  // Watch recorded stock waste for the selected shop.
   Stream<List<InventoryEvent>> watchWasteEvents() =>
       _storeRef.collection('inventoryEvents').snapshots().map((snapshot) {
         final events = snapshot.docs
@@ -963,12 +1144,14 @@ class FirestoreService {
         return events;
       });
 
+  // Watch the signed-in account profile.
   Stream<Map<String, dynamic>> watchUserProfile() => _db
       .collection('users')
       .doc(_user.uid)
       .snapshots()
       .map((doc) => doc.data() ?? const <String, dynamic>{});
 
+  // Validate and save the editable profile fields.
   Future<void> updateUserProfile({
     required String displayName,
     required String phoneNumber,
@@ -1045,6 +1228,7 @@ class FirestoreService {
     }
   }
 
+  // Save the selected account notification preference.
   Future<void> updateNotificationPreference(bool enabled) =>
       _db.collection('users').doc(_user.uid).set({
         'preferences': {
@@ -1055,6 +1239,7 @@ class FirestoreService {
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+  // Resolve a stored image path to a download URL.
   Future<String?> imageUrl(String? path) async {
     if (path == null || path.isEmpty) return null;
     if (path.startsWith('http')) return path;

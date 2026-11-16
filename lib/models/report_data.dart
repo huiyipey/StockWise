@@ -3,14 +3,17 @@ import 'package:intl/intl.dart';
 import 'category_label.dart';
 import 'product_name.dart';
 
+// Define the weekday labels used by report calendars.
 int calendarWeekDays(DateTime a, DateTime b) => DateTime.utc(
   b.year,
   b.month,
   b.day,
 ).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
 
+// Remove the time part from a report date.
 DateTime reportDay(DateTime value) =>
     DateTime(value.year, value.month, value.day);
+// Count inclusive calendar days in the report interval.
 int reportDayCount(DateTime first, DateTime last) =>
     DateTime.utc(
       last.year,
@@ -18,13 +21,18 @@ int reportDayCount(DateTime first, DateTime last) =>
       last.day,
     ).difference(DateTime.utc(first.year, first.month, first.day)).inDays +
     1;
+// Convert the instant to a Malaysia calendar date.
 DateTime malaysiaReportDay(DateTime instant) =>
     reportDay(instant.toUtc().add(const Duration(hours: 8)));
+// Format the report date as year-month-day.
 String reportIso(DateTime value) => DateFormat('yyyy-MM-dd').format(value);
+// Format a date for report labels.
 String reportDate(DateTime value) => DateFormat('d MMMM yyyy').format(value);
+// Format integer cents as a MYR amount.
 String reportMoney(int cents) =>
     'RM ${NumberFormat('#,##0.00', 'en').format(cents / 100)}';
 
+// Choose daily, weekly, monthly, yearly, or custom reporting.
 enum ReportPeriod {
   daily('Daily'),
   weekly('Weekly'),
@@ -36,6 +44,7 @@ enum ReportPeriod {
   final String label;
 }
 
+// Represent one selectable day, ISO week, month, or year.
 class ReportBucket {
   const ReportBucket({
     required this.start,
@@ -45,10 +54,13 @@ class ReportBucket {
   });
   final DateTime start, end;
   final String label, axisLabel;
+  // Check whether the date belongs to this report bucket.
   bool contains(DateTime date) => !date.isBefore(start) && !date.isAfter(end);
+  // Check whether this bucket falls after today.
   bool upcoming(DateTime today) => start.isAfter(today);
 }
 
+// Define the calendar buckets and request boundaries for a report.
 class ReportWindow {
   const ReportWindow({
     required this.period,
@@ -60,6 +72,7 @@ class ReportWindow {
   final DateTime start, end;
   final List<ReportBucket> buckets;
 
+  // Build the calendar buckets for the selected report period.
   factory ReportWindow.forPeriod(
     ReportPeriod period,
     DateTime today, {
@@ -86,6 +99,7 @@ class ReportWindow {
             : DateTime(firstYear);
         end = DateTime(today.year, 12, 31);
       case ReportPeriod.weekly:
+        // Find Monday of ISO week one for the given year.
         DateTime firstIsoMonday(int year) {
           final jan4 = DateTime(year, 1, 4);
           return DateTime(year, 1, 5 - jan4.weekday);
@@ -148,7 +162,9 @@ class ReportWindow {
     );
   }
 
+  // Build the displayed report date-range label.
   String get dateLabel => '${reportDate(start)} - ${reportDate(end)}';
+  // Choose daily, weekly, monthly, or yearly grouping.
   String get granularity => switch (period) {
     ReportPeriod.monthly => 'Monthly',
     ReportPeriod.yearly => 'Yearly',
@@ -173,6 +189,7 @@ List<({DateTime start, DateTime end})> reportRequestRanges(
   return result;
 }
 
+// Represent one sales or waste record in the selected period.
 class ReportRecord {
   const ReportRecord({
     required this.date,
@@ -186,8 +203,10 @@ class ReportRecord {
   final DateTime date;
   final String reference, category, reason;
   final int productCents, deliveryCents, units;
+  // Add the product sales and delivery fees.
   int get totalCents => productCents + deliveryCents;
 
+  // Read one normalized sales or waste report record.
   factory ReportRecord.fromRow(String kind, List<dynamic> row) {
     if (row.length < 5) {
       throw const FormatException('Incomplete report record.');
@@ -210,6 +229,7 @@ class ReportRecord {
     );
   }
 
+  // Build the values shown in a report record row.
   List<String> cells(String kind) => kind == 'sales'
       ? [
           '${DateFormat('d MMM yyyy').format(date)}\n$reference',
@@ -225,17 +245,24 @@ class ReportRecord {
         ];
 }
 
+// Calculate totals and exports for the selected chart bucket.
 class ReportSelection {
   const ReportSelection(this.kind, this.bucket, this.records);
   final String kind;
   final ReportBucket bucket;
   final List<ReportRecord> records;
+  // Sum the selected product sales in cents.
   int get productCents => records.fold(0, (sum, row) => sum + row.productCents);
+  // Sum the selected delivery fees in cents.
   int get deliveryCents =>
       records.fold(0, (sum, row) => sum + row.deliveryCents);
+  // Add the product sales and delivery fees.
   int get totalCents => productCents + deliveryCents;
+  // Sum the selected waste quantities.
   int get units => records.fold(0, (sum, row) => sum + row.units);
+  // Choose the value plotted for this report type.
   int get value => kind == 'sales' ? productCents : units;
+  // Group the selected waste units by category.
   Map<String, int> get categories {
     final result = <String, int>{};
     for (final row in records) {
@@ -248,6 +275,7 @@ class ReportSelection {
     return result;
   }
 
+  // Choose the data columns for this report type.
   List<String> get headers => kind == 'sales'
       ? [
           'Date / Order',
@@ -257,6 +285,7 @@ class ReportSelection {
         ]
       : ['Date / Product', 'Category', 'Reason', 'Units'];
 
+  // Collect the selected chart, records, and CSV export data.
   Map<String, dynamic> export({
     required String storeName,
     required DateTime today,
@@ -297,6 +326,7 @@ class ReportSelection {
         ['TOTAL', units],
       ],
     ];
+    // Read one formatted report cell.
     String cell(dynamic value) {
       var text = '$value';
       if (value is String && RegExp(r'^\s*[=+@-]').hasMatch(text)) {
@@ -314,6 +344,7 @@ class ReportSelection {
   }
 }
 
+// Keep the loaded report records and calendar window.
 class ReportSnapshot {
   const ReportSnapshot({
     required this.kind,
@@ -322,6 +353,7 @@ class ReportSnapshot {
   });
   final String kind, storeName;
   final List<ReportRecord> records;
+  // Read stored values with safe defaults.
   factory ReportSnapshot.fromMap(
     String kind,
     Map<String, dynamic> data, {
@@ -350,14 +382,19 @@ class ReportSnapshot {
       records: rows,
     );
   }
+  // Select one chart bucket and its matching report records.
   ReportSelection select(ReportBucket bucket) => ReportSelection(
     kind,
     bucket,
     records.where((row) => bucket.contains(row.date)).toList(),
   );
+  // Sum the selected product sales in cents.
   int get productCents => records.fold(0, (sum, row) => sum + row.productCents);
+  // Sum the selected delivery fees in cents.
   int get deliveryCents =>
       records.fold(0, (sum, row) => sum + row.deliveryCents);
+  // Add the product sales and delivery fees.
   int get totalCents => productCents + deliveryCents;
+  // Sum the selected waste quantities.
   int get units => records.fold(0, (sum, row) => sum + row.units);
 }

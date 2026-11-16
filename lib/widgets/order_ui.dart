@@ -5,12 +5,15 @@ import '../models/app_models.dart';
 import '../models/order_status.dart';
 import 'inventory_ui.dart';
 
+// Format an integer-cent order amount in MYR.
 String orderMoney(int cents) => 'RM ${(cents / 100).toStringAsFixed(2)}';
 
+// Build the shared order panel component.
 class OrderPanel extends StatelessWidget {
   const OrderPanel({super.key, required this.child, this.padding = 18});
   final Widget child;
   final double padding;
+  // Render the order panel component.
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
@@ -23,9 +26,11 @@ class OrderPanel extends StatelessWidget {
   );
 }
 
+// Build the shared order heading component.
 class OrderHeading extends StatelessWidget {
   const OrderHeading(this.text, {super.key});
   final String text;
+  // Render the order heading component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 20, bottom: 12),
@@ -36,6 +41,7 @@ class OrderHeading extends StatelessWidget {
   );
 }
 
+// Build the shared order badge component.
 class OrderBadge extends StatelessWidget {
   const OrderBadge(
     this.label, {
@@ -45,6 +51,7 @@ class OrderBadge extends StatelessWidget {
   });
   final String label, value;
   final double fontSize;
+  // Render the order badge component.
   @override
   Widget build(BuildContext context) {
     final warning = value == 'unpaid' || value == 'to_pay';
@@ -75,6 +82,7 @@ class OrderBadge extends StatelessWidget {
   }
 }
 
+// Build the shared order status filter component.
 class OrderStatusFilter extends StatelessWidget {
   const OrderStatusFilter({
     super.key,
@@ -83,6 +91,7 @@ class OrderStatusFilter extends StatelessWidget {
   });
   final String selected;
   final ValueChanged<String> onSelected;
+  // Render the order status filter component.
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
@@ -126,6 +135,7 @@ class OrderStatusFilter extends StatelessWidget {
   );
 }
 
+// Build the shared order list card component.
 class OrderListCard extends StatelessWidget {
   const OrderListCard({
     super.key,
@@ -136,6 +146,7 @@ class OrderListCard extends StatelessWidget {
   final StoreOrder order;
   final VoidCallback onTap;
   final bool enlarged;
+  // Render the order list card component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
@@ -200,8 +211,10 @@ class OrderListCard extends StatelessWidget {
     ),
   );
 
+  // Fit the order ID, payment status, and status badges.
   Widget _header(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
+      // Measure the label before choosing the card layout.
       double textWidth(String text, double size) {
         final painter = TextPainter(
           text: TextSpan(
@@ -246,12 +259,14 @@ class OrderListCard extends StatelessWidget {
     },
   );
 
+  // Show the order identifier with the shared emphasis.
   Widget _number() => Text(
     '#${order.orderNumber}',
     maxLines: 2,
     overflow: TextOverflow.ellipsis,
     style: TextStyle(fontSize: enlarged ? 15 : 12, fontWeight: FontWeight.w700),
   );
+  // Show payment status before order status.
   List<Widget> _badges() => [
     OrderBadge(
       orderLabel(order.paymentStatus),
@@ -266,10 +281,12 @@ class OrderListCard extends StatelessWidget {
   ];
 }
 
+// Build the shared order value row component.
 class OrderValueRow extends StatelessWidget {
   const OrderValueRow(this.label, this.value, {super.key, this.bold = false});
   final String label, value;
   final bool bold;
+  // Render the order value row component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 7),
@@ -302,10 +319,12 @@ class OrderValueRow extends StatelessWidget {
   );
 }
 
+// Build the shared order totals component.
 class OrderTotals extends StatelessWidget {
   const OrderTotals({super.key, required this.subtotal, this.delivery});
   final int subtotal;
   final int? delivery;
+  // Render the order totals component.
   @override
   Widget build(BuildContext context) => OrderPanel(
     child: Column(
@@ -321,10 +340,12 @@ class OrderTotals extends StatelessWidget {
   );
 }
 
+// Build the shared order notice component.
 class OrderNotice extends StatelessWidget {
   const OrderNotice(this.message, {super.key, this.error = false});
   final String message;
   final bool error;
+  // Render the order notice component.
   @override
   Widget build(BuildContext context) => Container(
     width: double.infinity,
@@ -357,6 +378,7 @@ class OrderNotice extends StatelessWidget {
   );
 }
 
+// Build the shared order empty component.
 class OrderEmpty extends StatelessWidget {
   const OrderEmpty(
     this.title, {
@@ -367,6 +389,7 @@ class OrderEmpty extends StatelessWidget {
   final String title;
   final IconData icon;
   final VoidCallback? onRetry;
+  // Render the order empty component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 16),
@@ -406,6 +429,7 @@ class OrderEmpty extends StatelessWidget {
   );
 }
 
+// Build the shared order picker field component.
 class OrderPickerField extends StatelessWidget {
   const OrderPickerField({
     super.key,
@@ -416,6 +440,7 @@ class OrderPickerField extends StatelessWidget {
   final String? label;
   final String value;
   final VoidCallback? onTap;
+  // Render the order picker field component.
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
@@ -441,6 +466,7 @@ class OrderPickerField extends StatelessWidget {
   );
 }
 
+// Show the selectable order choices in a bottom sheet.
 Future<String?> showOrderChoices({
   required BuildContext context,
   required String title,
@@ -569,6 +595,7 @@ Future<String?> showOrderChoices({
   ),
 );
 
+// Confirm the requested order action.
 Future<bool> showOrderConfirmation({
   required BuildContext context,
   required String title,

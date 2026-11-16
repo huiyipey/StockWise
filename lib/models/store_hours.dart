@@ -1,3 +1,4 @@
+// Keep the store hours values used by the app.
 class StoreHours {
   const StoreHours({
     this.opens = 540,
@@ -8,6 +9,7 @@ class StoreHours {
 
   /// ISO weekdays: Monday = 1 through Sunday = 7.
   final Set<int> closedDays;
+  // Read stored values with safe defaults.
   factory StoreHours.fromMap(dynamic value) => value is Map
       ? StoreHours(
           opens: (value['opens'] as num?)?.toInt() ?? 540,
@@ -21,27 +23,34 @@ class StoreHours {
           },
         )
       : const StoreHours();
+  // Convert the selected values to Firestore fields.
   Map<String, dynamic> toMap() => {
     'opens': opens,
     'closes': closes,
     'closedDays': closedDays.toList()..sort(),
   };
+  // Check that the saved operating hours are valid.
   bool get valid =>
       opens >= 0 &&
       opens < 1440 &&
       closes > opens + 30 &&
       closes <= 1440 &&
       closedDays.every((day) => day >= 1 && day <= 7);
+  // Check whether this weekday is marked as closed.
   bool isClosedOn(DateTime localDate) => closedDays.contains(localDate.weekday);
   static const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  // Format the selected closed weekdays.
   String get closedDaysLabel => closedDays.isEmpty
       ? 'No closed days'
       : closedDays.length == 7
       ? 'Closed every day'
       : 'Closed ${[for (var day = 1; day <= 7; day++)
           if (closedDays.contains(day)) dayNames[day - 1]].join(', ')}';
+  // Format a stored minute value as a readable time.
   String clock(int value) =>
       '${(value ~/ 60).toString().padLeft(2, '0')}:${(value % 60).toString().padLeft(2, '0')}';
+  // Build the label shown to the user.
   String get label => '${clock(opens)} - ${clock(closes)} · $closedDaysLabel';
+  // Show the shop last order time.
   String get lastOrderLabel => clock(closes - 30);
 }

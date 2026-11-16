@@ -6,12 +6,14 @@ const orderStatuses = [
   'cancelled',
 ];
 
+// Convert the stored order state to its display label.
 String orderLabel(String value) => value
     .split('_')
     .where((part) => part.isNotEmpty)
     .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
     .join(' ');
 
+// Reject order transitions that are not currently allowed.
 String? orderStatusError(
   String current,
   String next, {
@@ -36,6 +38,7 @@ String? orderStatusError(
   return null;
 }
 
+// Choose the payment state after a valid order transition.
 String orderPaymentAfter(String currentPayment, String nextStatus) =>
     nextStatus == 'cancelled'
     ? currentPayment

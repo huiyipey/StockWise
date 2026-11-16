@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+// Display a product image with zoom and retry controls.
 class ProductImageScreen extends StatefulWidget {
   final ImageProvider image;
   final String title;
@@ -23,25 +24,31 @@ class ProductImageScreen extends StatefulWidget {
   State<ProductImageScreen> createState() => _ProductImageScreenState();
 }
 
+// Manage the product image screen values and actions.
 class _ProductImageScreenState extends State<ProductImageScreen> {
+  // Keep this component's values, selections, and request state.
   static const maxScale = 6.0;
   final transformation = TransformationController();
   Size viewport = Size.zero;
   Offset doubleTapPosition = Offset.zero;
   int reload = 0;
+  // Check whether the image viewer uses inventory styling.
   bool get styled => widget.inventoryStyle || widget.receiptStyle;
+  // Choose the image viewer background colour.
   Color get background => widget.receiptStyle
       ? const Color(0xFF10241D)
       : widget.inventoryStyle
       ? const Color(0xFF1B2D24)
       : Colors.black;
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     transformation.dispose();
     super.dispose();
   }
 
+  // Apply the requested image zoom around its centre.
   void _zoomTo(double scale, Offset focalPoint) {
     final next = scale.clamp(1.0, maxScale);
     if (next == 1) {
@@ -64,11 +71,13 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
       ..setEntry(1, 3, y);
   }
 
+  // Increase or decrease the image zoom within its limits.
   void _stepZoom(double factor) => _zoomTo(
     transformation.value.getMaxScaleOnAxis() * factor,
     Offset(viewport.width / 2, viewport.height / 2),
   );
 
+  // Reload the image after a failure.
   Future<void> _retry() async {
     await widget.image.evict();
     if (mounted) {
@@ -77,6 +86,7 @@ class _ProductImageScreenState extends State<ProductImageScreen> {
     }
   }
 
+  // Build the product image screen layout.
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: background,

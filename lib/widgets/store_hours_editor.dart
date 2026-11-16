@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/store_hours.dart';
 import 'inventory_ui.dart';
 
+// Build the shared store hours editor component.
 class StoreHoursEditor extends StatelessWidget {
   const StoreHoursEditor({
     super.key,
@@ -12,6 +13,7 @@ class StoreHoursEditor extends StatelessWidget {
   final StoreHours value;
   final ValueChanged<StoreHours> onChanged;
   final bool enabled;
+  // Render the store hours editor component.
   @override
   Widget build(BuildContext context) => FormField<StoreHours>(
     initialValue: value,

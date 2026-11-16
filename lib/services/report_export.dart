@@ -12,6 +12,7 @@ class ReportExportFile {
   final Uint8List bytes;
   final String extension, mimeType;
 
+  // Build the selected CSV, chart PDF, or combined ZIP.
   static Future<ReportExportFile> build(Map<String, dynamic> data) async {
     final format = data['format'] ?? 'data';
     final csv = Uint8List.fromList(utf8.encode(data['csv'] as String));
@@ -34,6 +35,7 @@ class ReportExportFile {
     );
   }
 
+  // Render the chart and selected data using bundled report fonts.
   static Future<Uint8List> _pdf(
     Map<String, dynamic> data, {
     required bool includeData,
@@ -55,6 +57,7 @@ class ReportExportFile {
       data['categories'] as Map? ?? {},
     );
     final green = PdfColor.fromHex('#247653');
+    // Style a section heading in the exported PDF.
     pw.Widget title(String text) => pw.Padding(
       padding: const pw.EdgeInsets.only(top: 14, bottom: 8),
       child: pw.Text(
@@ -173,6 +176,7 @@ class ReportExportFile {
     return doc.save();
   }
 
+  // Draw the exported report bars and axis labels.
   static pw.Widget _chart(
     List<Map<String, dynamic>> points,
     bool sales,

@@ -18,6 +18,7 @@ import 'stockwise_ui.dart';
 import 'promotion_editor.dart';
 import 'profile_ui.dart' show showProfileConfirmation;
 
+// Build the shared item editor component.
 class ItemEditor extends StatefulWidget {
   final InventoryBatch? item;
   final Stream<List<StoreCategory>>? categoryStream;
@@ -36,13 +37,16 @@ class ItemEditor extends StatefulWidget {
     this.onSaved,
   });
 
+  // Check whether an existing record is being edited.
   bool get editing => item != null;
 
   @override
   State<ItemEditor> createState() => _ItemEditorState();
 }
 
+// Manage the item editor values and actions.
 class _ItemEditorState extends State<ItemEditor> {
+  // Keep this component's values, selections, and request state.
   final formKey = GlobalKey<FormState>();
   late final TextEditingController name;
   late final TextEditingController barcode;
@@ -69,6 +73,7 @@ class _ItemEditorState extends State<ItemEditor> {
   bool saving = false, allowExit = false;
   late Map<String, dynamic> promotionData;
   late final String initialDraft;
+  // Collect the current editor values for saving or change detection.
   String get draft => jsonEncode({
     'name': name.text,
     'barcode': barcode.text,
@@ -88,9 +93,12 @@ class _ItemEditorState extends State<ItemEditor> {
   });
   late final categoriesStream =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
+  // Block repeated actions while a request is running.
   bool get busy => saving || lookingUp || scanning;
+  // Read the existing image path while editing.
   String? get imagePath => reusedProduct?.imagePath ?? widget.item?.imagePath;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -127,6 +135,7 @@ class _ItemEditorState extends State<ItemEditor> {
     barcode.addListener(_barcodeChanged);
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     name.dispose();
@@ -138,6 +147,7 @@ class _ItemEditorState extends State<ItemEditor> {
     super.dispose();
   }
 
+  // Render the item editor component.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     enlargedFields: true,
@@ -151,12 +161,14 @@ class _ItemEditorState extends State<ItemEditor> {
           body: SafeArea(
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: widget.editing ? 'Edit Inventory' : 'Add Inventory',
                   back: true,
                   onBack: saving ? null : _leave,
                 ),
                 Expanded(
+                  // Follow category names and archive-state changes.
                   child: StreamBuilder<List<StoreCategory>>(
                     stream: categoriesStream,
                     builder: (context, snapshot) {
@@ -178,6 +190,7 @@ class _ItemEditorState extends State<ItemEditor> {
                           )
                           .toList();
                       availableCategories = categories;
+                      // Group the inputs under one validation key.
                       return Form(
                         onChanged: () {
                           if (mounted) setState(() {});
@@ -285,7 +298,8 @@ class _ItemEditorState extends State<ItemEditor> {
                                           ),
                                           decoration: const InputDecoration(
                                             labelText: 'Name',
-                                            hintText: 'e.g. Fresh Milk',
+                                            hintText: productNameHint,
+                                            hintMaxLines: 2,
                                           ),
                                           validator: _required,
                                         ),
@@ -421,6 +435,7 @@ class _ItemEditorState extends State<ItemEditor> {
                                         ),
                                         if (promotion) ...[
                                           const SizedBox(height: 6),
+                                          // Configure the selected price or bundle promotion.
                                           PromotionEditor(
                                             initial: promotionData,
                                             basePriceCents: _safeCents(
@@ -487,6 +502,7 @@ class _ItemEditorState extends State<ItemEditor> {
     ),
   );
 
+  // Show the photo preview and choose-or-replace action.
   Widget _photoPicker() => Material(
     color: InventoryColors.background,
     shape: RoundedRectangleBorder(
@@ -504,6 +520,7 @@ class _ItemEditorState extends State<ItemEditor> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (image != null)
+              // Show loading, errors, or the completed request.
               FutureBuilder<Uint8List>(
                 future: image!.readAsBytes(),
                 builder: (_, snapshot) => snapshot.hasData
@@ -554,6 +571,7 @@ class _ItemEditorState extends State<ItemEditor> {
     ),
   );
 
+  // Build the inline minus, quantity, and plus controls.
   Widget _quantityRow() => FormField<String>(
     key: quantityField,
     initialValue: quantity.text,
@@ -632,6 +650,7 @@ class _ItemEditorState extends State<ItemEditor> {
     ),
   );
 
+  // Show the current valid category choices.
   Widget _categoryField(List<StoreCategory> records) {
     final choices = {
       for (final record in records)
@@ -687,6 +706,7 @@ class _ItemEditorState extends State<ItemEditor> {
     );
   }
 
+  // Clamp the edited quantity within its permitted range.
   void _changeQuantity(int delta) {
     final number = ((int.tryParse(quantity.text) ?? 1) + delta).clamp(
       1,
@@ -701,6 +721,7 @@ class _ItemEditorState extends State<ItemEditor> {
     quantityField.currentState?.didChange(quantity.text);
   }
 
+  // Choose the batch expiry date.
   Future<void> _pickDate(BuildContext pickerContext) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -720,6 +741,7 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  // Choose or replace the product photo.
   Future<void> _pickImage() async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -729,6 +751,7 @@ class _ItemEditorState extends State<ItemEditor> {
     if (picked != null && mounted) setState(() => image = picked);
   }
 
+  // Scan a barcode before opening or filling the item editor.
   Future<void> _scanBarcode() async {
     if (busy) return;
     setState(() => scanning = true);
@@ -758,6 +781,7 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  // Build the barcode field with lookup and scan actions.
   Widget _barcodeField() => TextFormField(
     key: const ValueKey('item-barcode'),
     controller: barcode,
@@ -780,6 +804,7 @@ class _ItemEditorState extends State<ItemEditor> {
     ),
   );
 
+  // Clear stale product suggestions when the barcode changes.
   void _barcodeChanged() {
     lookupVersion++;
     final hadProduct = reusedProduct != null;
@@ -794,6 +819,7 @@ class _ItemEditorState extends State<ItemEditor> {
     if (hadProduct) expiryField.currentState?.didChange(null);
   }
 
+  // Load saved product details for the entered barcode.
   Future<void> _lookupBarcode() async {
     if (busy) return;
     FocusScope.of(context).unfocus();
@@ -860,6 +886,7 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  // Confirm before discarding a changed inventory draft.
   Future<void> _leave() async {
     if (busy) return;
     final discard =
@@ -878,8 +905,10 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  // Reject an empty required field.
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'Required' : null;
+  // Validate the entered non-negative price.
   String? _priceValidator(String? value) {
     final amount = double.tryParse(value?.trim() ?? '');
     return amount == null || !amount.isFinite || (amount * 100).round() <= 0
@@ -887,13 +916,16 @@ class _ItemEditorState extends State<ItemEditor> {
         : null;
   }
 
+  // Convert a valid price to cents for draft comparison.
   int _safeCents(String value) {
     final amount = double.tryParse(value);
     return amount == null || !amount.isFinite ? 0 : (amount * 100).round();
   }
 
+  // Convert entered currency to integer cents.
   int _cents(String value) => (double.parse(value.trim()) * 100).round();
 
+  // Validate all item fields and save the inventory draft.
   Future<void> _save() async {
     if (busy) return;
     if (!(formKey.currentState?.validate() ?? false)) {
@@ -974,6 +1006,7 @@ class _ItemEditorState extends State<ItemEditor> {
     }
   }
 
+  // Convert a save failure to a readable message.
   String _friendlyError(Object error) {
     final text = '$error';
     if (text.toLowerCase().contains('storage') ||

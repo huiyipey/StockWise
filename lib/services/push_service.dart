@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+// Register device notifications and display foreground alerts.
 class PushService {
   PushService._();
   static final instance = PushService._();
@@ -13,6 +14,7 @@ class PushService {
   StreamSubscription<User?>? authSubscription;
   StreamSubscription<String>? refresh;
   StreamSubscription<RemoteMessage>? foreground;
+  // Set up notification permissions, device tokens, and foreground alerts.
   Future<void> initialize() async {
     if (kIsWeb ||
         ![
@@ -91,6 +93,7 @@ class PushService {
     });
   }
 
+  // Save this device token for the signed-in account.
   Future<void> register(String value) async {
     if (FirebaseAuth.instance.currentUser == null) return;
     await FirebaseFunctions.instanceFor(region: 'asia-southeast1')
@@ -98,6 +101,7 @@ class PushService {
         .call({'token': value, 'platform': defaultTargetPlatform.name});
   }
 
+  // Remove this account notification registration and local alerts.
   Future<void> detach() async {
     if (kIsWeb ||
         ![

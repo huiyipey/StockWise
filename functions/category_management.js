@@ -1,6 +1,7 @@
 const {HttpsError} = require('firebase-functions/v2/https');
 const {storeRef, team} = require('./commerce');
 
+// Delete only categories that have no current or historical references.
 function deleteCategoryHandler({db}) {
   return async request => {
     const store = storeRef(db, request);
@@ -9,14 +10,18 @@ function deleteCategoryHandler({db}) {
       throw new HttpsError('invalid-argument', 'Choose a valid category.');
     }
     const category = store.collection('categories').doc(id);
+    // Check category references before the transaction deletes anything.
     return db.runTransaction(async tx => {
       await team(tx, store, request.auth.uid);
       const saved = await tx.get(category);
       if (!saved.exists) return {deleted: true, alreadyDeleted: true};
+      // Return the message used when a category must be archived.
       const inUse = () => new HttpsError('failed-precondition',
         'This category is used by products or stock history. Archive it instead to preserve those records.',
         {reason: 'category-in-use'});
+      // Include legacy rows that implicitly belong to Others.
       const referencesCategory = row => row.categoryId === id || (id === 'others' && !row.categoryId);
+      // Find records that reference the category being deleted.
       const linkedRows = collection => id === 'others'
         ? collection.select('categoryId')
         : collection.where('categoryId', '==', id).limit(1);
@@ -50,4 +55,5 @@ function deleteCategoryHandler({db}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {deleteCategoryHandler};

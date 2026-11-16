@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// Keep the shared application colour palette.
 abstract final class AppColors {
   static const primary = Color(0xFF7EAE78);
   static const primaryDark = Color(0xFF5F8C5B);
@@ -16,7 +17,9 @@ abstract final class AppColors {
   static const blue = Color(0xFF1F6F93);
 }
 
+// Group the app theme values and actions.
 abstract final class AppTheme {
+  // Create the shared light application theme.
   static ThemeData get light {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,

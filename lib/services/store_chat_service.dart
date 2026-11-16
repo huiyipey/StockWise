@@ -7,22 +7,33 @@ import '../models/chat_attachment.dart';
 import '../models/store_chat.dart';
 import 'store_session.dart';
 
+// Define shop-scoped message and attachment operations.
 abstract class StoreChatRepository {
+  // Read the current account identifier.
   String get currentUserId;
+  // Read the selected shop display name.
   String get storeName;
+  // Check active administrative access in this shop.
   bool get isAdmin;
+  // Watch this shop conversations in latest-message order.
   Stream<List<StoreConversation>> watchConversations();
+  // Watch one customer conversation in this shop.
   Stream<StoreConversation?> watchConversation(String customerId);
+  // Watch messages inside this customer conversation.
   Stream<List<StoreChatMessage>> watchMessages(String customerId);
+  // Save a validated text or attachment message.
   Future<void> sendMessage(
     String customerId,
     String text, {
     ChatAttachmentDraft? attachment,
   });
+  // Download an attachment from this conversation storage path.
   Future<Uint8List> loadAttachment(String customerId, StoreChatMessage message);
+  // Advance this viewer read state for displayed messages.
   Future<void> markRead(String customerId, DateTime through);
 }
 
+// Keep messages and attachments scoped to one shop conversation.
 class StoreChatService implements StoreChatRepository {
   final String storeId;
   @override
@@ -41,6 +52,7 @@ class StoreChatService implements StoreChatRepository {
     required this.isAdmin,
   });
 
+  // Create a chat service scoped to the selected shop.
   factory StoreChatService.forSelectedStore() {
     final session = StoreSession.instance;
     final store = session.store;
@@ -57,9 +69,11 @@ class StoreChatService implements StoreChatRepository {
     );
   }
 
+  // Build this shop conversation collection reference.
   CollectionReference<Map<String, dynamic>> get _conversations =>
       _db.collection('stores').doc(storeId).collection('conversations');
 
+  // Watch this shop conversations in latest-message order.
   @override
   Stream<List<StoreConversation>> watchConversations() {
     if (!isAdmin) {
@@ -75,6 +89,7 @@ class StoreChatService implements StoreChatRepository {
         );
   }
 
+  // Watch one customer conversation in this shop.
   @override
   Stream<StoreConversation?> watchConversation(String customerId) =>
       _conversations
@@ -86,6 +101,7 @@ class StoreChatService implements StoreChatRepository {
                 : null,
           );
 
+  // Watch messages inside this customer conversation.
   @override
   Stream<List<StoreChatMessage>> watchMessages(String customerId) =>
       _conversations
@@ -99,6 +115,7 @@ class StoreChatService implements StoreChatRepository {
                 .toList(),
           );
 
+  // Save a validated text or attachment message.
   @override
   Future<void> sendMessage(
     String customerId,
@@ -229,6 +246,7 @@ class StoreChatService implements StoreChatRepository {
     }
   }
 
+  // Download an attachment from this conversation storage path.
   @override
   Future<Uint8List> loadAttachment(
     String customerId,
@@ -255,6 +273,7 @@ class StoreChatService implements StoreChatRepository {
     return bytes;
   }
 
+  // Advance this viewer read state for displayed messages.
   @override
   Future<void> markRead(String customerId, DateTime through) =>
       _db.runTransaction((transaction) async {

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../services/password_policy.dart';
 import '../widgets/auth_ui.dart';
 
+// Validate signup details and create an unverified account.
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key, this.onCreateAccount, this.onAccountCreated});
   final Future<void> Function(String email, String password)? onCreateAccount;
@@ -14,7 +15,9 @@ class SignupScreen extends StatefulWidget {
   State<SignupScreen> createState() => _SignupScreenState();
 }
 
+// Manage the signup screen values and actions.
 class _SignupScreenState extends State<SignupScreen> {
+  // Keep this component's values, selections, and request state.
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
@@ -26,11 +29,13 @@ class _SignupScreenState extends State<SignupScreen> {
       _confirmingLeave = false,
       _allowExit = false;
 
+  // Check whether any signup information has been entered.
   bool get _hasUnsavedInformation =>
       _email.text.isNotEmpty ||
       _password.text.isNotEmpty ||
       _confirmation.text.isNotEmpty;
 
+  // Confirm before discarding entered form information.
   Future<void> _requestLeave() async {
     if (_creating || _confirmingLeave || _allowExit) return;
     if (!_hasUnsavedInformation) {
@@ -106,10 +111,12 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  // Clear old errors when the form is edited.
   void _clearFeedback(String _) => setState(() {
     _error = null;
     _invalid.clear();
   });
+  // Show the message beside the relevant form field.
   void _showError(String message, [Set<String> fields = const {}]) =>
       setState(() {
         _error = message;
@@ -117,6 +124,7 @@ class _SignupScreenState extends State<SignupScreen> {
           ..clear()
           ..addAll(fields);
       });
+  // Convert Firebase account errors to readable messages.
   void _authError(FirebaseAuthException failure) {
     switch (failure.code) {
       case 'invalid-email':
@@ -139,6 +147,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  // Validate signup fields and create the account.
   Future<void> _register() async {
     if (_creating || _confirmingLeave || _allowExit) return;
     final email = _email.text.trim(), password = _password.text;
@@ -205,6 +214,7 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     _email.dispose();
@@ -213,6 +223,7 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
+  // Build the signup screen layout.
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_creating && (_allowExit || !_hasUnsavedInformation),
@@ -227,10 +238,12 @@ class _SignupScreenState extends State<SignupScreen> {
       ),
       child: AutofillGroup(
         onDisposeAction: AutofillContextAction.cancel,
+        // Group the authentication form and its heading.
         child: AuthCard(
           title: 'Create Account',
           subtitle: 'Start with your email and password.',
           children: [
+            // Enter the email.
             AuthField(
               key: const ValueKey('signup-email'),
               controller: _email,
@@ -242,6 +255,7 @@ class _SignupScreenState extends State<SignupScreen> {
               onChanged: _clearFeedback,
             ),
             const SizedBox(height: 20),
+            // Enter the password.
             AuthField(
               key: const ValueKey('signup-password'),
               controller: _password,
@@ -266,6 +280,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
             const SizedBox(height: 20),
+            // Enter the confirm password.
             AuthField(
               key: const ValueKey('signup-confirmation'),
               controller: _confirmation,
@@ -283,6 +298,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   setState(() => _confirmationVisible = !_confirmationVisible),
             ),
             const SizedBox(height: 12),
+            // Show the form error beside the relevant input.
             AuthError(_error),
             const SizedBox(height: 8),
             const Text(
@@ -294,6 +310,7 @@ class _SignupScreenState extends State<SignupScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            // Show the form action with its loading state.
             AuthButton(
               label: 'Create Account',
               busyLabel: 'Creating account...',

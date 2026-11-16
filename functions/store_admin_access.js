@@ -1,6 +1,7 @@
 const {HttpsError} = require('firebase-functions/v2/https');
 const {isAdminRole, isActiveStoreAdmin} = require('./store_roles');
 
+// Change access transactionally without removing the last active admin.
 function setStoreAdminActiveHandler({db, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -39,4 +40,5 @@ function setStoreAdminActiveHandler({db, serverTimestamp}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {setStoreAdminActiveHandler};

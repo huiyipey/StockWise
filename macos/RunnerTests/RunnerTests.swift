@@ -2,6 +2,7 @@ import Cocoa
 import FlutterMacOS
 import XCTest
 
+// Keep the native macOS runner test entry point.
 class RunnerTests: XCTestCase {
 
   func testExample() {

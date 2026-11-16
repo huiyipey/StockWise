@@ -1,7 +1,9 @@
+# Stop when any sender setup operation fails.
 $ErrorActionPreference = 'Stop'
 # Run locally. Read-Host masks input; the password is never written to a file.
 $mailPassword = Read-Host 'Gmail app password for huiyipey@gmail.com (input hidden)' -AsSecureString
 $mailPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($mailPassword)
+# Pass the sender configuration directly to the setup helper.
 try {
     $mailPlain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($mailPointer).Replace(' ', '')
     if ($mailPlain.Length -ne 16) { throw 'Expected a 16-character Gmail app password.' }
@@ -11,6 +13,7 @@ try {
     node (Join-Path $PSScriptRoot 'grant-mail-access.cjs')
     if ($LASTEXITCODE -ne 0) { throw 'Credential is stored, but the function access grant needs to be retried after deployment.' }
     Write-Output 'Email credentials stored in Secret Manager. No local password file was created.'
+# Release the temporary password buffer.
 } finally {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($mailPointer)
     $mailPlain = $null

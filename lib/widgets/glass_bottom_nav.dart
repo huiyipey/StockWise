@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
+// Build the shared nav item component.
 class NavItem {
   final IconData icon;
   final IconData activeIcon;
@@ -17,6 +18,7 @@ class NavItem {
   });
 }
 
+// Build the shared glass bottom nav component.
 class GlassBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int>? onTap;
@@ -31,6 +33,7 @@ class GlassBottomNav extends StatelessWidget {
     this.activeColor = const Color(0xFF7FAA75),
   });
 
+  // Render the glass bottom nav component.
   @override
   Widget build(BuildContext context) {
     return Container(

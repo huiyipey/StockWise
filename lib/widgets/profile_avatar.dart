@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
+// Build the shared profile avatar component.
 class ProfileAvatar extends StatefulWidget {
   final String? photoPath;
   final Uint8List? preview;
@@ -21,21 +22,26 @@ class ProfileAvatar extends StatefulWidget {
   State<ProfileAvatar> createState() => _ProfileAvatarState();
 }
 
+// Manage the profile avatar values and actions.
 class _ProfileAvatarState extends State<ProfileAvatar> {
+  // Keep this component's values, selections, and request state.
   late Future<String?> url;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(ProfileAvatar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.photoPath != widget.photoPath) _load();
   }
 
+  // Load the stored image or attachment for display.
   void _load() {
     final path = widget.photoPath;
     url = path == null || path.isEmpty
@@ -45,6 +51,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
         : FirestoreService.instance.imageUrl(path);
   }
 
+  // Render the profile avatar component.
   @override
   Widget build(BuildContext context) => Center(
     child: ClipOval(
@@ -71,6 +78,7 @@ class _ProfileAvatarState extends State<ProfileAvatar> {
     ),
   );
 
+  // Show fallback artwork when no image is available.
   Widget _placeholder() => ColoredBox(
     color: AppColors.primarySoft,
     child: Icon(

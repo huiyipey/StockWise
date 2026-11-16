@@ -6,6 +6,7 @@ import '../services/email_verification_service.dart';
 import '../services/store_session.dart';
 import '../widgets/auth_ui.dart';
 
+// Manage signup verification, resend, and email changes.
 class EmailVerificationScreen extends StatefulWidget {
   const EmailVerificationScreen({
     super.key,
@@ -21,8 +22,10 @@ class EmailVerificationScreen extends StatefulWidget {
       _EmailVerificationScreenState();
 }
 
+// Manage the email verification screen values and actions.
 class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     with WidgetsBindingObserver {
+  // Keep this component's values, selections, and request state.
   late final EmailVerificationClient _client;
   late String _email;
   bool _loading = true,
@@ -38,6 +41,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   int _remaining = 0;
   String? _error;
   Timer? _timer;
+  // Check whether an account request is already running.
   bool get _busy =>
       _loading ||
       _sending ||
@@ -46,6 +50,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
       _editing ||
       _continuing;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -55,6 +60,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     _load();
   }
 
+  // Refresh account status when the app returns to the foreground.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && !_verified && !_signingOut) {
@@ -63,6 +69,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Check verification when the user returns from the email link.
   void _checkAfterResume() {
     if (!mounted || _verified || _continuing) {
       _resumeCheckPending = false;
@@ -74,6 +81,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Update the countdown before another verification email is allowed.
   void _cooldown(int seconds) {
     _timer?.cancel();
     _remaining = seconds;
@@ -86,6 +94,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Apply the latest verification session to the screen.
   void _apply(VerificationStatus status) {
     _email = status.email;
     _verified = status.verified;
@@ -102,6 +111,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Load the session and send its first verification email when needed.
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -134,6 +144,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     _checkAfterResume();
   }
 
+  // Show a readable verification failure.
   void _failure(Object failure, String fallback) {
     if (failure is VerificationFailure) {
       _error = failure.message;
@@ -143,6 +154,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Request the verification email and apply the server cooldown.
   Future<void> _send({bool initial = false}) async {
     if (_busy || _remaining > 0 || _verified) return;
     setState(() {
@@ -171,6 +183,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Refresh the account verification status.
   Future<void> _check({bool manual = true}) async {
     if (_busy || _verified) return;
     setState(() {
@@ -204,6 +217,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Leave the pending account and return to sign-in.
   Future<void> _signOut() async {
     if (_busy) return;
     _resumeCheckPending = false;
@@ -220,6 +234,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     }
   }
 
+  // Open the signup email editor.
   Future<void> _editEmail() async {
     if (_busy || _verified) return;
     setState(() => _editing = true);
@@ -249,6 +264,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     _checkAfterResume();
   }
 
+  // Build the secondary verification action.
   Widget _link(String label, VoidCallback? onPressed, {double size = 12.5}) =>
       TextButton(
         onPressed: onPressed,
@@ -265,6 +281,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
         child: Text(label, textAlign: TextAlign.center),
       );
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -272,6 +289,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
     super.dispose();
   }
 
+  // Build the email verification screen layout.
   @override
   Widget build(BuildContext context) {
     final time =
@@ -289,6 +307,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                 _busy ? null : _signOut,
                 size: 13,
               ),
+        // Group the authentication form and its heading.
         child: AuthCard(
           leading: _verified
               ? const Icon(
@@ -372,9 +391,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                 const SizedBox(height: 20),
               ],
               if (_error != null) ...[
+                // Show the form error beside the relevant input.
                 AuthError(_error),
                 const SizedBox(height: 20),
               ],
+              // Show the form action with its loading state.
               AuthButton(
                 label: _loadFailed
                     ? 'Try again'
@@ -428,10 +449,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
   }
 }
 
+// Group the verification notice values and actions.
 class _VerificationNotice extends StatelessWidget {
   const _VerificationNotice({required this.title, this.body});
   final String title;
   final String? body;
+  // Build the verification notice layout.
   @override
   Widget build(BuildContext context) => Semantics(
     liveRegion: true,
@@ -478,6 +501,7 @@ class _VerificationNotice extends StatelessWidget {
   );
 }
 
+// Group the change verification email values and actions.
 class _ChangeVerificationEmail extends StatefulWidget {
   const _ChangeVerificationEmail({required this.client, required this.email});
   final EmailVerificationClient client;
@@ -487,7 +511,9 @@ class _ChangeVerificationEmail extends StatefulWidget {
       _ChangeVerificationEmailState();
 }
 
+// Manage the change verification email values and actions.
 class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
+  // Keep this component's values, selections, and request state.
   late final _email = TextEditingController(text: widget.email);
   final _password = TextEditingController();
   bool _busy = false,
@@ -495,6 +521,7 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
       _reauthenticate = false,
       _visible = false;
   String? _error;
+  // Save the new signup email and request its verification email.
   Future<void> _save() async {
     if (_busy) return;
     final email = _email.text.trim();
@@ -537,6 +564,7 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     _email.dispose();
@@ -544,6 +572,7 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
     super.dispose();
   }
 
+  // Build the change verification email layout.
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !_busy,
@@ -596,6 +625,7 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
                 ),
               ),
               const SizedBox(height: 26),
+              // Enter the email.
               AuthField(
                 key: const ValueKey('verification-new-email'),
                 controller: _email,
@@ -609,9 +639,11 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
                 }),
               ),
               const SizedBox(height: 12),
+              // Show the form error beside the relevant input.
               AuthError(_error),
               if (_reauthenticate) ...[
                 const SizedBox(height: 12),
+                // Enter the password.
                 AuthField(
                   key: const ValueKey('verification-current-password'),
                   controller: _password,
@@ -634,6 +666,7 @@ class _ChangeVerificationEmailState extends State<_ChangeVerificationEmail> {
                 ),
               ),
               const SizedBox(height: 26),
+              // Show the form action with its loading state.
               AuthButton(
                 label: 'Save and resend',
                 busyLabel: 'Sending email...',

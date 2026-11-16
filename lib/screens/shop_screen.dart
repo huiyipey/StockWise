@@ -19,6 +19,7 @@ import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'shopping_assistant_screen.dart';
 
+// Show customer products, promotions, and shopping shortcuts.
 class ShopScreen extends StatefulWidget {
   const ShopScreen({
     super.key,
@@ -47,11 +48,14 @@ class ShopScreen extends StatefulWidget {
   State<ShopScreen> createState() => _ShopScreenState();
 }
 
+// Manage the shop screen values and actions.
 class _ShopScreenState extends State<ShopScreen> {
+  // Keep this component's values, selections, and request state.
   final search = TextEditingController();
   final scroll = ScrollController();
   bool showTop = false;
   final savedView = SavedCatalogueView('shop');
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -78,6 +82,7 @@ class _ShopScreenState extends State<ShopScreen> {
   String category = 'all';
   DateTimeRange? expiryRange;
   bool ascending = true;
+  // Restore the saved category and sort preferences.
   Future<void> _restoreView() async {
     final value = await savedView.restore();
     if (mounted && value != null) {
@@ -88,8 +93,11 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
+  // Remember the current category and sort preferences.
   void _saveView() => savedView.save(category, ascending);
+  // Read the current time for stock and expiry checks.
   DateTime get now => widget.now?.call() ?? DateTime.now();
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     search.dispose();
@@ -97,6 +105,7 @@ class _ShopScreenState extends State<ShopScreen> {
     super.dispose();
   }
 
+  // Open the cart for the current shop.
   void openCart() {
     if (widget.onOpenCart != null) {
       widget.onOpenCart!();
@@ -108,6 +117,7 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  // Open the current product or the saved order item.
   void openProduct(InventoryBatch item) {
     if (widget.onOpenProduct != null) {
       widget.onOpenProduct!(item);
@@ -119,6 +129,7 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  // Open Ask StockWise for this shop.
   void openAssistant() {
     if (widget.onOpenAssistant != null) {
       widget.onOpenAssistant!();
@@ -130,15 +141,18 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  // Build the shop screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
       builder: (context) => Scaffold(
         body: SafeArea(
           bottom: false,
+          // Follow category names and archive-state changes.
           child: StreamBuilder<List<StoreCategory>>(
             stream: categories,
             builder: (context, categorySnapshot) =>
+                // Follow live stock quantities, prices, and expiry updates.
                 StreamBuilder<List<InventoryBatch>>(
                   stream: inventory,
                   builder: (context, snapshot) => _content(
@@ -168,6 +182,7 @@ class _ShopScreenState extends State<ShopScreen> {
     ),
   );
 
+  // Build product sections after applying the current filters.
   Widget _content(
     BuildContext context,
     AsyncSnapshot<List<InventoryBatch>> snapshot,
@@ -272,6 +287,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Apply the category, expiry, and sort filters.
                 InventoryFilters(
                   ids: ids,
                   records: records,
@@ -291,6 +307,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   compact: true,
                   customerStyle: true,
                 ),
+                // Explain when a saved catalogue snapshot is being displayed.
                 const CatalogueCacheNotice(horizontalMargin: 0),
                 const SizedBox(height: 16),
                 ShopAssistantBanner(onTap: openAssistant),
@@ -357,6 +374,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   )
                 else ...[
                   if (promotions.isNotEmpty) ...[
+                    // Label the next product group.
                     ShopSectionTitle(
                       'On Promotion',
                       subtitle: 'Good finds at a better price',
@@ -389,6 +407,7 @@ class _ShopScreenState extends State<ShopScreen> {
                     const SizedBox(height: 26),
                   ],
                   if (regular.isNotEmpty) ...[
+                    // Label the next product group.
                     ShopSectionTitle('Everyday Products'),
                     const SizedBox(height: 12),
                   ],
@@ -426,6 +445,8 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
+  // Build the shop title, shortcuts, and search box.
+  // Show the page title, shop name, and header actions.
   Widget _header(BuildContext context) => InventoryHeader(
     title: 'Shop',
     storeName: StoreSession.instance.store?.name ?? 'Your store',
@@ -442,6 +463,7 @@ class _ShopScreenState extends State<ShopScreen> {
       children: [
         widget.chatButton ?? const StoreChatButton(inventoryStyle: true),
         const SizedBox(width: 6),
+        // Refresh this section when its live data changes.
         StreamBuilder<int>(
           stream: cartCount,
           builder: (context, snapshot) => Badge(
@@ -464,6 +486,7 @@ class _ShopScreenState extends State<ShopScreen> {
     ),
   );
 
+  // Build a product card with its add action.
   Widget _product(
     InventoryBatch item,
     List<StoreCategory> records, {
@@ -482,6 +505,7 @@ class _ShopScreenState extends State<ShopScreen> {
     onAdd: () => _add(item),
   );
 
+  // Check whether the product matches the search and filters.
   bool _matches(InventoryBatch item, String effectiveCategory) {
     final query = search.text.trim().toLowerCase();
     if (!item.productName.toLowerCase().contains(query)) {
@@ -497,12 +521,14 @@ class _ShopScreenState extends State<ShopScreen> {
         !day.isAfter(DateUtils.dateOnly(range.end));
   }
 
+  // Clear the search, category, and expiry filters.
   void resetFilters() => setState(() {
     search.clear();
     category = 'all';
     expiryRange = null;
     _saveView();
   });
+  // Open the expiry range selector and apply its result.
   Future<void> _pickExpiryRange(BuildContext context) async {
     FocusScope.of(context).unfocus();
     final today = DateUtils.dateOnly(now);
@@ -515,6 +541,7 @@ class _ShopScreenState extends State<ShopScreen> {
     if (selected != null && mounted) setState(() => expiryRange = selected);
   }
 
+  // Add one available unit and show cart feedback.
   Future<void> _add(InventoryBatch item) async {
     if (adding.contains(item.id)) return;
     setState(() => adding.add(item.id));
@@ -542,6 +569,8 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
+  // Build the navigation links for this role.
+  // Show customer navigation and the current cart count.
   Widget _bottomNav() => CustomerBottomNav(
     cartCountStream: cartCount,
     currentIndex: 0,

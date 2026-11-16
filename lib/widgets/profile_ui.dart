@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'inventory_ui.dart';
 import 'profile_avatar.dart';
 
+// Build the shared profile panel component.
 class ProfilePanel extends StatelessWidget {
   const ProfilePanel({super.key, required this.child, this.padding = 18});
   final Widget child;
   final double padding;
+  // Render the profile panel component.
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
@@ -19,9 +21,11 @@ class ProfilePanel extends StatelessWidget {
   );
 }
 
+// Build the shared profile section component.
 class ProfileSection extends StatelessWidget {
   const ProfileSection(this.title, {super.key});
   final String title;
+  // Render the profile section component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: 22, bottom: 12),
@@ -36,6 +40,7 @@ class ProfileSection extends StatelessWidget {
   );
 }
 
+// Build the shared profile action component.
 class ProfileAction extends StatelessWidget {
   const ProfileAction({
     super.key,
@@ -50,6 +55,7 @@ class ProfileAction extends StatelessWidget {
   final VoidCallback? onTap;
   final String? subtitle;
   final String? trailingLabel;
+  // Render the profile action component.
   @override
   Widget build(BuildContext context) => InkWell(
     onTap: onTap,
@@ -112,6 +118,7 @@ class ProfileAction extends StatelessWidget {
   );
 }
 
+// Build the shared profile notice component.
 class ProfileNotice extends StatelessWidget {
   const ProfileNotice(
     this.message, {
@@ -121,6 +128,7 @@ class ProfileNotice extends StatelessWidget {
   });
   final String message;
   final bool error, busy;
+  // Render the profile notice component.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
@@ -158,6 +166,7 @@ class ProfileNotice extends StatelessWidget {
   );
 }
 
+// Build the shared profile empty component.
 class ProfileEmpty extends StatelessWidget {
   const ProfileEmpty(
     this.title, {
@@ -168,6 +177,7 @@ class ProfileEmpty extends StatelessWidget {
   final String title;
   final String? body;
   final IconData icon;
+  // Render the profile empty component.
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 55),
@@ -202,6 +212,7 @@ class ProfileEmpty extends StatelessWidget {
   );
 }
 
+// Build the shared profile photo component.
 class ProfilePhoto extends StatelessWidget {
   const ProfilePhoto({
     super.key,
@@ -214,6 +225,7 @@ class ProfilePhoto extends StatelessWidget {
   final String? path;
   final Uint8List? preview;
   final double radius;
+  // Render the profile photo component.
   @override
   Widget build(BuildContext context) {
     final words = name
@@ -244,6 +256,7 @@ class ProfilePhoto extends StatelessWidget {
   }
 }
 
+// Build the shared profile identity component.
 class ProfileIdentity extends StatelessWidget {
   const ProfileIdentity({
     super.key,
@@ -256,6 +269,7 @@ class ProfileIdentity extends StatelessWidget {
   });
   final String name, email, role, storeName;
   final String? phone, photo;
+  // Render the profile identity component.
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(24),
@@ -382,6 +396,7 @@ class ProfileIdentity extends StatelessWidget {
       ),
     ),
   );
+  // Show the profile contact details with their icons.
   Widget _contact(IconData icon, String value) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
@@ -402,6 +417,7 @@ class ProfileIdentity extends StatelessWidget {
   );
 }
 
+// Build the shared profile footer component.
 class ProfileFooter extends StatelessWidget {
   const ProfileFooter({
     super.key,
@@ -412,6 +428,7 @@ class ProfileFooter extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool busy;
+  // Render the profile footer component.
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
@@ -423,6 +440,7 @@ class ProfileFooter extends StatelessWidget {
   );
 }
 
+// Confirm before discarding changes or signing out.
 Future<bool> showProfileConfirmation({
   required BuildContext context,
   required String title,
@@ -499,6 +517,7 @@ Future<bool> showProfileConfirmation({
     ) ??
     false;
 
+// Confirm before leaving a form with unsaved changes.
 class ProfileFormPage extends StatefulWidget {
   const ProfileFormPage({
     super.key,
@@ -517,8 +536,11 @@ class ProfileFormPage extends StatefulWidget {
   State<ProfileFormPage> createState() => _ProfileFormPageState();
 }
 
+// Manage the profile form page values and actions.
 class _ProfileFormPageState extends State<ProfileFormPage> {
+  // Keep this component's values, selections, and request state.
   bool allowPop = false, confirming = false;
+  // Confirm before leaving a form with unsaved changes.
   Future<void> leave() async {
     if (widget.busy || confirming) return;
     confirming = true;
@@ -539,6 +561,7 @@ class _ProfileFormPageState extends State<ProfileFormPage> {
     }
   }
 
+  // Render the profile form page component.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(

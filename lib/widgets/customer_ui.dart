@@ -5,10 +5,12 @@ import '../models/app_models.dart';
 import 'glass_bottom_nav.dart';
 import 'inventory_ui.dart';
 
+// Build the shared promotion description component.
 class PromotionDescription extends StatelessWidget {
   const PromotionDescription(this.text, {super.key, this.fontSize = 12});
   final String text;
   final double fontSize;
+  // Render the promotion description component.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -28,6 +30,7 @@ class PromotionDescription extends StatelessWidget {
   );
 }
 
+// Show a short floating success or error message.
 void showCustomerFeedback(
   BuildContext context,
   String message, {
@@ -72,6 +75,7 @@ void showCustomerFeedback(
     );
 }
 
+// Show the product name and an underlined cart link.
 void showAddedToCartFeedback(
   BuildContext context,
   String productName, {
@@ -102,6 +106,7 @@ void showAddedToCartFeedback(
   ),
 );
 
+// Build the shared customer bottom nav component.
 class CustomerBottomNav extends StatefulWidget {
   const CustomerBottomNav({
     super.key,
@@ -118,7 +123,9 @@ class CustomerBottomNav extends StatefulWidget {
   State<CustomerBottomNav> createState() => _CustomerBottomNavState();
 }
 
+// Manage the customer bottom nav values and actions.
 class _CustomerBottomNavState extends State<CustomerBottomNav> {
+  // Keep this component's values, selections, and request state.
   late final Stream<int> source =
       widget.cartCountStream ??
       (Firebase.apps.isEmpty
@@ -126,6 +133,7 @@ class _CustomerBottomNavState extends State<CustomerBottomNav> {
           : FirestoreService.instance.watchCart().map(
               (lines) => lines.fold<int>(0, (sum, line) => sum + line.quantity),
             ));
+  // Render the customer bottom nav component.
   @override
   Widget build(BuildContext context) => StreamBuilder<int>(
     stream: source,
@@ -148,10 +156,13 @@ class _CustomerBottomNavState extends State<CustomerBottomNav> {
   );
 }
 
+// Build the shared product pricing card component.
 class ProductPricingCard extends StatelessWidget {
   const ProductPricingCard({super.key, required this.item});
   final InventoryBatch item;
+  // Format integer cents as a MYR price.
   String money(int cents) => 'RM ${(cents / 100).toStringAsFixed(2)}';
+  // Render the product pricing card component.
   @override
   Widget build(BuildContext context) {
     final discount = item.promotionEnabled && item.promotionPriceCents != null;

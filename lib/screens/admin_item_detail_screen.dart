@@ -12,6 +12,7 @@ import '../widgets/catalogue_cache_notice.dart';
 import 'edit_item_screen.dart';
 import 'product_image_screen.dart';
 
+// Show stock, prices, expiry, and admin item actions.
 class AdminItemDetailScreen extends StatelessWidget {
   const AdminItemDetailScreen({
     super.key,
@@ -34,8 +35,10 @@ class AdminItemDetailScreen extends StatelessWidget {
   final ImageProvider? imageProvider;
   final bool liveUpdates;
   final Stream<InventoryBatch?>? inventoryStream;
+  // Build the admin item detail screen layout.
   @override
   Widget build(BuildContext context) {
+    // Build the role-specific page content.
     Widget content(InventoryBatch value) => _InventoryDetails(
       item: value,
       categoryName: categoryName,
@@ -50,6 +53,7 @@ class AdminItemDetailScreen extends StatelessWidget {
           : inventoryStream,
     );
     if (!liveUpdates && inventoryStream == null) return content(item);
+    // Refresh this section when its live data changes.
     return StreamBuilder<InventoryBatch?>(
       stream:
           inventoryStream ??
@@ -82,6 +86,7 @@ class AdminItemDetailScreen extends StatelessWidget {
   }
 }
 
+// Group the inventory details values and actions.
 class _InventoryDetails extends StatelessWidget {
   const _InventoryDetails({
     required this.item,
@@ -103,10 +108,13 @@ class _InventoryDetails extends StatelessWidget {
   final VoidCallback? onEdit;
   final ImageProvider? imageProvider;
 
+  // Read the category shown below the product image.
   String get category => categoryTitleCase(
     categoryName ?? inventoryCategoryName(item.categoryId, const []),
   );
+  // Format the remaining stock quantity.
   String get quantity => '${item.quantityOnHand} ${item.unitLabel}';
+  // Format the product unit used beside its category.
   String get priceUnit =>
       const {
         'packs': 'pack',
@@ -116,8 +124,10 @@ class _InventoryDetails extends StatelessWidget {
         'units': 'unit',
       }[item.unitLabel.toLowerCase()] ??
       item.unitLabel;
+  // Format integer cents as a MYR price.
   String money(int cents) => 'RM ${(cents / 100).toStringAsFixed(2)}';
 
+  // Build the inventory details layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -126,11 +136,13 @@ class _InventoryDetails extends StatelessWidget {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Inventory Details',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
+              // Explain when a saved catalogue snapshot is being displayed.
               const CatalogueCacheNotice(),
               Expanded(
                 child: ListView(
@@ -248,6 +260,7 @@ class _InventoryDetails extends StatelessWidget {
     ),
   );
 
+  // Place stock quantity and expiry information side by side.
   Widget _stockAndExpiry() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
@@ -272,12 +285,14 @@ class _InventoryDetails extends StatelessWidget {
     ],
   );
 
+  // Show a compact labelled value in the item summary.
   Widget _summaryLine({required double minHeight, required Widget child}) =>
       ConstrainedBox(
         constraints: BoxConstraints(minHeight: minHeight),
         child: Align(alignment: Alignment.centerLeft, child: child),
       );
 
+  // Show the remaining quantity and unit.
   Widget _stockBalance() => Container(
     key: const ValueKey('item-stock-summary'),
     padding: const EdgeInsets.all(16),
@@ -325,6 +340,7 @@ class _InventoryDetails extends StatelessWidget {
     ),
   );
 
+  // Show the expiry date and remaining-day label.
   Widget _expiry() {
     final days = item.daysUntilExpiry;
     final status = days < 0
@@ -409,8 +425,10 @@ class _InventoryDetails extends StatelessWidget {
     );
   }
 
+  // Show regular and promotion prices.
   Widget _pricing() => ProductPricingCard(item: item);
 
+  // Show the stored product information.
   Widget _details() => Card(
     child: Padding(
       padding: const EdgeInsets.all(18),
@@ -438,6 +456,7 @@ class _InventoryDetails extends StatelessWidget {
     ),
   );
 
+  // Show the action for discarding remaining stock.
   Widget _discardCard(BuildContext context) {
     final enabled = item.availableQuantity > 0;
     final color = enabled ? InventoryColors.error : InventoryColors.muted;
@@ -489,6 +508,7 @@ class _InventoryDetails extends StatelessWidget {
     );
   }
 
+  // Open the discard dialog for this batch.
   Future<void> _discard(BuildContext context) async {
     final discarded = await showDialog<int>(
       context: context,
@@ -521,9 +541,11 @@ class _InventoryDetails extends StatelessWidget {
   }
 }
 
+// Group the detail row values and actions.
 class _DetailRow extends StatelessWidget {
   const _DetailRow({required this.label, required this.value});
   final String label, value;
+  // Build the detail row layout.
   @override
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -552,6 +574,7 @@ class _DetailRow extends StatelessWidget {
   );
 }
 
+// Group the item photo values and actions.
 class _ItemPhoto extends StatefulWidget {
   const _ItemPhoto({required this.title, this.imagePath, this.imageProvider});
   final String title;
@@ -561,8 +584,11 @@ class _ItemPhoto extends StatefulWidget {
   State<_ItemPhoto> createState() => _ItemPhotoState();
 }
 
+// Manage the item photo values and actions.
 class _ItemPhotoState extends State<_ItemPhoto> {
+  // Keep this component's values, selections, and request state.
   late final Future<ImageProvider?> image = _load();
+  // Load the stored image or attachment for display.
   Future<ImageProvider?> _load() async {
     if (widget.imageProvider != null) return widget.imageProvider;
     final path = widget.imagePath;
@@ -573,6 +599,7 @@ class _ItemPhotoState extends State<_ItemPhoto> {
     return url == null ? null : NetworkImage(url);
   }
 
+  // Show fallback artwork when no image is available.
   Widget placeholder() => const Center(
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -587,6 +614,7 @@ class _ItemPhotoState extends State<_ItemPhoto> {
     ),
   );
 
+  // Build the item photo layout.
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(16),
@@ -596,6 +624,7 @@ class _ItemPhotoState extends State<_ItemPhoto> {
         key: const ValueKey('item-details-photo'),
         height: 204,
         width: double.infinity,
+        // Show loading, errors, or the completed request.
         child: FutureBuilder<ImageProvider?>(
           future: image,
           builder: (context, snapshot) {
@@ -659,6 +688,7 @@ class _ItemPhotoState extends State<_ItemPhoto> {
   );
 }
 
+// Group the discard stock dialog values and actions.
 class _DiscardStockDialog extends StatefulWidget {
   const _DiscardStockDialog({
     required this.item,
@@ -672,11 +702,14 @@ class _DiscardStockDialog extends StatefulWidget {
   State<_DiscardStockDialog> createState() => _DiscardStockDialogState();
 }
 
+// Manage the discard stock dialog values and actions.
 class _DiscardStockDialogState extends State<_DiscardStockDialog> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   final quantity = TextEditingController(text: '1');
   StreamSubscription<InventoryBatch?>? subscription;
   late int available = widget.item.availableQuantity;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -687,6 +720,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
 
   bool saving = false;
   String? error;
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     subscription?.cancel();
@@ -694,6 +728,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
     super.dispose();
   }
 
+  // Validate and submit the quantity to discard.
   Future<void> discard() async {
     if (saving || !(form.currentState?.validate() ?? false)) return;
     final value = int.parse(quantity.text);
@@ -736,6 +771,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
     }
   }
 
+  // Build the discard stock dialog layout.
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !saving,
@@ -744,6 +780,7 @@ class _DiscardStockDialogState extends State<_DiscardStockDialog> {
       title: const Text('Discard Stock'),
       content: SizedBox(
         width: 350,
+        // Group the inputs under one validation key.
         child: Form(
           key: form,
           child: Column(

@@ -8,6 +8,7 @@ const servicePattern = new RegExp(`^(?:${patterns.tollFree}|${patterns.premiumRa
 const allowedCharacters = /^[+0-9 ()-]+$/;
 const balancedParentheses = /^[^()]*(?:\([^()]*[0-9][^()]*\)[^()]*)*$/;
 
+// Convert supported Malaysian numbers to one canonical format.
 function normalizeMalaysianPhone(value) {
   if (typeof value !== 'string') return null;
   const raw = value.trim();
@@ -24,8 +25,10 @@ function normalizeMalaysianPhone(value) {
   return nationalPattern.test(national) ? `+60${national}` : null;
 }
 
+// Check the canonical number against Malaysian phone patterns.
 function isValidMalaysianPhone(value) {
   return normalizeMalaysianPhone(value) !== null;
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {normalizeMalaysianPhone, isValidMalaysianPhone, malaysianNationalNumberPattern, patterns};

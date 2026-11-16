@@ -20,17 +20,19 @@ const actionUrl = origin + '/';
 fs.writeFileSync(path.join(root, 'functions/auth_web_config.json'), JSON.stringify({apiKey})+'\n');
 fs.writeFileSync(path.join(root, 'web_auth/config.js'), 'window.STOCKWISE_AUTH_CONFIG = '+JSON.stringify({apiKey, authDomain})+';\n');
 fs.copyFileSync(path.join(root, 'assets/branding/auth_logo.png'), path.join(root, 'web_auth/auth_logo.png'));
+// Stop here when only public web assets are requested.
 if (process.argv.includes('--assets')) {
   console.log('Public verification page assets generated. No cloud settings changed.');
   return;
 }
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 
 (async () => {
   const client = new OAuth2Client();
   client.setCredentials({access_token: await token()});
   const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient: client})});
   const auth = getAuth();
+  // Keep the original legacy-account rollout cutoff.
   const policy = db.collection('authPolicies').doc('emailVerification');
   if (!process.argv.includes('--apply')) {
     const existing = await policy.get();
@@ -55,6 +57,7 @@ initializeApp({projectId: project, credential: {getAccessToken: async () => ({ac
     }
     pageToken = page.pageToken;
   } while (pageToken);
+  // Update the supported Firebase verification sender settings.
   const configUrl = `https://identitytoolkit.googleapis.com/admin/v2/projects/${project}/config`;
   const before = await api(configUrl);
   // The managed sender allows its display name to be set. This project's
@@ -66,6 +69,7 @@ initializeApp({projectId: project, credential: {getAccessToken: async () => ({ac
   if (after.notification?.sendEmail?.verifyEmailTemplate?.senderDisplayName !== 'StockWise') {
     throw Error('Verification email settings did not match after saving.');
   }
+  // Ignore the informational timestamp when comparing Auth policies.
   const policySettings = ({lastUpdateTime, ...settings} = {}) => settings;
   // Identity Platform changes this informational timestamp for any config update.
   if (!isDeepStrictEqual(policySettings(after.passwordPolicyConfig), policySettings(before.passwordPolicyConfig))

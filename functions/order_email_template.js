@@ -1,14 +1,17 @@
 const {DateTime} = require('luxon');
 
+// Escape text before inserting it into email HTML.
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
+// Format integer cents as a MYR amount.
 const money = cents => Number.isSafeInteger(cents) ? `MYR ${(cents / 100).toFixed(2)}` : '—';
 const statuses = {
   to_pay: 'To Pay', to_ship: 'To Ship', to_receive: 'To Receive',
   completed: 'Completed', cancelled: 'Cancelled', refunded: 'Refunded',
 };
 
+// Build the StockWise order summary email and plain-text alternative.
 function orderConfirmation(shop, order, items, {customerName, imagesByPath = new Map(), orderId = '', preview = false} = {}) {
   const shopName = shop.name || 'Your StockWise store';
   const number = order.orderNumber || orderId;
@@ -57,6 +60,7 @@ function orderConfirmation(shop, order, items, {customerName, imagesByPath = new
       <td width="110" align="right" valign="top" style="width:110px;padding:18px 0;border-bottom:1px solid #E4E8E2;font-size:15px;line-height:23px;font-weight:bold;color:#244B39;">${money(item.lineTotalCents)}</td>
     </tr>`;
   }).join('');
+  // Build one labelled row in the email summary.
   const metadataRow = (label, value) => `<tr><td valign="top" style="padding:5px 12px 5px 0;font-size:13px;line-height:20px;color:#687368;">${label}</td><td align="right" valign="top" style="padding:5px 0;font-size:13px;line-height:20px;font-weight:bold;color:#244B39;overflow-wrap:anywhere;">${escapeHtml(value)}</td></tr>`;
 
   // Table layout and inline styles keep the message readable in Gmail and Outlook.
@@ -103,4 +107,5 @@ function orderConfirmation(shop, order, items, {customerName, imagesByPath = new
   return {subject: `${preview ? '[TEST] ' : ''}${String(shopName).replace(/[\r\n]/g, ' ')}: order ${String(number).replace(/[\r\n]/g, ' ')} placed successfully`, text, html};
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {orderConfirmation};

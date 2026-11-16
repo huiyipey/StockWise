@@ -4,16 +4,20 @@ const postcodes = require('./data/malaysia_postcodes.json');
 const {titleCase,operatingHours}=require('./commerce_logic');
 const {isActiveStoreAdmin}=require('./store_roles');
 
+// Normalize the shop name for display and validation.
 function displayStoreName(value) {
   return typeof value === 'string' ? titleCase(value) : '';
 }
+// Normalize the shop name for duplicate checks.
 function normalizedStoreName(value) {
   return displayStoreName(value).normalize('NFKC').toLowerCase();
 }
+// Hash the normalized name used by the reservation document.
 function storeNameKey(value) {
   return createHash('sha256').update(normalizedStoreName(value)).digest('hex');
 }
 
+// Validate shop name, address, hours, and closed weekdays.
 function storeDetails(data) {
   const name = displayStoreName(data?.name);
   let shopAddress = typeof data?.shopAddress === 'string' ? data.shopAddress.trim() : '';
@@ -23,6 +27,7 @@ function storeDetails(data) {
   }
   if (data?.address !== undefined) {
     const input = data.address;
+    // Validate and trim a bounded text field.
     const text = key => typeof input?.[key] === 'string' ? input[key].trim() : '';
     const line1 = text('line1');
     const line2 = text('line2');
@@ -46,6 +51,7 @@ function storeDetails(data) {
   return {name, shopAddress, address};
 }
 
+// Reserve the shop name and create its Admin membership atomically.
 function createStoreHandler({db, auth, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -60,6 +66,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
     const reservation = db.collection('storeNames').doc(nameKey);
     const prefix = name.replace(/[^A-Za-z0-9]/g, '').toUpperCase().padEnd(4, 'X').slice(0, 4);
     const code = `${prefix}-${store.id.slice(0, 4).toUpperCase()}`;
+    // Return the duplicate-shop-name error.
     const duplicate = () => new HttpsError('already-exists', 'This store name already exists. Please choose another name.');
     await db.runTransaction(async tx => {
       const registered = await tx.get(reservation);
@@ -87,15 +94,12 @@ function createStoreHandler({db, auth, serverTimestamp}) {
       for (const category of ['Dairy', 'Bakery', 'Vegetables', 'Fruits', 'Meat', 'Household', 'Others']) {
         const id = category.toLowerCase();
         tx.set(store.collection('categories').doc(id), {
-          storeId: store.id, name: category, slug: id, sortOrder: 0,
+          storeId: store.id, name: category, sortOrder: 0,
           isActive: true, createdAt: timestamp, updatedAt: timestamp,
         });
       }
-      tx.set(store.collection('settings').doc('inventory'), {
-        storeId: store.id, expiryWarningDays: [2, 3, 7], updatedAt: timestamp,
-      });
       tx.set(store.collection('settings').doc('commerce'), {
-        storeId: store.id, currency: 'MYR', deliveryFeeMode:'fixed', deliveryFeeCents: 500, postcodeFees:{}, minimumOrderCents: 0, updatedAt: timestamp,
+        storeId: store.id, currency: 'MYR', deliveryFeeMode:'fixed', deliveryFeeCents: 500, postcodeFees:{}, updatedAt: timestamp,
       });
       tx.set(db.collection('users').doc(owner.uid), {activeStoreId: store.id, updatedAt: timestamp}, {merge: true});
     });
@@ -103,6 +107,7 @@ function createStoreHandler({db, auth, serverTimestamp}) {
   };
 }
 
+// Update shop details and name reservations atomically.
 function updateStoreHandler({db, auth, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -117,6 +122,7 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
     const store = stores.doc(storeId);
     const normalized = normalizedStoreName(name);
     const nameKey = storeNameKey(name);
+    // Reserve the normalized name and save the shop changes together.
     return db.runTransaction(async tx => {
       const current = await tx.get(store);
       if (!current.exists) throw new HttpsError('not-found', 'This store no longer exists.');
@@ -173,4 +179,5 @@ function updateStoreHandler({db, auth, serverTimestamp}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {createStoreHandler, updateStoreHandler, normalizedStoreName, storeNameKey};

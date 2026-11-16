@@ -3,11 +3,13 @@ import '../services/firestore_service.dart';
 import 'inventory_ui.dart';
 import 'order_ui.dart';
 
+// Read the unavailable promotion messages from the quote.
 List<Map<String, dynamic>> promotionWarnings(Map<String, dynamic>? quote) => [
   for (final value in quote?['promotionWarnings'] as List? ?? const [])
     if (value is Map) Map<String, dynamic>.from(value),
 ];
 
+// Summarize the server-calculated cart totals.
 Map? cartQuoteSummary(Map<String, dynamic>? quote, String batchId) {
   for (final value in quote?['cartSummaries'] as List? ?? const []) {
     if (value is Map && value['batchId'] == batchId) return value;
@@ -15,6 +17,7 @@ Map? cartQuoteSummary(Map<String, dynamic>? quote, String batchId) {
   return null;
 }
 
+// Ask whether checkout should continue without unavailable offers.
 Future<bool> confirmUnavailablePromotions(
   BuildContext context,
   Map<String, dynamic> quote, {
@@ -74,9 +77,11 @@ Future<bool> confirmUnavailablePromotions(
       false;
 }
 
+// Build the shared quote lines component.
 class QuoteLines extends StatelessWidget {
   const QuoteLines({super.key, this.quote});
   final Map<String, dynamic>? quote;
+  // Render the quote lines component.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,6 +95,7 @@ class QuoteLines extends StatelessWidget {
             (raw['unitPriceCents'] ?? raw['lineTotalCents'] ?? 0) == 0)
           Padding(
             padding: const EdgeInsets.only(top: 12),
+            // Group the related order details in one card.
             child: OrderPanel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,6 +122,7 @@ class QuoteLines extends StatelessWidget {
   );
 }
 
+// Build the shared cart quote component.
 class CartQuote extends StatefulWidget {
   const CartQuote({super.key, required this.revision});
   final String revision;
@@ -123,10 +130,13 @@ class CartQuote extends StatefulWidget {
   State<CartQuote> createState() => _CartQuoteState();
 }
 
+// Manage the cart quote values and actions.
 class _CartQuoteState extends State<CartQuote> {
+  // Keep this component's values, selections, and request state.
   late Future<Map<String, dynamic>> quote = FirestoreService.instance.quoteCart(
     '',
   );
+  // Refresh values when the parent supplies new data.
   @override
   void didUpdateWidget(CartQuote oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -135,6 +145,7 @@ class _CartQuoteState extends State<CartQuote> {
     }
   }
 
+  // Render the cart quote component.
   @override
   Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>>(
     future: quote,

@@ -3,6 +3,7 @@ import '../models/report_email_schedule.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
+// Choose independent email schedules for sales and waste.
 class ReportEmailSettingsScreen extends StatefulWidget {
   const ReportEmailSettingsScreen({
     super.key,
@@ -16,11 +17,14 @@ class ReportEmailSettingsScreen extends StatefulWidget {
       _ReportEmailSettingsScreenState();
 }
 
+// Manage the report email settings screen values and actions.
 class _ReportEmailSettingsScreenState extends State<ReportEmailSettingsScreen> {
+  // Keep this component's values, selections, and request state.
   late final sales = {...widget.initial.sales},
       waste = {...widget.initial.waste};
   bool saving = false;
   String? error;
+  // Save the selected sales and waste email schedules.
   Future<void> submit() async {
     setState(() {
       saving = true;
@@ -41,6 +45,7 @@ class _ReportEmailSettingsScreenState extends State<ReportEmailSettingsScreen> {
     }
   }
 
+  // Build the report email settings screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Scaffold(
@@ -59,9 +64,11 @@ class _ReportEmailSettingsScreenState extends State<ReportEmailSettingsScreen> {
               ),
             ),
             for (final kind in ['sales', 'waste']) ...[
+              // Group related account or shop settings.
               ProfileSection(
                 kind == 'sales' ? 'Sales Reports' : 'Waste Reports',
               ),
+              // Keep related profile details together.
               ProfilePanel(
                 padding: 0,
                 child: Column(

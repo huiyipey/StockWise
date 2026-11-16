@@ -15,6 +15,7 @@ import 'profile_screen.dart';
 import 'shop_screen.dart';
 import 'waste_analysis_screen.dart';
 
+// Search and filter orders for the selected shop.
 class OrdersScreen extends StatefulWidget {
   final bool isAdmin;
   final String initialStatus;
@@ -31,22 +32,27 @@ class OrdersScreen extends StatefulWidget {
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
+// Manage the orders screen values and actions.
 class _OrdersScreenState extends State<OrdersScreen> {
+  // Keep this component's values, selections, and request state.
   late String status = widget.initialStatus;
   String query = '';
   final search = TextEditingController();
   late Stream<List<StoreOrder>> orders = watch();
 
+  // Watch all shop orders for Admin or own orders for Customer.
   Stream<List<StoreOrder>> watch() =>
       widget.orderSource?.call() ??
       FirestoreService.instance.watchOrders(admin: widget.isAdmin);
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     search.dispose();
     super.dispose();
   }
 
+  // Build the orders screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -55,6 +61,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: widget.isAdmin ? 'Orders' : 'Order History',
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
@@ -100,6 +107,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // Filter orders by the selected status.
                     OrderStatusFilter(
                       selected: status,
                       onSelected: (value) => setState(() => status = value),
@@ -108,6 +116,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ),
               Expanded(
+                // Follow the latest order records and states.
                 child: StreamBuilder<List<StoreOrder>>(
                   stream: orders,
                   builder: (context, snapshot) {
@@ -216,8 +225,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
     ),
   );
 
+  // Build the navigation links for this role.
   Widget _bottomNav(BuildContext context) {
     if (widget.isAdmin) {
+      // Show the admin navigation destinations.
       return InventoryBottomNav(
         currentIndex: 3,
         items: [
@@ -265,6 +276,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ],
       );
     }
+    // Show customer navigation and the current cart count.
     return CustomerBottomNav(
       currentIndex: 2,
       items: [

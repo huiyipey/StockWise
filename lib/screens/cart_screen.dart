@@ -18,6 +18,7 @@ import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'shop_screen.dart';
 
+// Show cart quantities, promotion prices, and checkout actions.
 class CartScreen extends StatefulWidget {
   const CartScreen({
     super.key,
@@ -36,7 +37,9 @@ class CartScreen extends StatefulWidget {
   State<CartScreen> createState() => _CartScreenState();
 }
 
+// Manage the cart screen values and actions.
 class _CartScreenState extends State<CartScreen> {
+  // Keep this component's values, selections, and request state.
   final pending = <String>{};
   late final cart = (widget.cartStream ?? FirestoreService.instance.watchCart())
       .asBroadcastStream(onCancel: (subscription) => subscription.cancel());
@@ -44,6 +47,7 @@ class _CartScreenState extends State<CartScreen> {
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   String? quoteKey;
   Future<Map<String, dynamic>>? quote;
+  // Build the cart screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -52,12 +56,15 @@ class _CartScreenState extends State<CartScreen> {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Cart',
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
               ),
+              // Explain when a saved catalogue snapshot is being displayed.
               const CatalogueCacheNotice(),
               Expanded(
+                // Follow this customer cart contents and quantities.
                 child: StreamBuilder<List<CartLine>>(
                   stream: cart,
                   builder: (context, snapshot) {
@@ -83,6 +90,7 @@ class _CartScreenState extends State<CartScreen> {
                         ),
                       );
                     }
+                    // Refresh this section when its live data changes.
                     return StreamBuilder<List<InventoryBatch>>(
                       stream: inventory,
                       builder: (context, stock) {
@@ -127,6 +135,7 @@ class _CartScreenState extends State<CartScreen> {
                               (widget.quoteLoader ??
                               () => FirestoreService.instance.quoteCart(''))();
                         }
+                        // Show loading, errors, or the completed request.
                         return FutureBuilder<Map<String, dynamic>>(
                           future: quote,
                           builder: (context, result) => _list(
@@ -152,6 +161,7 @@ class _CartScreenState extends State<CartScreen> {
     ),
   );
 
+  // Build the cart contents and totals.
   Widget _list(
     BuildContext context,
     List<CartLine> lines,
@@ -161,6 +171,7 @@ class _CartScreenState extends State<CartScreen> {
     bool loading = false,
     bool failed = false,
   }) {
+    // Use the quoted line price when it is available.
     int lineTotal(CartLine line) {
       final summary = cartQuoteSummary(pricing, line.batchId);
       if (summary != null) return (summary['totalCents'] as num).toInt();
@@ -295,6 +306,7 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  // Confirm promotion changes before opening checkout.
   Future<void> _checkout(
     BuildContext context,
     List<CartLine> lines,
@@ -319,6 +331,7 @@ class _CartScreenState extends State<CartScreen> {
     if (mounted) setState(() => quoteKey = null);
   }
 
+  // Build one cart product with its current price.
   Widget _line(
     BuildContext context,
     CartLine line,
@@ -448,6 +461,7 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  // Show quantity controls and the remove action.
   Widget _controls(
     BuildContext context,
     CartLine line,
@@ -539,6 +553,7 @@ class _CartScreenState extends State<CartScreen> {
       color: InventoryColors.muted,
       decoration: TextDecoration.lineThrough,
     );
+    // Measure the text before choosing a compact layout.
     Size measure(String label, TextStyle style) {
       final painter = TextPainter(
         text: TextSpan(text: label, style: style),
@@ -636,6 +651,7 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  // Remove this cart line after the requested action.
   Future<void> _remove(BuildContext context, CartLine line) async {
     if (pending.contains(line.id)) return;
     if (!await showOrderConfirmation(
@@ -670,6 +686,7 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  // Save the selected cart quantity within stock limits.
   Future<void> _quantity(
     BuildContext context,
     CartLine line,
@@ -693,6 +710,8 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
+  // Build the navigation links for this role.
+  // Show customer navigation and the current cart count.
   Widget _bottomNav(BuildContext context) => CustomerBottomNav(
     cartCountStream: cart.map(
       (lines) => lines.fold<int>(0, (sum, line) => sum + line.quantity),

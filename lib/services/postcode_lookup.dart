@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+// Look up Malaysian city and state values from bundled data.
 class PostcodeLocation {
   const PostcodeLocation({required this.city, required this.state});
   final String city;
@@ -14,6 +15,7 @@ typedef PostcodeLookup = Future<PostcodeLocation?> Function(String postcode);
 class MalaysianPostcodes {
   static Map<String, dynamic>? _index;
 
+  // Read the matching city and state from bundled postcode data.
   static Future<PostcodeLocation?> lookup(String postcode) async {
     if (_index == null) {
       final bytes = await rootBundle.load(

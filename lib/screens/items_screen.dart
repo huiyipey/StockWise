@@ -17,6 +17,7 @@ import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
 import 'category_management_screen.dart';
 
+// Search and filter the admin inventory list.
 class ItemsScreen extends StatefulWidget {
   const ItemsScreen({super.key, this.inventoryStream, this.categoryStream});
   final Stream<List<InventoryBatch>>? inventoryStream;
@@ -25,18 +26,22 @@ class ItemsScreen extends StatefulWidget {
   State<ItemsScreen> createState() => _ItemsScreenState();
 }
 
+// Manage the items screen values and actions.
 class _ItemsScreenState extends State<ItemsScreen> {
+  // Keep this component's values, selections, and request state.
   final searchController = TextEditingController();
   String query = '', category = 'all';
   DateTimeRange? expiryRange;
   bool expiryAscending = true;
   final savedView = SavedCatalogueView('inventory');
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     _restoreView();
   }
 
+  // Restore the saved category and sort preferences.
   Future<void> _restoreView() async {
     final value = await savedView.restore();
     if (mounted && value != null) {
@@ -47,17 +52,20 @@ class _ItemsScreenState extends State<ItemsScreen> {
     }
   }
 
+  // Remember the current category and sort preferences.
   void _saveView() => savedView.save(category, expiryAscending);
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   late final categories =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     searchController.dispose();
     super.dispose();
   }
 
+  // Scan a barcode before opening or filling the item editor.
   Future<void> _scanBarcode() async {
     FocusScope.of(context).unfocus();
     final value = await Navigator.push<String>(
@@ -72,6 +80,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
     }
   }
 
+  // Build the items screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -80,14 +89,18 @@ class _ItemsScreenState extends State<ItemsScreen> {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Inventory',
                 storeName: StoreSession.instance.store?.name ?? 'StockWise',
               ),
+              // Explain when a saved catalogue snapshot is being displayed.
               const CatalogueCacheNotice(),
               Expanded(
+                // Follow category names and archive-state changes.
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
+                  // Refresh this section when its live data changes.
                   builder: (context, records) => StreamBuilder<List<InventoryBatch>>(
                     stream: inventory,
                     builder: (context, snapshot) {
@@ -172,6 +185,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                             ),
                           ),
                           const SizedBox(height: 16),
+                          // Apply the category, expiry, and sort filters.
                           InventoryFilters(
                             ids: ids,
                             records: records.data ?? [],
@@ -293,6 +307,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                     }
                                     return false;
                                   },
+                                  // Show one stock batch with its expiry and quantity.
                                   child: InventoryBatchTile(
                                     enlarged: true,
                                     item: item,
@@ -356,6 +371,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
     ),
   );
 
+  // Check whether this item matches the selected expiry range.
   bool _inRange(DateTime date) {
     final range = expiryRange;
     if (range == null) return true;
@@ -364,6 +380,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
         !day.isAfter(DateUtils.dateOnly(range.end));
   }
 
+  // Open the expiry range selector and apply its result.
   Future<void> _pickExpiryRange(BuildContext context) async {
     final now = DateTime.now();
     final selected = await showInventoryExpiryRange(
@@ -375,6 +392,8 @@ class _ItemsScreenState extends State<ItemsScreen> {
     if (selected != null && mounted) setState(() => expiryRange = selected);
   }
 
+  // Build the navigation links for this role.
+  // Show the admin navigation destinations.
   Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     currentIndex: 1,
     items: [

@@ -1,3 +1,4 @@
+// Find the Flutter SDK and configure plugin repositories.
 pluginManagement {
     val flutterSdkPath =
         run {
@@ -8,6 +9,7 @@ pluginManagement {
             flutterSdkPath
         }
 
+// Load the Gradle plugins supplied by this Flutter SDK.
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
@@ -17,6 +19,7 @@ pluginManagement {
     }
 }
 
+// Pin the Android, Kotlin, Firebase, and Flutter loader plugins.
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "9.0.1" apply false
@@ -26,4 +29,5 @@ plugins {
     id("org.jetbrains.kotlin.android") version "2.3.20" apply false
 }
 
+// Include the Android application module.
 include(":app")

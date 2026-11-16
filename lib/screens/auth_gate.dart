@@ -8,9 +8,11 @@ import 'email_verification_screen.dart';
 import 'login_screen.dart';
 import 'store_gate_screen.dart';
 
+// Follow sign-in changes and check account entry requirements.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
+  // Build the auth gate layout.
   @override
   Widget build(BuildContext context) => StreamBuilder<User?>(
     stream: FirebaseAuth.instance.authStateChanges(),
@@ -61,18 +63,23 @@ class AccountAccessGate extends StatefulWidget {
   State<AccountAccessGate> createState() => _AccountAccessGateState();
 }
 
+// Manage the account access gate values and actions.
 class _AccountAccessGateState extends State<AccountAccessGate> {
+  // Keep this component's values, selections, and request state.
   late Future<bool> _access;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     _access = widget.canContinue();
   }
 
+  // Reload the account entry check.
   void _refresh() => setState(() {
     _access = widget.canContinue();
   });
 
+  // Build the account access gate layout.
   @override
   Widget build(BuildContext context) => FutureBuilder<bool>(
     future: _access,
@@ -109,14 +116,18 @@ class _AccountAccessGateState extends State<AccountAccessGate> {
   );
 }
 
+// Group the profile gate values and actions.
 class _ProfileGate extends StatefulWidget {
   const _ProfileGate();
   @override
   State<_ProfileGate> createState() => _ProfileGateState();
 }
 
+// Manage the profile gate values and actions.
 class _ProfileGateState extends State<_ProfileGate> {
+  // Keep this component's values, selections, and request state.
   late final _profile = FirestoreService.instance.ensureUserProfile();
+  // Build the profile gate layout.
   @override
   Widget build(BuildContext context) => FutureBuilder<void>(
     future: _profile,

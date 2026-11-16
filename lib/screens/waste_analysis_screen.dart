@@ -8,12 +8,14 @@ import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'report_dashboard.dart';
 
+// Place the report dashboard inside the admin navigation.
 class WasteAnalysisScreen extends StatelessWidget {
   const WasteAnalysisScreen({
     super.key,
     this.dashboard = const ReportDashboard(),
   });
   final Widget dashboard;
+  // Build the waste analysis screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -35,6 +37,8 @@ class WasteAnalysisScreen extends StatelessWidget {
     ),
   );
 
+  // Build the navigation links for this role.
+  // Show the admin navigation destinations.
   Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     currentIndex: 2,
     items: [

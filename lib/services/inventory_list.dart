@@ -1,11 +1,13 @@
 import '../models/app_models.dart';
 
+// Match the product name against the search text.
 bool matchesInventorySearch(InventoryBatch item, String query) {
   final search = query.trim().toLowerCase();
   return item.productName.toLowerCase().contains(search) ||
       (item.barcode?.toLowerCase().contains(search) ?? false);
 }
 
+// Sort inventory by the chosen expiry direction.
 int compareAdminInventory(
   InventoryBatch a,
   InventoryBatch b, {

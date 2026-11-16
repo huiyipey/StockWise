@@ -1,6 +1,7 @@
 const {HttpsError} = require('firebase-functions/v2/https');
 const {isActiveStoreAdmin} = require('./store_roles');
 
+// Create the guarded Admin invitation action.
 function createAdminInviteHandler({db, auth, serverTimestamp}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -17,6 +18,7 @@ function createAdminInviteHandler({db, auth, serverTimestamp}) {
     if (!/^[^@\s/]+@[^@\s/]+\.[^@\s/]+$/.test(email) || email.length > 254) {
       throw new HttpsError('invalid-argument', 'Enter a valid email address.');
     }
+    // Identify an account lookup that found no registered email.
     const missingEmail = () => new HttpsError('not-found',
       'This email does not exist. Please enter a valid email.', {reason: 'email-not-found'});
     let account;
@@ -47,4 +49,5 @@ function createAdminInviteHandler({db, auth, serverTimestamp}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {createAdminInviteHandler};

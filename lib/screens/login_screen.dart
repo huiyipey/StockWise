@@ -7,6 +7,7 @@ import '../services/store_session.dart';
 import '../widgets/auth_ui.dart';
 import 'signup_screen.dart';
 
+// Validate the account email and handle sign-in or password reset.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({
     super.key,
@@ -27,20 +28,25 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+// Manage the login screen values and actions.
 class _LoginScreenState extends State<LoginScreen> {
+  // Keep this component's values, selections, and request state.
   late final _email = TextEditingController(text: widget.initialEmail);
   final _password = TextEditingController();
   String? _error;
   bool _emailInvalid = false, _passwordInvalid = false;
   bool _signingIn = false, _sendingReset = false, _resetSent = false;
   bool _passwordVisible = false;
+  // Check whether an account request is already running.
   bool get _busy => _signingIn || _sendingReset;
 
+  // Clear old errors when the form is edited.
   void _clearFeedback(String _) => setState(() {
     _error = null;
     _emailInvalid = _passwordInvalid = _resetSent = false;
   });
 
+  // Show the message beside the relevant form field.
   void _showError(
     String message, {
     bool email = false,
@@ -52,9 +58,11 @@ class _LoginScreenState extends State<LoginScreen> {
     _resetSent = false;
   });
 
+  // Check the email format before contacting Firebase.
   bool _validEmail(String value) =>
       RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
 
+  // Reject an email that is not registered.
   Future<bool> _checkRegisteredEmail(String email) async {
     try {
       final registered =
@@ -78,6 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return false;
   }
 
+  // Convert Firebase account errors to readable messages.
   void _authError(FirebaseAuthException failure, {bool reset = false}) {
     switch (failure.code) {
       case 'invalid-email':
@@ -110,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Validate the credentials and sign in.
   Future<void> _login() async {
     if (_busy) return;
     final email = _email.text.trim(), password = _password.text;
@@ -159,6 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Check the account before sending a password reset email.
   Future<void> _resetPassword() async {
     if (_busy) return;
     final email = _email.text.trim();
@@ -193,6 +204,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     _email.dispose();
@@ -200,6 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  // Build the login screen layout.
   @override
   Widget build(BuildContext context) => AuthPage(
     footer: AuthAccountLink(
@@ -213,10 +226,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
     ),
     child: AutofillGroup(
+      // Group the authentication form and its heading.
       child: AuthCard(
         title: 'Welcome Back',
         subtitle: 'Sign in to continue to your store.',
         children: [
+          // Enter the email.
           AuthField(
             key: const ValueKey('login-email'),
             controller: _email,
@@ -228,6 +243,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onChanged: _clearFeedback,
           ),
           const SizedBox(height: 20),
+          // Enter the password.
           AuthField(
             key: const ValueKey('login-password'),
             controller: _password,
@@ -246,6 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 12),
           if (_resetSent)
+            // Show confirmation that a reset email was sent.
             const AuthResetConfirmation()
           else if (_error == null && widget.verificationNotice)
             Semantics(
@@ -268,6 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             )
           else
+            // Show the form error beside the relevant input.
             AuthError(_error),
           if (_resetSent) const SizedBox(height: 16),
           Align(
@@ -308,6 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          // Show the form action with its loading state.
           AuthButton(
             label: 'Sign in',
             busyLabel: 'Signing in...',

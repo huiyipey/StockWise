@@ -12,6 +12,7 @@ import '../models/chat_attachment.dart';
 import '../services/chat_attachment_files.dart';
 import '../widgets/chat_attachment_bubble.dart';
 
+// Send messages and attachments in a shop conversation.
 class StoreChatScreen extends StatefulWidget {
   final StoreChatRepository repository;
   final String customerId;
@@ -33,7 +34,9 @@ class StoreChatScreen extends StatefulWidget {
   State<StoreChatScreen> createState() => _StoreChatScreenState();
 }
 
+// Manage the store chat screen values and actions.
 class _StoreChatScreenState extends State<StoreChatScreen> {
+  // Keep this component's values, selections, and request state.
   final draft = TextEditingController();
   final scroll = ScrollController();
   late final messages = widget.repository.watchMessages(widget.customerId);
@@ -49,6 +52,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
   Future<Uint8List>? attachmentPreview;
   bool picking = false;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -64,10 +68,12 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
         );
   }
 
+  // Wait for the displayed messages before marking them read.
   void _scheduleRead() {
     WidgetsBinding.instance.addPostFrameCallback((_) => _markRead());
   }
 
+  // Mark received messages as read for the current viewer.
   Future<void> _markRead() async {
     final row = latest;
     if (!mounted ||
@@ -94,6 +100,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     subscription?.cancel();
@@ -102,6 +109,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
     super.dispose();
   }
 
+  // Save the message and optional attachment, then clear the composer.
   Future<void> _send() async {
     if (sending || picking) return;
     final original = draft.text;
@@ -153,6 +161,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
     }
   }
 
+  // Choose and validate a chat attachment.
   Future<void> _pickAttachment() async {
     if (sending || picking) return;
     FocusScope.of(context).unfocus();
@@ -190,6 +199,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                // Keep related profile details together.
                 ProfilePanel(
                   padding: 0,
                   child: Column(
@@ -258,6 +268,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
     }
   }
 
+  // Build the store chat screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -301,6 +312,7 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
         body: Column(
           children: [
             Expanded(
+              // Follow the messages in this conversation.
               child: StreamBuilder<List<StoreChatMessage>>(
                 stream: messages,
                 builder: (context, snapshot) {
@@ -433,11 +445,13 @@ class _StoreChatScreenState extends State<StoreChatScreen> {
                   horizontal: 12,
                   vertical: 8,
                 ),
+                // Keep related profile details together.
                 child: ProfilePanel(
                   padding: 10,
                   child: Row(
                     children: [
                       if (attachmentPreview != null)
+                        // Show loading, errors, or the completed request.
                         FutureBuilder<Uint8List>(
                           future: attachmentPreview,
                           builder: (context, snapshot) => snapshot.hasData

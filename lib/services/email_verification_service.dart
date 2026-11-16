@@ -5,11 +5,13 @@ import 'package:flutter/foundation.dart';
 const legacyAccountClaim = 'stockwise_legacy_account';
 final verificationSignInEmail = ValueNotifier<String?>(null);
 
+// Accept verified accounts and the supported legacy exemption.
 bool accountCanContinue({
   required bool verified,
   required Map<String, dynamic> claims,
 }) => verified || claims[legacyAccountClaim] == true;
 
+// Check authoritative account verification and manage verification requests.
 class VerificationStatus {
   const VerificationStatus({
     required this.email,
@@ -22,6 +24,7 @@ class VerificationStatus {
   final bool verified, attempted, deliveryFailed;
   final int resendAfter;
 
+  // Read the saved record fields with safe defaults.
   factory VerificationStatus.fromData(dynamic data) {
     if (data is! Map ||
         data['email'] is! String ||
@@ -43,6 +46,7 @@ class VerificationStatus {
   }
 }
 
+// Check authoritative account verification and manage verification requests.
 class VerificationFailure implements Exception {
   const VerificationFailure(
     this.message, {
@@ -55,14 +59,21 @@ class VerificationFailure implements Exception {
   final bool emailInvalid, reauthenticate;
 }
 
+// Define the signup verification operations used by the screen.
 abstract class EmailVerificationClient {
+  // Load the account verification session.
   Future<VerificationStatus> load();
+  // Request a verification email for the current account.
   Future<VerificationStatus> send({String? newEmail});
+  // Refresh and check the account verification status.
   Future<VerificationStatus> check();
+  // Confirm the account password before a protected change.
   Future<void> reauthenticate(String password);
+  // Sign out of the current account.
   Future<void> signOut();
 }
 
+// Check authoritative account verification and manage verification requests.
 class EmailVerificationService implements EmailVerificationClient {
   EmailVerificationService({FirebaseAuth? auth, FirebaseFunctions? functions})
     : _auth = auth ?? FirebaseAuth.instance,
@@ -73,6 +84,7 @@ class EmailVerificationService implements EmailVerificationClient {
   final FirebaseFunctions _functions;
   String? _pendingEmail;
 
+  // Refresh the account and check whether entry is allowed.
   Future<bool> canContinue() async {
     final user = _auth.currentUser;
     if (user == null) return false;
@@ -86,6 +98,7 @@ class EmailVerificationService implements EmailVerificationClient {
     );
   }
 
+  // Call the verification endpoint and normalize its response.
   Future<VerificationStatus> _call(String action, {String? email}) async {
     final sessionUid = _auth.currentUser?.uid;
     try {
@@ -158,13 +171,16 @@ class EmailVerificationService implements EmailVerificationClient {
     }
   }
 
+  // Read the pending verification session from the server.
   @override
   Future<VerificationStatus> load() => _call('status');
 
+  // Send or resend verification using the current account email.
   @override
   Future<VerificationStatus> send({String? newEmail}) =>
       _call(newEmail == null ? 'send' : 'change', email: newEmail);
 
+  // Refresh the Auth user and token before checking verification.
   @override
   Future<VerificationStatus> check() async {
     final user = _auth.currentUser;
@@ -200,6 +216,7 @@ class EmailVerificationService implements EmailVerificationClient {
     }
   }
 
+  // Confirm the account password before a protected change.
   @override
   Future<void> reauthenticate(String password) async {
     final user = _auth.currentUser;
@@ -219,6 +236,7 @@ class EmailVerificationService implements EmailVerificationClient {
     }
   }
 
+  // Sign out of the current account.
   @override
   Future<void> signOut() async {
     verificationSignInEmail.value = null;

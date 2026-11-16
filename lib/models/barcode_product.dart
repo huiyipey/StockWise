@@ -28,6 +28,7 @@ class BarcodeProduct {
     this.updatedAt,
   });
 
+  // Read the saved record fields with safe defaults.
   factory BarcodeProduct.fromData(
     String id,
     String storeId,
@@ -65,6 +66,7 @@ BarcodeProduct? latestBarcodeProduct(Iterable<BarcodeProduct> products) {
 typedef BarcodeProductLookup = Future<BarcodeProduct?> Function(String barcode);
 typedef InventoryItemSaver = Future<void> Function(InventoryItemInput input);
 
+// Keep the inventory item input values used by the app.
 class InventoryItemInput {
   final InventoryBatch? existing;
   final BarcodeProduct? reusedProduct;

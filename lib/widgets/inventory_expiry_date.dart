@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'inventory_ui.dart';
 
+// Open the shared expiry-date calendar and text-entry dialog.
 Future<DateTime?> showInventoryExpiryDate({
   required BuildContext context,
   required DateTime initialDate,
@@ -18,6 +19,7 @@ Future<DateTime?> showInventoryExpiryDate({
   ),
 );
 
+// Build the shared expiry date dialog component.
 class _ExpiryDateDialog extends StatefulWidget {
   const _ExpiryDateDialog({
     required this.initial,
@@ -31,11 +33,14 @@ class _ExpiryDateDialog extends StatefulWidget {
   State<_ExpiryDateDialog> createState() => _ExpiryDateDialogState();
 }
 
+// Manage the expiry date dialog values and actions.
 class _ExpiryDateDialogState extends State<_ExpiryDateDialog> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   late DateTime selected = widget.initial;
   bool input = false;
 
+  // Return the selected valid expiry date.
   void confirm() {
     if (input) {
       if (!form.currentState!.validate()) return;
@@ -44,12 +49,14 @@ class _ExpiryDateDialogState extends State<_ExpiryDateDialog> {
     Navigator.pop(context, selected);
   }
 
+  // Switch between calendar and manual date entry.
   void toggleEntry() {
     if (input && form.currentState!.validate()) form.currentState!.save();
     FocusScope.of(context).unfocus();
     setState(() => input = !input);
   }
 
+  // Render the expiry date dialog component.
   @override
   Widget build(BuildContext context) {
     final locale = MaterialLocalizations.of(context);
@@ -116,6 +123,7 @@ class _ExpiryDateDialogState extends State<_ExpiryDateDialog> {
                     if (input)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+                        // Group the inputs under one validation key.
                         child: Form(
                           key: form,
                           child: InputDatePickerFormField(
@@ -174,20 +182,26 @@ class _ExpiryCalendar extends StatefulWidget {
   State<_ExpiryCalendar> createState() => _ExpiryCalendarState();
 }
 
+// Manage the expiry calendar values and actions.
 class _ExpiryCalendarState extends State<_ExpiryCalendar> {
+  // Keep this component's values, selections, and request state.
   late DateTime month = DateTime(widget.selected.year, widget.selected.month);
   bool choosingYear = false;
 
+  // Find the earliest month allowed by this calendar.
   DateTime get firstMonth =>
       DateTime(widget.firstDate.year, widget.firstDate.month);
+  // Find the latest month allowed by this calendar.
   DateTime get lastMonth =>
       DateTime(widget.lastDate.year, widget.lastDate.month);
 
+  // Move the displayed calendar to this month.
   void showMonth(DateTime value) {
     if (value.isBefore(firstMonth) || value.isAfter(lastMonth)) return;
     setState(() => month = value);
   }
 
+  // Render the expiry calendar component.
   @override
   Widget build(BuildContext context) {
     final locale = MaterialLocalizations.of(context);

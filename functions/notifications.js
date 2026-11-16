@@ -2,8 +2,13 @@ const {createHash}=require('node:crypto');
 const {HttpsError}=require('firebase-functions/v2/https');
 const {shelfLife,expiryStage,titleCase}=require('./commerce_logic');
 const {isActiveStoreAdmin}=require('./store_roles');
+const {isImportedDemoOrder}=require('./demo_data');
+const {inventorySnapshot}=require('./inventory_snapshot');
+// Hash identifiers used by notification delivery records.
 const key=token=>createHash('sha256').update(token).digest('hex');
+// Create shop and account notification handlers.
 function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
+  // Read eligible device tokens after applying account preferences.
   async function tokens(uid,type){
     const profile=(await db.collection('users').doc(uid).get()).data()||{};
     const enabled=type==='expiry'?profile.preferences?.expiryAlerts:type==='promotion'?profile.preferences?.promotions:(profile.preferences?.orderUpdates??profile.preferences?.orders);if(enabled===false)return [];
@@ -12,6 +17,7 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
       const owner=await db.collection('pushInstallations').doc(key(token)).get();if(owner.data()?.uid===uid)result.push(token);}
     return result;
   }
+  // Send the alert and remove device tokens rejected by FCM.
   async function notify(uid,title,body,data,type){
     const list=await tokens(uid,type);if(!list.length)return;
     for(let i=0;i<list.length;i+=500){const chunk=list.slice(i,i+500);const reply=await messaging.sendEachForMulticast({tokens:chunk,notification:{title,body},
@@ -21,23 +27,27 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
       }
     }
   }
+  // Claim the event before sending its notification.
   async function once(store, id, action) {
     const ref=store.collection('pushDeliveries').doc(key(id));
     const claimed=await db.runTransaction(async tx=>{const saved=await tx.get(ref);if(saved.exists)return false;tx.set(ref,{createdAt:serverTimestamp()});return true;});
     if(!claimed)return;
     try{await action();}catch(e){await ref.delete();throw e;}
   }
+  // Find the active Admin accounts of this shop.
   async function recipients(store){const members=await store.collection('members').get();return members.docs.filter(m=>isActiveStoreAdmin(m.data())).map(m=>m.id);}
+  // Archive expired inventory and record its remaining stock as waste.
   async function cleanup(store,ref,now=new Date()){
     return db.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)return;
       const b=snap.data();if(!b.expiryAt?.toDate||b.expiryAt.toDate()>now)return;
-      tx.set(store.collection('inventoryArchive').doc(ref.id),{...b,removedAt:serverTimestamp(),removalReason:'expired'});
+      tx.set(store.collection('inventoryArchive').doc(ref.id),{...inventorySnapshot(b),removedAt:serverTimestamp(),removalReason:'expired'});
       if(b.quantityOnHand>0)tx.set(store.collection('inventoryEvents').doc(`expiry-${ref.id}`),{storeId:store.id,batchId:ref.id,productId:b.productId,
         productName:b.productName,categoryId:b.categoryId||'others',eventType:'expired',quantity:b.quantityOnHand,quantityDelta:-b.quantityOnHand,actorUid:'system',occurredAt:serverTimestamp()});
       tx.delete(ref);
     });
   }
   return {
+    // Associate this notification token with the signed-in account.
     registerPushToken:async request=>{
       const token=request.data?.token,uid=request.auth?.uid;
       if(!uid)throw new HttpsError('unauthenticated','Please sign in.');
@@ -47,12 +57,15 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
         tx.set(ref,{uid,updatedAt:serverTimestamp()});tx.set(db.collection('users').doc(uid).collection('devices').doc(id),{token,updatedAt:serverTimestamp(),platform:request.data.platform||'android'});
       });return {registered:true};
     },
+    // Remove the signed-in account notification token.
     unregisterPushToken:async request=>{const uid=request.auth?.uid,token=request.data?.token;if(!uid||typeof token!=='string')return {removed:false};
       const ref=db.collection('pushInstallations').doc(key(token));await db.runTransaction(async tx=>{const snap=await tx.get(ref);if(snap.data()?.uid===uid)tx.delete(ref);tx.delete(db.collection('users').doc(uid).collection('devices').doc(key(token)));});return {removed:true};},
-    newOrder:async event=>{const data=event.data?.data();if(!data)return;const store=db.collection('stores').doc(event.params.storeId);
+    // Notify active admins about this new order.
+    newOrder:async event=>{const data=event.data?.data();if(!data||isImportedDemoOrder(data))return;const store=db.collection('stores').doc(event.params.storeId);
       const shop=(await store.get()).data();if(shop?.status!=='active')return;
       for(const uid of await recipients(store))await notify(uid,'New order',`${data.orderNumber} was placed in ${shop.name}.`,{storeId:store.id,orderId:event.params.orderId,type:'new_order'},'order');
     },
+    // Notify the recipient while keeping the conversation shop-scoped.
     chatMessage:async event=>{const data=event.data?.data();if(!data)return;const store=db.collection('stores').doc(event.params.storeId);
       const shop=(await store.get()).data();if(shop?.status!=='active')return;
       const team=await store.collection('members').get();
@@ -60,6 +73,7 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
       for(const uid of uids)if(uid!==data.senderId)await notify(uid,`${data.senderName} · ${shop.name}`,data.text||'Sent an attachment',
         {storeId:store.id,customerId:event.params.customerId,type:'chat'},'order');
     },
+    // Notify the customer about a changed order status.
     orderStatus:async event=>{
       const before=event.data?.before?.data(),after=event.data?.after?.data();
       if(!before||!after||before.status===after.status||!after.userId)return;
@@ -68,9 +82,11 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
         `${titleCase(after.status.replaceAll('_',' '))}${after.cancellationReason?': '+after.cancellationReason:''}`,
         {storeId:store.id,orderId:event.params.orderId,type:'order_status'},'order'));
     },
+    // Notify eligible customers about the current promotion.
     promotion:async event=>{
       const before=event.data?.before?.data(),after=event.data?.after?.data();
       if(!after||!after.promotionEnabled||after.status!=='active'||after.quantityOnHand<=0||!after.expiryAt?.toDate||after.expiryAt.toDate()<=new Date())return;
+      // Build a stable key for this promotion notification.
       const signature=b=>JSON.stringify([b?.promotionEnabled,b?.promotion||null,b?.basePriceCents,b?.promotionPriceCents]);
       if(before&&signature(before)===signature(after))return;
       const store=db.collection('stores').doc(event.params.storeId),shop=(await store.get()).data();if(shop?.status!=='active')return;
@@ -80,12 +96,14 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
         for(const user of customers.docs)if(!team.has(user.id))await notify(user.id,`New promotion · ${shop.name}`,`${after.productName}${after.promotion?.label?': '+after.promotion.label:' is on promotion.'}`,{storeId:store.id,batchId:event.params.batchId,type:'promotion'},'promotion');
       });
     },
+    // Save shelf-life fields after the batch changes.
     inventoryWritten:async event=>{const after=event.data?.after;if(!after?.exists)return;
       const b=after.data(),now=new Date(),store=db.collection('stores').doc(event.params.storeId);
       if(b.expiryAt?.toDate&&b.expiryAt.toDate()<=now){await cleanup(store,after.ref,now);return;}
       if(!b.expiryAt?.toDate)return;const life=shelfLife(b,now);
       if(b.totalShelfLifeDays!==life.totalShelfLifeDays||b.shelfLifeType!==life.shelfLifeType)await after.ref.update({totalShelfLifeDays:life.totalShelfLifeDays,shelfLifeType:life.shelfLifeType,receivedAt:b.receivedAt||b.createdAt||Timestamp.fromDate(now)});
     },
+    // Process expiry alerts and expired stock on the schedule.
     inventoryClock:async()=>{
       const now=new Date(),stores=await db.collection('stores').where('status','==','active').get();
       for(const shop of stores.docs){const store=shop.ref,inventory=await store.collection('inventoryBatches').get();
@@ -105,4 +123,5 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
     },
   };
 }
+// Export the helpers used by the app backend and tests.
 module.exports={notificationHandlers};

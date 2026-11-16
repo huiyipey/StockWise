@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/app_models.dart';
 import '../theme/app_theme.dart';
 
+// Build the shared product price component.
 class ProductPrice extends StatelessWidget {
   final InventoryBatch item;
   final double fontSize;
@@ -15,6 +16,7 @@ class ProductPrice extends StatelessWidget {
     this.centered = false,
   });
 
+  // Render the product price component.
   @override
   Widget build(BuildContext context) {
     final sellingPrice =

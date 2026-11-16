@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'inventory_ui.dart';
 
+// Open the shared inclusive expiry-range dialog.
 Future<DateTimeRange?> showInventoryExpiryRange({
   required BuildContext context,
   required DateTime firstDate,
@@ -18,6 +19,7 @@ Future<DateTimeRange?> showInventoryExpiryRange({
   ),
 );
 
+// Build the shared expiry range dialog component.
 class _ExpiryRangeDialog extends StatefulWidget {
   const _ExpiryRangeDialog({
     required this.first,
@@ -30,10 +32,13 @@ class _ExpiryRangeDialog extends StatefulWidget {
   State<_ExpiryRangeDialog> createState() => _ExpiryRangeDialogState();
 }
 
+// Manage the expiry range dialog values and actions.
 class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
+  // Keep this component's values, selections, and request state.
   final start = TextEditingController(), end = TextEditingController();
   String? startError, endError;
   bool initialized = false;
+  // Initialize values that depend on the current locale.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -46,6 +51,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     start.dispose();
@@ -53,11 +59,14 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
     super.dispose();
   }
 
+  // Check the date against the allowed selection limits.
   bool inBounds(DateTime day) =>
       !day.isBefore(widget.first) && !day.isAfter(widget.last);
+  // Validate and normalize the entered or stored value.
   DateTime? parse(String text) =>
       MaterialLocalizations.of(context).parseCompactDate(text.trim());
 
+  // Return a valid inclusive date range.
   void apply() {
     final first = parse(start.text), last = parse(end.text);
     setState(() {
@@ -79,6 +88,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
     }
   }
 
+  // Choose one date using the shared calendar dialog.
   Future<void> calendar() async {
     FocusScope.of(context).unfocus();
     final first = parse(start.text), last = parse(end.text);
@@ -101,6 +111,7 @@ class _ExpiryRangeDialogState extends State<_ExpiryRangeDialog> {
     if (picked != null && mounted) Navigator.pop(context, picked);
   }
 
+  // Render the expiry range dialog component.
   @override
   Widget build(BuildContext context) {
     final help = MaterialLocalizations.of(context).dateHelpText.toUpperCase();

@@ -1,6 +1,8 @@
 const {DateTime} = require('luxon');
 const ZONE = 'Asia/Kuala_Lumpur';
+// Parse a Malaysia calendar date at midnight.
 const day = (value) => DateTime.fromISO(value, {zone: ZONE});
+// Validate inclusive report dates and create query boundaries.
 function range(start, end) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '') || !/^\d{4}-\d{2}-\d{2}$/.test(end || '')) throw Error('Choose valid dates.');
   const a = day(start), b = day(end).plus({days: 1});
@@ -8,6 +10,7 @@ function range(start, end) {
   if (!a.isValid || !b.isValid || b <= a || b.diff(a, 'days').days > 371) throw Error('Choose a range of 1 to 371 days.');
   return {start: a.toJSDate(), end: b.toJSDate()};
 }
+// Calculate sales or waste records and their totals.
 function report(kind, records, start, end, names = {}) {
   const bounds = range(start, end);
   const daily = {};
@@ -40,11 +43,13 @@ function report(kind, records, start, end, names = {}) {
     daily: Object.entries(daily).map(([date, value]) => ({date, value})),
     categories, headers: kind === 'sales' ? ['Date', 'Order', 'Product sales (MYR)', 'Delivery (MYR)', 'Total (MYR)'] : ['Date', 'Product', 'Category', 'Reason', 'Units'], rows};
 }
+// Escape CSV values and neutralize spreadsheet formula prefixes.
 function csvCell(value) {
   let s = String(value ?? '');
   if (typeof value === 'string' && /^[\s]*[=+@-]/.test(s)) s = "'" + s;
   return '"' + s.replaceAll('"', '""') + '"';
 }
+// Build the complete report CSV, including waste category totals.
 function csv(data, storeName) {
   return '\uFEFF' + [[storeName, data.kind + ' report'], ['From', data.start, 'Through', data.end],
     ['Timezone', data.timezone],
@@ -54,6 +59,7 @@ function csv(data, storeName) {
       ...Object.entries(data.categories).sort(([a], [b]) => a.localeCompare(b)), ['TOTAL', data.units]] : []),
   ].map(row => row.map(csvCell).join(',')).join('\r\n');
 }
+// Find completed reporting periods that are due for delivery.
 function duePeriods(now = new Date(), cadences = ['weekly', 'monthly']) {
   const today = DateTime.fromJSDate(now, {zone: ZONE}).startOf('day');
   const result = [];
@@ -63,11 +69,13 @@ function duePeriods(now = new Date(), cadences = ['weekly', 'monthly']) {
   if (cadences.includes('yearly') && today.month === 1 && today.day === 1) result.push({cadence: 'yearly', start: today.minus({years: 1}).startOf('year').toISODate(), end: today.minus({days: 1}).toISODate()});
   return result;
 }
+// Read valid schedules for the selected report type.
 function reportCadences(member = {}, kind) {
   if (member.reportsByEmail === false) return [];
   const values = member.reportEmailSchedules?.[kind];
   return Array.isArray(values) ? [...new Set(values.filter(value => ['daily', 'weekly', 'monthly', 'yearly'].includes(value)))] : ['weekly'];
 }
+// Rank available products using purchase history and promotions.
 function recommendations(catalog, history) {
   const bought = new Map();
   for (const line of history) {
@@ -79,4 +87,5 @@ function recommendations(catalog, history) {
     return {id: item.id, reason: purchases ? 'You bought this product before.' : item.promotion ? 'Available on promotion in this store.' : 'Available in this store.', score: purchases * 10 + (item.promotion ? 2 : 0)};
   }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)).slice(0, 6);
 }
+// Export the helpers used by the app backend and tests.
 module.exports = {range, report, csv, duePeriods, reportCadences, recommendations};

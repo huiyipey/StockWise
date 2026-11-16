@@ -5,9 +5,11 @@
 bool isStoreAdminRole(Object? role) =>
     const {'admin', 'owner', 'manager', 'staff'}.contains(role);
 
+// Map recognized roles to Admin; use Customer otherwise.
 String canonicalStoreRole(Object? role) =>
     isStoreAdminRole(role) ? 'admin' : 'customer';
 
+// Check that the invitation grants Admin for its own shop.
 bool isAcceptableAdminInvitation(
   Map<String, dynamic>? invitation, {
   required String storeId,
@@ -18,6 +20,7 @@ bool isAcceptableAdminInvitation(
     invitation?['storeId'] == storeId &&
     invitation?['emailLowercase'] == emailLowercase;
 
+// Resolve the account role from its active shop memberships.
 String storeMembershipRole(
   String storeId,
   Iterable<({String storeId, String role, bool isActive})> memberships,

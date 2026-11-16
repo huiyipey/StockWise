@@ -4,6 +4,7 @@ const {HttpsError} = require('firebase-functions/v2/https');
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOOKUPS = 60;
 
+// Check account registration without exposing private profile details.
 function createEmailRegistrationHandler({db, auth, now = Date.now}) {
   return async request => {
     const email = typeof request.data?.email === 'string'
@@ -44,4 +45,5 @@ function createEmailRegistrationHandler({db, auth, now = Date.now}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {createEmailRegistrationHandler, WINDOW_MS, MAX_LOOKUPS};

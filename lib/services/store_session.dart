@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/app_models.dart';
 import '../models/store_role.dart';
 
+// Keep the selected shop and its current membership access.
 class StoreSession extends ChangeNotifier {
   StoreSession._();
 
@@ -11,12 +12,18 @@ class StoreSession extends ChangeNotifier {
   StoreInfo? _store;
   String _role = 'customer';
 
+  // Read the selected shop.
   StoreInfo? get store => _store;
+  // Read the selected shop identifier.
   String? get storeId => _store?.id;
+  // Resolve Admin or Customer for the selected shop.
   String get role => _role;
+  // Require active Admin access to this shop.
   bool get canManage => _role == 'admin';
+  // Use the same Admin access for team management.
   bool get canManageMembers => canManage;
 
+  // Select the shop and apply its membership role.
   void select(StoreInfo store, {String role = 'customer'}) {
     _store = store;
     _role = canonicalStoreRole(role);
@@ -43,6 +50,7 @@ class StoreSession extends ChangeNotifier {
     return true;
   }
 
+  // Clear the selected shop and administrative access.
   void clear() {
     _store = null;
     _role = 'customer';

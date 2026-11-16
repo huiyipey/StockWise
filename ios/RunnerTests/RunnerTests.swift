@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import XCTest
 
+// Keep the native iOS runner test entry point.
 class RunnerTests: XCTestCase {
 
   func testExample() {

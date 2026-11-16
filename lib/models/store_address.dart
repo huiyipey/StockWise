@@ -1,3 +1,4 @@
+// Keep the store address values used by the app.
 class StoreAddress {
   const StoreAddress({
     required this.line1,
@@ -13,12 +14,14 @@ class StoreAddress {
   final String city;
   final String state;
 
+  // Join the non-empty address fields for display.
   String get formatted => [
     line1.trim(),
     if (line2.trim().isNotEmpty) line2.trim(),
     '${postcode.trim()} ${city.trim()}, ${state.trim()}',
   ].join('\n');
 
+  // Convert the selected values to Firestore fields.
   Map<String, String> toMap() => {
     'line1': line1.trim(),
     'line2': line2.trim(),
@@ -27,6 +30,7 @@ class StoreAddress {
     'state': state.trim(),
   };
 
+  // Read stored values with safe defaults.
   static StoreAddress? fromMap(Object? value) {
     if (value is! Map) return null;
     if (['line1', 'postcode', 'city', 'state'].any(

@@ -11,6 +11,7 @@ import 'inventory_ui.dart';
 typedef ChatAttachmentOpener =
     Future<void> Function(Uint8List bytes, String name, String contentType);
 
+// Build the shared chat attachment bubble component.
 class ChatAttachmentBubble extends StatefulWidget {
   final StoreChatMessage message;
   final String customerId;
@@ -27,14 +28,18 @@ class ChatAttachmentBubble extends StatefulWidget {
   State<ChatAttachmentBubble> createState() => _ChatAttachmentBubbleState();
 }
 
+// Manage the chat attachment bubble values and actions.
 class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
+  // Keep this component's values, selections, and request state.
   Future<Uint8List>? download;
   bool opening = false;
+  // Load the stored image or attachment for display.
   Future<Uint8List> _load() => download ??= widget.repository.loadAttachment(
     widget.customerId,
     widget.message,
   );
 
+  // Create the local tables and indexes when needed.
   Future<void> _open({bool save = false}) async {
     if (opening) return;
     setState(() => opening = true);
@@ -77,6 +82,7 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
     }
   }
 
+  // Show the attachment open and download actions.
   Widget _fileButton() => TextButton.icon(
     onPressed: opening ? null : () => _open(),
     icon: const Icon(Icons.insert_drive_file_outlined),
@@ -87,6 +93,7 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
     ),
   );
 
+  // Render the chat attachment bubble component.
   @override
   Widget build(BuildContext context) {
     final attachment = widget.message.attachment!;
@@ -94,6 +101,7 @@ class _ChatAttachmentBubbleState extends State<ChatAttachmentBubble> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (attachment.isImage)
+          // Show loading, errors, or the completed request.
           FutureBuilder<Uint8List>(
             future: _load(),
             builder: (context, snapshot) {

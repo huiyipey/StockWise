@@ -6,6 +6,7 @@ import '../services/local_data_session.dart';
 import '../services/local_database.dart';
 import 'inventory_ui.dart';
 
+// Build the shared catalogue cache notice component.
 class CatalogueCacheNotice extends StatelessWidget {
   const CatalogueCacheNotice({
     super.key,
@@ -16,6 +17,7 @@ class CatalogueCacheNotice extends StatelessWidget {
   final LocalScope? scope;
   final CatalogueCache? cache;
   final double horizontalMargin;
+  // Render the catalogue cache notice component.
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: cache ?? CatalogueCache.instance,

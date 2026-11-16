@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../models/report_data.dart';
 import 'inventory_ui.dart';
 
+// Build the shared report period filter component.
 class ReportPeriodFilter extends StatelessWidget {
   const ReportPeriodFilter({
     super.key,
@@ -15,6 +16,7 @@ class ReportPeriodFilter extends StatelessWidget {
   final ReportPeriod selected;
   final ValueChanged<ReportPeriod> onSelected;
 
+  // Render the report period filter component.
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => SingleChildScrollView(
@@ -68,6 +70,7 @@ class ReportPeriodFilter extends StatelessWidget {
   );
 }
 
+// Build the shared report switch component.
 class ReportSwitch extends StatelessWidget {
   const ReportSwitch({
     super.key,
@@ -80,6 +83,7 @@ class ReportSwitch extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onSelected;
   final bool soft;
+  // Render the report switch component.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(4),
@@ -131,12 +135,15 @@ class ReportSwitch extends StatelessWidget {
   );
 }
 
+// Build the shared report metrics component.
 class ReportMetrics extends StatelessWidget {
   const ReportMetrics({super.key, required this.data});
   final ReportSnapshot data;
+  // Render the report metrics component.
   @override
   Widget build(BuildContext context) {
     if (data.kind == 'waste') {
+      // Build one report summary metric.
       Widget metric(String title, String value, IconData icon, bool primary) =>
           Container(
             padding: const EdgeInsets.all(17),
@@ -208,6 +215,7 @@ class ReportMetrics extends StatelessWidget {
       ('Delivery Fees', reportMoney(data.deliveryCents)),
       ('Total Collected', reportMoney(data.totalCents)),
     ];
+    // Build one compact secondary report metric.
     Widget small((String, String) metric) => Container(
       padding: const EdgeInsets.all(12),
       constraints: const BoxConstraints(minHeight: 80),
@@ -309,6 +317,7 @@ class ReportMetrics extends StatelessWidget {
   }
 }
 
+// Build the shared report chart component.
 class ReportChart extends StatefulWidget {
   const ReportChart({
     super.key,
@@ -327,8 +336,11 @@ class ReportChart extends StatefulWidget {
   State<ReportChart> createState() => _ReportChartState();
 }
 
+// Manage the report chart values and actions.
 class _ReportChartState extends State<ReportChart> {
+  // Keep this component's values, selections, and request state.
   final scroll = ScrollController();
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -350,12 +362,14 @@ class _ReportChartState extends State<ReportChart> {
     });
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     scroll.dispose();
     super.dispose();
   }
 
+  // Render the report chart component.
   @override
   Widget build(BuildContext context) {
     final sales = widget.data.kind == 'sales';
@@ -662,9 +676,11 @@ class _ReportChartState extends State<ReportChart> {
   }
 }
 
+// Build the shared report grid component.
 class _ReportGrid extends CustomPainter {
   const _ReportGrid(this.baseline);
   final double baseline;
+  // Paint the custom border or chart grid.
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -679,10 +695,12 @@ class _ReportGrid extends CustomPainter {
     }
   }
 
+  // Repaint only when the chart grid settings change.
   @override
   bool shouldRepaint(_ReportGrid old) => old.baseline != baseline;
 }
 
+// Build the shared report records component.
 class ReportRecords extends StatefulWidget {
   const ReportRecords({
     super.key,
@@ -697,14 +715,18 @@ class ReportRecords extends StatefulWidget {
   State<ReportRecords> createState() => _ReportRecordsState();
 }
 
+// Manage the report records values and actions.
 class _ReportRecordsState extends State<ReportRecords> {
+  // Keep this component's values, selections, and request state.
   final scroll = ScrollController();
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     scroll.dispose();
     super.dispose();
   }
 
+  // Render the report records component.
   @override
   Widget build(BuildContext context) {
     final data = widget.selection;
@@ -925,9 +947,11 @@ class _ReportRecordsState extends State<ReportRecords> {
   }
 }
 
+// Build the shared report categories component.
 class ReportCategories extends StatelessWidget {
   const ReportCategories({super.key, required this.selection});
   final ReportSelection selection;
+  // Render the report categories component.
   @override
   Widget build(BuildContext context) {
     final entries = selection.categories.entries.toList()
@@ -1006,9 +1030,11 @@ class ReportCategories extends StatelessWidget {
   }
 }
 
+// Build the shared report email card component.
 class ReportEmailCard extends StatelessWidget {
   const ReportEmailCard({super.key, required this.status});
   final Widget status;
+  // Render the report email card component.
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1112,10 +1138,12 @@ class ReportEmailCard extends StatelessWidget {
   );
 }
 
+// Build the shared report notice component.
 class ReportNotice extends StatelessWidget {
   const ReportNotice({super.key, required this.message, this.error = false});
   final String message;
   final bool error;
+  // Render the report notice component.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(14),

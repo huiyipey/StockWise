@@ -12,15 +12,17 @@ const {token, project} = require('./cloud-access.cjs');
 const {storeNameKey} = require('../functions/store_creation');
 const config = require('../android/app/google-services.json');
 const apiKey = config.client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
 const auth = getAuth();
 const authClient = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient})});
 const run = randomUUID().replaceAll('-', '').slice(0, 12);
+// Keep these checks scoped to disposable test records.
 const prefix = `Store address test ${run}`;
 const names = [prefix, `${prefix} renamed`, `${prefix} legacy`];
 const users = [];
 const storeIds = new Set();
+// Create or sign in the disposable test account.
 async function account(index) {
   const password = randomUUID() + 'Aa9!';
   const email = `stockwise-store-address-${run}-${index}@example.invalid`;
@@ -33,6 +35,7 @@ async function account(index) {
   assert.equal(response.status, 200, data.error?.message);
   return {uid: user.uid, idToken: data.idToken};
 }
+// Invoke the selected backend action using the test account.
 async function call(method, data, user) {
   const response = await fetch(`https://asia-southeast1-${project}.cloudfunctions.net/${method}`, {
     method: 'POST', headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
@@ -42,6 +45,7 @@ async function call(method, data, user) {
   if (body.result?.id) storeIds.add(body.result.id);
   return {status: response.status, ...body};
 }
+// Submit the address change being tested.
 async function patchAddress(storeId, user) {
   const response = await fetch(`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/stores/${storeId}?updateMask.fieldPaths=address`, {
     method: 'PATCH', headers: {Authorization: `Bearer ${user.idToken}`, 'Content-Type': 'application/json'},
@@ -51,6 +55,7 @@ async function patchAddress(storeId, user) {
 }
 (async () => {
   authClient.setCredentials({access_token: await token(), expiry_date: Date.now() + 3500000});
+  // Run this operation and handle any reported failure.
   try {
     console.log(`Temporary address test run: ${run}`);
     const owner = await account(0);
@@ -92,6 +97,7 @@ async function patchAddress(storeId, user) {
     assert.equal(migrated.status, 200, JSON.stringify(migrated));
     assert.equal((await db.collection('stores').doc(legacy.result.id).get()).data().address.state, 'Selangor');
     console.log('PASS: older clients still work and legacy shops can confirm a structured address.');
+  // Clean up temporary test resources.
   } finally {
     for (const name of names) {
       const found = await db.collection('stores').where('nameKey', '==', storeNameKey(name)).get();

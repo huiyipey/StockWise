@@ -5,6 +5,7 @@ import 'package:mime/mime.dart';
 
 const chatAttachmentMaxBytes = 20 * 1024 * 1024;
 
+// Build an attachment path inside this shop conversation.
 String chatAttachmentPath(
   String storeId,
   String customerId,
@@ -12,11 +13,13 @@ String chatAttachmentPath(
   String messageId,
 ) => 'stores/$storeId/chat-attachments/$customerId/$senderId/$messageId/file';
 
+// Remove unsafe characters from the attachment file name.
 String safeAttachmentFileName(String name) {
   final clean = name.replaceAll(RegExp(r'[/\\\x00-\x1f:*?"<>|]'), '_').trim();
   return clean.isEmpty || clean == '.' || clean == '..' ? 'attachment' : clean;
 }
 
+// Reject unsupported types and oversized attachment files.
 String? chatAttachmentError(String name, int size) {
   if (name.trim().isEmpty || name.length > 180) {
     return 'Use a file name of 180 characters or fewer.';
@@ -28,6 +31,7 @@ String? chatAttachmentError(String name, int size) {
   return null;
 }
 
+// Keep the chat attachment values used by the app.
 class ChatAttachment {
   final String storagePath;
   final String fileName;
@@ -39,16 +43,20 @@ class ChatAttachment {
     required this.contentType,
     required this.size,
   });
+  // Check whether the attachment is an image.
   bool get isImage => contentType.startsWith('image/');
+  // Format the attachment size for display.
   String get sizeLabel => size >= 1024 * 1024
       ? '${(size / (1024 * 1024)).toStringAsFixed(1)} MB'
       : '${(size / 1024).ceil()} KB';
+  // Convert this record to fields that can be saved.
   Map<String, dynamic> toData() => {
     'storagePath': storagePath,
     'fileName': fileName,
     'contentType': contentType,
     'size': size,
   };
+  // Read the saved record fields with safe defaults.
   factory ChatAttachment.fromData(Map<String, dynamic> data) => ChatAttachment(
     storagePath: data['storagePath'] as String,
     fileName: data['fileName'] as String,
@@ -57,6 +65,7 @@ class ChatAttachment {
   );
 }
 
+// Keep the chat attachment draft values used by the app.
 class ChatAttachmentDraft {
   final XFile file;
   final String messageId;
@@ -70,7 +79,9 @@ class ChatAttachmentDraft {
     required this.contentType,
     required this.size,
   });
+  // Check whether the attachment is an image.
   bool get isImage => contentType.startsWith('image/');
+  // Read and validate the chosen image or attachment.
   static Future<ChatAttachmentDraft> fromFile(XFile file) async {
     final size = await file.length();
     final name = safeAttachmentFileName(file.name);
@@ -95,6 +106,7 @@ class ChatAttachmentDraft {
     );
   }
 
+  // Attach the uploaded storage path to this file metadata.
   ChatAttachment storedAt(String path) => ChatAttachment(
     storagePath: path,
     fileName: fileName,
@@ -103,6 +115,7 @@ class ChatAttachmentDraft {
   );
 }
 
+// Summarize text or attachment details for the conversation list.
 String chatMessagePreview(String text, ChatAttachment? attachment) =>
     text.trim().isNotEmpty
     ? text.trim()

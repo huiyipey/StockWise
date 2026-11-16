@@ -2,12 +2,14 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
+    // Require a signed-in account with verified or exempt email.
     function signedIn() {
       return request.auth != null
         && (request.auth.token.email_verified == true
           || request.auth.token.get('stockwise_legacy_account', false) == true);
     }
 
+    // Require active administrative membership in this shop.
     function storeAdmin(storeId) {
       return signedIn()
         && firestore.exists(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid))
@@ -16,22 +18,26 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/stores/$(storeId)/members/$(request.auth.uid)).data.role in ['admin', 'owner', 'manager', 'staff'];
     }
 
+    // Require an image upload smaller than five megabytes.
     function imageUpload() {
       return request.resource != null
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
     }
 
+    // Check that the signed-in account placed this order.
     function ownsOrder(storeId, orderId) {
       return signedIn()
         && firestore.get(/databases/(default)/documents/stores/$(storeId)/orders/$(orderId)).data.userId
           == request.auth.uid;
     }
 
+    // Use shop Admin access for chat attachments.
     function chatAdmin(storeId) {
       return storeAdmin(storeId);
     }
 
+    // Allow the conversation customer or an active shop admin.
     function canSendChat(storeId, customerId) {
       // At most two Firestore documents per Storage evaluation: store/member and message.
       // Conversation creation and message publication are enforced by Firestore rules.
@@ -40,10 +46,13 @@ service firebase.storage {
         || chatAdmin(storeId));
     }
 
+    // Protect attachment drafts and published conversation files.
     match /stores/{storeId}/chat-attachments/{customerId}/{senderId}/{messageId}/file {
+      // Locate the message that owns this attachment.
       function messagePath() {
         return /databases/(default)/documents/stores/$(storeId)/conversations/$(customerId)/messages/$(messageId);
       }
+      // Check whether the attachment message has already been published.
       function published() {
         return firestore.exists(messagePath());
       }
@@ -66,17 +75,20 @@ service firebase.storage {
         && (request.auth.uid == customerId || chatAdmin(storeId)) && !published();
     }
 
+    // Allow product-image uploads only for shop administrators.
     match /stores/{storeId}/product-images/{productId}/{fileName} {
       allow read: if signedIn();
       allow write: if storeAdmin(storeId) && imageUpload();
     }
 
+    // Let each account manage its own profile images.
     match /user-avatars/{uid}/{fileName} {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == uid && imageUpload();
       allow delete: if signedIn() && request.auth.uid == uid;
     }
 
+    // Share receipts with the order customer and shop administrators.
     match /stores/{storeId}/order-attachments/{orderId}/{fileName} {
       allow read: if storeAdmin(storeId) || ownsOrder(storeId, orderId);
       allow write: if (storeAdmin(storeId) || ownsOrder(storeId, orderId))

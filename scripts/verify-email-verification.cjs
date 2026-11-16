@@ -9,33 +9,40 @@ const {Firestore} = backendRequire('@google-cloud/firestore');
 const {GoogleAuth, OAuth2Client} = backendRequire('google-auth-library');
 const {api, token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId:project,credential:{getAccessToken:async()=>({access_token:await token(),expires_in:3500})}});
+initializeApp({projectId:project,credential:{/* Provide the authenticated token to this Firebase client. */ getAccessToken:async()=>({access_token:await token(),expires_in:3500})}});
 const auth = getAuth(), users=[];
 const client = new OAuth2Client();
 const db = new Firestore({projectId:project,preferRest:true,auth:new GoogleAuth({authClient:client})});
 const base=`https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const activeStores={structuredQuery:{from:[{collectionId:'stores'}],where:{fieldFilter:{field:{fieldPath:'status'},op:'EQUAL',value:{stringValue:'active'}}},limit:1}};
+// Send a test HTTP request and read its response.
 async function request(url,body,idToken,method='POST') {
   const r=await fetch(url,{method,headers:{'Content-Type':'application/json',...(idToken?{Authorization:`Bearer ${idToken}`}:{})},body:body?JSON.stringify(body):undefined});
   const data=await r.json(); return {status:r.status,data};
 }
+// Call the Firebase Auth endpoint used by this test.
 const identity=(method,data)=>request(`https://identitytoolkit.googleapis.com/v1/accounts:${method}?key=${apiKey}`,data);
+// Create a disposable account for the verification checks.
 async function signup() {
   const email=`stockwise-verification-test-${randomUUID()}@example.invalid`,password='Verify1!'+randomUUID();
   const r=await identity('signUp',{email,password,returnSecureToken:true});
   assert.equal(r.status,200,'Temporary account creation failed.');
   const user={...r.data,email,password}; users.push(user); return user;
 }
+// Sign in the disposable account for the verification request.
 async function login(user) {
   const r=await identity('signInWithPassword',{email:user.email,password:user.password,returnSecureToken:true});
   assert.equal(r.status,200,'Temporary sign-in failed.'); user.idToken=r.data.idToken;
 }
+// Invoke the selected backend action using the test account.
 const call=(action,user,data={})=>request(`https://asia-southeast1-${project}.cloudfunctions.net/manageEmailVerification`,{data:{action,...data}},user?.idToken);
+// Redeem the generated one-time account action.
 async function redeem(link) {
   const code=new URL(link).searchParams.get('oobCode'); assert.ok(code);
   const applied=await identity('update',{oobCode:code}); assert.equal(applied.status,200,'Native Firebase action failed.');
   const reused=await identity('update',{oobCode:code}); assert.equal(reused.status,400,'The verification action must be single-use.');
 }
+// Generate the native Firebase email action used by the test.
 async function actionLink(email, newEmail) {
   // Generate a fixture action without delivering it to a real inbox.
   const result = await api('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode', 'POST', {
@@ -46,6 +53,7 @@ async function actionLink(email, newEmail) {
 }
 (async()=>{
   client.setCredentials({access_token:await token()});
+  // Run this operation and handle any reported failure.
   try {
     assert.equal((await call('status')).status,401);
     const user=await signup(), other=await signup();
@@ -54,6 +62,7 @@ async function actionLink(email, newEmail) {
     assert.equal(initial.status,200); assert.equal(initial.data.result.verified,false); assert.equal(initial.data.result.attempted,false);
     assert.equal((await request(base+':runQuery',activeStores,user.idToken)).status,403,'Unverified accounts cannot read stores.');
     assert.equal((await request(base+'/users/'+user.localId,{fields:{emailVerified:{booleanValue:true}}},user.idToken,'PATCH')).status,403,'Client cannot bypass verification with a profile.');
+    // Create the temporary account used by the verification scenario.
     const create=(u)=>request(`https://asia-southeast1-${project}.cloudfunctions.net/createStore`,{data:{name:'',shopAddress:''}},u.idToken);
     assert.equal((await create(user)).status,403,'Unverified accounts cannot call store APIs.');
     const sent=await call('send',user);
@@ -100,6 +109,7 @@ async function actionLink(email, newEmail) {
     const policy=(await db.collection('authPolicies').doc('emailVerification').get()).data();
     assert.ok(policy.cutoff);
     console.log('PASS: live signup gate, managed email requests, cooldown, address correction, single-use links, verified store access and legacy access.');
+  // Clean up temporary test resources.
   } finally {
     for(const user of users) {
       assert.ok(user.localId);

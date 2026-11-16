@@ -3,6 +3,7 @@ import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
 import '../screens/product_image_screen.dart';
 
+// Build the shared stock wise header component.
 class StockWiseHeader extends StatelessWidget {
   final String title;
   final Widget? leading;
@@ -17,6 +18,7 @@ class StockWiseHeader extends StatelessWidget {
     this.height = 96,
   });
 
+  // Render the stock wise header component.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -45,9 +47,11 @@ class StockWiseHeader extends StatelessWidget {
   }
 }
 
+// Build the shared back circle button component.
 class BackCircleButton extends StatelessWidget {
   const BackCircleButton({super.key});
 
+  // Render the back circle button component.
   @override
   Widget build(BuildContext context) {
     return IconButton(
@@ -58,6 +62,7 @@ class BackCircleButton extends StatelessWidget {
   }
 }
 
+// Build the shared app search field component.
 class AppSearchField extends StatelessWidget {
   final String hint;
   final ValueChanged<String>? onChanged;
@@ -72,6 +77,7 @@ class AppSearchField extends StatelessWidget {
     this.suffixIcon,
   });
 
+  // Render the app search field component.
   @override
   Widget build(BuildContext context) {
     return TextField(
@@ -87,6 +93,7 @@ class AppSearchField extends StatelessWidget {
   }
 }
 
+// Build the shared product artwork component.
 class ProductArtwork extends StatelessWidget {
   final double size;
   final String? imagePath;
@@ -101,6 +108,7 @@ class ProductArtwork extends StatelessWidget {
     this.imageLabel,
   });
 
+  // Render the product artwork component.
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -108,6 +116,7 @@ class ProductArtwork extends StatelessWidget {
       child: SizedBox(
         width: size,
         height: size,
+        // Show loading, errors, or the completed request.
         child: FutureBuilder<String?>(
           future: imagePath == null || imagePath!.isEmpty
               ? Future.value(null)
@@ -164,6 +173,7 @@ class ProductArtwork extends StatelessWidget {
     );
   }
 
+  // Show fallback artwork when no image is available.
   Widget _placeholder() => ColoredBox(
     color: const Color(0xFFF0F2EF),
     child: Icon(
@@ -174,12 +184,14 @@ class ProductArtwork extends StatelessWidget {
   );
 }
 
+// Build the shared status pill component.
 class StatusPill extends StatelessWidget {
   final String label;
   final Color color;
 
   const StatusPill(this.label, {super.key, this.color = AppColors.primary});
 
+  // Render the status pill component.
   @override
   Widget build(BuildContext context) {
     return Container(

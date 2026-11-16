@@ -23,16 +23,19 @@ class CustomerPostcodeController extends ChangeNotifier {
   bool lookingUp = false, lookupFailed = false;
   String? resolvedPostcode, error;
 
+  // Check that the postcode lookup has completed successfully.
   bool get ready =>
       !lookingUp &&
       resolvedPostcode == postcode.text &&
       postcodeError(postcode.text) == null &&
       state.text.isNotEmpty;
 
+  // Notify the form after postcode state changes.
   void _notify() {
     if (!_disposed) notifyListeners();
   }
 
+  // Clear location values from an outdated postcode lookup.
   void invalidate() {
     _debounce?.cancel();
     _version++;
@@ -45,6 +48,7 @@ class CustomerPostcodeController extends ChangeNotifier {
     _notify();
   }
 
+  // Handle an edited value and notify the parent form.
   void changed(String value) {
     invalidate();
     lookingUp = postcodeError(value) == null;
@@ -57,8 +61,10 @@ class CustomerPostcodeController extends ChangeNotifier {
     }
   }
 
+  // Retry the failed lookup or image load.
   Future<void> retry() => loadExisting();
 
+  // Restore a saved address without overwriting its edited city.
   Future<void> loadExisting({bool preserveCity = true}) async {
     _debounce?.cancel();
     final version = ++_version;
@@ -98,6 +104,7 @@ class CustomerPostcodeController extends ChangeNotifier {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     _disposed = true;

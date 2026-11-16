@@ -18,6 +18,7 @@ import '../widgets/stockwise_ui.dart' show ProductArtwork;
 import 'item_detail_screen.dart';
 import 'admin_item_detail_screen.dart';
 
+// Show order details, receipt, and permitted order actions.
 class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({
     super.key,
@@ -48,7 +49,9 @@ class OrderDetailScreen extends StatefulWidget {
   State<OrderDetailScreen> createState() => _OrderDetailScreenState();
 }
 
+// Manage the order detail screen values and actions.
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
+  // Keep this component's values, selections, and request state.
   late StoreOrder order = widget.order;
   late String status = order.status;
   late String? receiptPath = order.receiptPath;
@@ -80,13 +83,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
     return value;
   });
+  // Check whether the form has unsaved changes.
   bool get dirty => widget.isAdmin && status != order.status;
+  // Block repeated actions while a request is running.
   bool get busy => saving || uploadingReceipt || pickingReceipt;
+  // Check whether a payment receipt has been uploaded.
   bool get hasReceipt => receiptPath?.trim().isNotEmpty == true;
+  // Watch the products saved with this order.
   Stream<List<OrderLine>> watchLines() =>
       widget.orderLinesStream ??
       FirestoreService.instance.watchOrderLines(order.id);
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -123,6 +131,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     subscription?.cancel();
@@ -130,6 +139,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     super.dispose();
   }
 
+  // Build the order detail screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -142,12 +152,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           body: SafeArea(
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: 'Order Details',
                   back: true,
                   onBack: leave,
                 ),
                 Expanded(
+                  // Refresh this section when its live data changes.
                   child: StreamBuilder<List<OrderLine>>(
                     stream: lines,
                     builder: (context, snapshot) => ListView(
@@ -164,6 +176,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           OrderNotice(updateNotice!),
                           const SizedBox(height: 16),
                         ],
+                        // Group the related order details in one card.
                         OrderPanel(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,10 +223,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             ],
                           ),
                         ),
+                        // Label the next order section.
                         const OrderHeading('Items'),
                         Builder(
                           builder: (context) {
                             if (snapshot.hasError) {
+                              // Group the related order details in one card.
                               return OrderPanel(
                                 child: Column(
                                   children: [
@@ -234,6 +249,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               );
                             }
                             if (!snapshot.hasData) {
+                              // Group the related order details in one card.
                               return const OrderPanel(
                                 child: Padding(
                                   padding: EdgeInsets.all(25),
@@ -246,6 +262,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                               );
                             }
                             if (snapshot.data!.isEmpty) {
+                              // Group the related order details in one card.
                               return const OrderPanel(
                                 child: Text(
                                   'No items found for this order.',
@@ -262,11 +279,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           },
                         ),
                         const SizedBox(height: 6),
+                        // Show the product subtotal, delivery fee, and total.
                         OrderTotals(
                           subtotal: order.subtotalCents,
                           delivery: order.shippingFeeCents,
                         ),
+                        // Label the next order section.
                         const OrderHeading('Receiver'),
+                        // Group the related order details in one card.
                         OrderPanel(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -308,7 +328,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                             ],
                           ),
                         ),
+                        // Label the next order section.
                         const OrderHeading('Payment Receipt'),
+                        // Show the receipt preview, upload state, and image actions.
                         OrderReceipt(
                           orderNumber: order.orderNumber,
                           isAdmin: widget.isAdmin,
@@ -328,6 +350,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           OrderNotice(receiptError!, error: true),
                         ],
                         if (widget.isAdmin) ...[
+                          // Label the next order section.
                           const OrderHeading('Order Status'),
                           OrderPickerField(
                             key: const ValueKey('order-status'),
@@ -389,10 +412,12 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     ),
   );
 
+  // Show the order receiver details.
   String receiver(String key) =>
       (order.receiver[key] as String?)?.trim().isNotEmpty == true
       ? order.receiver[key] as String
       : '-';
+  // Format the receiver address for display.
   String get deliveryAddress => [
     order.receiver['addressLine1'],
     order.receiver['addressLine2'],
@@ -403,6 +428,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     order.receiver['state'],
   ].where((v) => v != null && '$v'.trim().isNotEmpty).join(', ');
 
+  // Show one order product, its price, and its promotion.
   Widget lineCard(OrderLine line) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Material(
@@ -518,6 +544,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     ),
   );
 
+  // Place the product link at the top-right corner.
   Widget lineArrow(OrderLine line) => SizedBox(
     key: ValueKey('order-line-arrow-${line.id}'),
     width: 18,
@@ -531,6 +558,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           ),
   );
 
+  // Offer only the order states currently allowed.
   Future<void> chooseStatus() async {
     final disabled = <String, String>{};
     for (final next in orderStatuses) {
@@ -556,6 +584,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // Confirm before leaving a form with unsaved changes.
   Future<void> leave() async {
     if (busy) return;
     if (dirty &&
@@ -575,6 +604,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // Confirm and save the permitted order-status change.
   Future<void> save() async {
     if (busy || !dirty || missing) return;
     final current = order;
@@ -598,6 +628,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         builder: (context) => AlertDialog(
           scrollable: true,
           title: const Text('Cancellation Reason'),
+          // Group the inputs under one validation key.
           content: Form(
             key: key,
             child: TextFormField(
@@ -706,6 +737,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // Open the current product or the saved order item.
   Future<void> openProduct(OrderLine line) async {
     if (openingLineId != null) return;
     setState(() => openingLineId = line.id);
@@ -755,6 +787,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  // Upload the selected payment receipt.
   Future<void> upload() async {
     if (busy || missing) return;
     setState(() {

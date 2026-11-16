@@ -4,12 +4,14 @@
 // made by an administrator while this migration is running.
 const legacyAdminRoles = new Set(['owner', 'manager', 'staff']);
 
+// Choose role-only changes while preserving membership preferences.
 function migrationFor(documentPath, data) {
   if (!/^stores\/[^/]+\/(members|adminInvites)\/[^/]+$/.test(documentPath)) return null;
   if (!legacyAdminRoles.has(data?.role)) return null;
   return {path: documentPath, previousRole: data.role, role: 'admin'};
 }
 
+// Preview or apply the role-only Admin migration.
 async function main() {
   const path = require('node:path');
   const fs = require('node:fs');
@@ -61,5 +63,6 @@ async function main() {
   if (apply && (summary.conflicts || summary.remainingLegacy)) process.exitCode = 1;
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {migrationFor};
 if (require.main === module) main().catch(error => {console.error(error.message); process.exitCode = 1;});

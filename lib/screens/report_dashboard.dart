@@ -7,6 +7,7 @@ import '../widgets/inventory_ui.dart';
 import '../widgets/report_date_range.dart';
 import '../widgets/report_ui.dart';
 
+// Load and display sales or waste charts and records.
 class ReportDashboard extends StatefulWidget {
   const ReportDashboard({
     super.key,
@@ -24,7 +25,9 @@ class ReportDashboard extends StatefulWidget {
   State<ReportDashboard> createState() => _ReportDashboardState();
 }
 
+// Manage the report dashboard values and actions.
 class _ReportDashboardState extends State<ReportDashboard> {
+  // Keep this component's values, selections, and request state.
   String kind = 'sales';
   ReportPeriod period = ReportPeriod.monthly;
   bool graph = true, downloading = false, loading = true, failed = false;
@@ -36,6 +39,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
   Future<DateTime?>? registration;
   final contentAnchor = GlobalKey();
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -50,6 +54,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
     load();
   }
 
+  // Read the shop creation date for yearly reports.
   Future<DateTime?> readRegistration() => opened != null
       ? Future.value(opened)
       : widget.loader != null
@@ -58,6 +63,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
           (value) => value == null ? null : malaysiaReportDay(value),
         );
 
+  // Create the report calendar window for the selected period.
   ReportWindow makeWindow() => ReportWindow.forPeriod(
     period,
     today,
@@ -66,6 +72,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
     customEnd: customEnd,
   );
 
+  // Load the report and select the first available chart bucket.
   Future<void> load() async {
     final token = ++generation;
     loading = true;
@@ -115,6 +122,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
     }
   }
 
+  // Apply a report period and reload its data.
   Future<void> choosePeriod(ReportPeriod picked) async {
     if (picked == period && picked != ReportPeriod.custom) return;
     if (picked == ReportPeriod.custom) {
@@ -142,6 +150,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
     });
   }
 
+  // Build and save the selected report export.
   Future<void> download() async {
     if (downloading || loading || data == null) return;
     final selection = data!.select(window.buckets[selected]);
@@ -235,17 +244,20 @@ class _ReportDashboardState extends State<ReportDashboard> {
     }
   }
 
+  // Show the report action result.
   void feedback(String message, {bool error = false}) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(inventoryFeedback(message, error: error));
   }
 
+  // Select a chart bucket and move to its records.
   void openRecords(int index) => setState(() {
     selected = index;
     page = 0;
   });
 
+  // Build the report dashboard layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -255,6 +267,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
           key: const ValueKey('report-scroll'),
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           children: [
+            // Switch between sales and waste reports.
             ReportSwitch(
               labels: const ['Sales', 'Waste'],
               selected: kind == 'sales' ? 0 : 1,
@@ -268,24 +281,13 @@ class _ReportDashboardState extends State<ReportDashboard> {
               },
             ),
             const SizedBox(height: 16),
+            // Choose the calendar period used by this report.
             ReportPeriodFilter(
               key: const ValueKey('report-period'),
               selected: period,
               onSelected: choosePeriod,
             ),
             const SizedBox(height: 12),
-            if (period == ReportPeriod.weekly) ...[
-              const Text(
-                'ISO weeks run Monday–Sunday. Week 1 is the week containing 4 January.',
-                key: ValueKey('iso-week-explanation'),
-                style: TextStyle(
-                  fontSize: 11,
-                  height: 1.5,
-                  color: InventoryColors.muted,
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -333,11 +335,13 @@ class _ReportDashboardState extends State<ReportDashboard> {
                 }),
               ),
             ] else if (data != null && selection != null) ...[
+              // Show the report summary totals.
               ReportMetrics(data: data!),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
+                    // Switch between sales and waste reports.
                     child: ReportSwitch(
                       labels: const ['Chart', 'Data'],
                       selected: graph ? 0 : 1,
@@ -385,6 +389,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
                   ),
                 ),
                 child: graph
+                    // Plot report buckets and handle the selected bar.
                     ? ReportChart(
                         key: ValueKey('chart-$kind-${period.name}'),
                         data: data!,
@@ -393,6 +398,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
                         selected: selected,
                         onSelected: openRecords,
                       )
+                    // Show records for the selected chart bucket.
                     : ReportRecords(
                         key: ValueKey(
                           'data-$kind-${reportIso(selection.bucket.start)}',
@@ -404,6 +410,7 @@ class _ReportDashboardState extends State<ReportDashboard> {
               ),
               if (kind == 'waste') ...[
                 const SizedBox(height: 16),
+                // Summarize the selected waste by category.
                 ReportCategories(selection: selection),
               ],
               const SizedBox(height: 20),

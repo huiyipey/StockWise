@@ -6,6 +6,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stockwise_ui.dart';
 
+// Show account alerts and mark opened notices as read.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -13,19 +14,24 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
+// Manage the notifications screen values and actions.
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  // Keep this component's values, selections, and request state.
   String query = '';
 
+  // Build the notifications screen layout.
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
       child: Column(
         children: [
+          // Show the page heading and navigation actions.
           const StockWiseHeader(
             title: 'Notifications',
             leading: BackCircleButton(),
           ),
           Expanded(
+            // Refresh this section when its live data changes.
             child: StreamBuilder<List<AppNotification>>(
               stream: FirestoreService.instance.watchNotifications(),
               builder: (context, snapshot) {
@@ -70,6 +76,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ),
   );
 
+  // Build one notification card and its read action.
   Widget _card(AppNotification notice) {
     final color = notice.type == 'expiry_warning'
         ? AppColors.warning
@@ -102,6 +109,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
+  // Choose the icon for this notification type.
   IconData _icon(String type) => switch (type) {
     'expiry_warning' => Icons.warning_amber_rounded,
     'order_status' => Icons.receipt_long_outlined,

@@ -3,12 +3,14 @@ import 'dart:typed_data';
 
 import 'package:image_picker/image_picker.dart';
 
+// Keep the assistant image values used by the app.
 class AssistantImage {
   AssistantImage._(this.bytes, this.mimeType, this.name);
   static const maxBytes = 2 * 1024 * 1024;
   final Uint8List bytes;
   final String mimeType, name;
 
+  // Detect the image format and reject unsupported image bytes.
   factory AssistantImage.fromBytes(Uint8List bytes, {String name = 'Image'}) {
     if (bytes.isEmpty || bytes.length > maxBytes) {
       throw const FormatException('Choose an image smaller than 2 MB.');
@@ -36,6 +38,7 @@ class AssistantImage {
     );
   }
 
+  // Read and validate the chosen image or attachment.
   static Future<AssistantImage> fromFile(XFile file) async {
     if (await file.length() > maxBytes) {
       throw const FormatException('Choose an image smaller than 2 MB.');
@@ -43,6 +46,7 @@ class AssistantImage {
     return AssistantImage.fromBytes(await file.readAsBytes(), name: file.name);
   }
 
+  // Encode the validated image for the assistant request.
   Map<String, String> toRequestData() => {
     'mimeType': mimeType,
     'data': base64Encode(bytes),

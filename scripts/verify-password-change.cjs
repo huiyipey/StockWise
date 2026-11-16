@@ -6,7 +6,8 @@ const {initializeApp} = backendRequire('firebase-admin/app');
 const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+// Send a test HTTP request and read its response.
 async function request(action, body) {
   const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${action}?key=${apiKey}`, {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
@@ -18,7 +19,9 @@ let user;
   const email = `stockwise-password-test-${randomUUID()}@example.invalid`;
   const password = randomUUID() + 'Aa9!';
   const newPassword = ' ' + randomUUID() + ' Aa9! ';
+  // Sign in the test account and obtain its ID token.
   const signIn = candidate => request('signInWithPassword', {email, password: candidate, returnSecureToken: true});
+  // Run this operation and handle any reported failure.
   try {
     const signup = await request('signUp', {email, password, returnSecureToken: true});
     assert.equal(signup.status, 200, 'Temporary sign-up failed');
@@ -36,6 +39,7 @@ let user;
     assert.equal(newLogin.data.localId, user.localId);
     assert.equal((await signIn(newPassword.trim())).status, 400, 'Password whitespace remains significant');
     console.log('PASS: live current-password verification, password change, old password rejection and new password login.');
+  // Clean up temporary test resources.
   } finally {
     if (user) {
       assert.ok(user.email.startsWith('stockwise-password-test-'));

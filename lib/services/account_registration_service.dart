@@ -2,15 +2,18 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 typedef RegisteredEmailChecker = Future<bool> Function(String email);
 
+// Check whether an email belongs to an existing account.
 class EmailLookupFailure implements Exception {
   const EmailLookupFailure(this.message);
   final String message;
 }
 
+// Check whether an email belongs to an existing account.
 class AccountRegistrationService {
   AccountRegistrationService._();
   static final instance = AccountRegistrationService._();
 
+  // Ask the server whether this email is already registered.
   Future<bool> isRegistered(String email) async {
     try {
       final result =

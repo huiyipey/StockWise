@@ -33,6 +33,7 @@ import 'delivery_fee_screen.dart';
 import '../services/push_service.dart';
 import 'waste_analysis_screen.dart';
 
+// Show account details and role-specific shop settings.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
@@ -65,7 +66,9 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+// Manage the profile screen values and actions.
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Keep this component's values, selections, and request state.
   final scroll = ScrollController();
   late final profile =
       widget.profileStream ?? FirestoreService.instance.watchUserProfile();
@@ -74,12 +77,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool preferenceSaving = false, loggingOut = false;
   bool? preferenceValue;
   String? preferenceError, logoutError;
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     scroll.dispose();
     super.dispose();
   }
 
+  // Build the profile screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -95,8 +100,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               bottom: false,
               child: Column(
                 children: [
+                  // Show the page title, shop name, and header actions.
                   const InventoryHeader(title: 'Your Profile', enlarged: true),
                   Expanded(
+                    // Refresh this section when its live data changes.
                     child: StreamBuilder<Map<String, dynamic>>(
                       stream: profile,
                       builder: (context, snapshot) {
@@ -114,6 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                         }
                         if (StoreSession.instance.canManage) {
+                          // Refresh this section when its live data changes.
                           return StreamBuilder<StoreInfo?>(
                             stream: shop,
                             initialData: StoreSession.instance.store,
@@ -141,6 +149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ),
   );
 
+  // Build the role-specific page content.
   Widget content(
     BuildContext context,
     Map<String, dynamic> data,
@@ -160,6 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       controller: scroll,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
       children: [
+        // Show the account identity, role, shop, and email.
         ProfileIdentity(
           key: const ValueKey('profile-identity'),
           name: name?.isNotEmpty == true ? name! : 'StockWise User',
@@ -173,7 +183,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
           shopDetails(shopData!),
         ],
+        // Group related account or shop settings.
         const ProfileSection('Your Account'),
+        // Keep related profile details together.
         ProfilePanel(
           padding: 0,
           child: Column(
@@ -196,9 +208,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
+        // Group related account or shop settings.
         ProfileSection(
           session.canManage ? 'Store And Preferences' : 'Store and Preferences',
         ),
+        // Keep related profile details together.
         ProfilePanel(
           padding: 0,
           child: Column(
@@ -367,8 +381,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Show the selected shop address and operating hours.
   Widget shopDetails(AsyncSnapshot<StoreInfo?> snapshot) {
     if (snapshot.hasError) {
+      // Keep related profile details together.
       return const ProfilePanel(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -388,8 +404,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
     final store = snapshot.data;
     if (store == null) {
+      // Keep related profile details together.
       return const ProfilePanel(child: Text('This shop no longer exists.'));
     }
+    // Keep related profile details together.
     return ProfilePanel(
       key: const ValueKey('profile-shop-details'),
       child: Column(
@@ -472,6 +490,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Save the changed notification preference.
   Future<void> changePreference(bool value) async {
     if (preferenceSaving) return;
     setState(() {
@@ -494,6 +513,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Open the selected shop editor.
   Future<void> _editShop(StoreInfo store) async {
     final updated = await showDialog<StoreInfo>(
       context: context,
@@ -519,6 +539,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ).showSnackBar(inventoryFeedback('Shop details updated'));
   }
 
+  // Open the account profile editor.
   Future<void> _editProfile(
     BuildContext context,
     Map<String, dynamic> data,
@@ -545,6 +566,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Open the password change form.
   Future<void> _changePassword(BuildContext context) async {
     final changed = await Navigator.push<bool>(
       context,
@@ -560,6 +582,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Return to the shop selector.
   Future<void> _switchStore(BuildContext context) async {
     StoreSession.instance.clear();
     if (!context.mounted) return;
@@ -570,6 +593,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Clear the account session and sign out.
   Future<void> _logout(BuildContext context) async {
     if (loggingOut) return;
     final confirmed = await showProfileConfirmation(
@@ -643,8 +667,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  // Build the navigation links for this role.
   Widget _bottomNav(BuildContext context) {
     if (StoreSession.instance.canManage) {
+      // Show the admin navigation destinations.
       return InventoryBottomNav(
         currentIndex: 4,
         items: [
@@ -692,6 +718,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       );
     }
+    // Show customer navigation and the current cart count.
     return CustomerBottomNav(
       currentIndex: 3,
       items: [
@@ -734,6 +761,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// Group the report email preference values and actions.
 class _ReportEmailPreference extends StatefulWidget {
   const _ReportEmailPreference({
     required this.stream,
@@ -747,8 +775,11 @@ class _ReportEmailPreference extends StatefulWidget {
   State<_ReportEmailPreference> createState() => _ReportEmailPreferenceState();
 }
 
+// Manage the report email preference values and actions.
 class _ReportEmailPreferenceState extends State<_ReportEmailPreference> {
+  // Keep this component's values, selections, and request state.
   ReportEmailSchedule? saved;
+  // Build the report email preference layout.
   @override
   Widget build(BuildContext context) => StreamBuilder<ReportEmailSchedule>(
     stream: widget.stream,

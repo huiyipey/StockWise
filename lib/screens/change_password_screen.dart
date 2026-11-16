@@ -5,6 +5,7 @@ import '../services/password_policy.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
+// Validate the current password and save a new password.
 class ChangePasswordScreen extends StatefulWidget {
   final PasswordChanger? onChangePassword;
   const ChangePasswordScreen({super.key, this.onChangePassword});
@@ -13,7 +14,9 @@ class ChangePasswordScreen extends StatefulWidget {
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
 }
 
+// Manage the change password screen values and actions.
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   final currentPassword = TextEditingController();
   final newPassword = TextEditingController();
@@ -21,6 +24,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final visible = [false, false, false];
   bool saving = false;
   String? error;
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     currentPassword.dispose();
@@ -29,6 +33,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
+  // Validate password fields and submit the password change.
   Future<void> _save() async {
     if (saving || !(form.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
@@ -61,6 +66,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
   }
 
+  // Build a password field with visibility and validation.
   Widget _passwordField({
     required int index,
     required String label,
@@ -96,6 +102,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     validator: validator,
   );
 
+  // Build the change password screen layout.
   @override
   Widget build(BuildContext context) => ProfileFormPage(
     title: 'Change Password',
@@ -105,12 +112,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       newPassword,
       confirmation,
     ].any((field) => field.text.isNotEmpty),
+    // Group the inputs under one validation key.
     body: Form(
       onChanged: () => setState(() {}),
       key: form,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
+          // Keep related profile details together.
           ProfilePanel(
             padding: 20,
             child: Column(

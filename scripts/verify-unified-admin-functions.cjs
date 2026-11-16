@@ -10,26 +10,32 @@ const {GoogleAuth, OAuth2Client} = backend('google-auth-library');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
 const run = randomUUID().replaceAll('-', '').slice(0, 16);
-const app = initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, `admin-functions-${run}`);
+const app = initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, `admin-functions-${run}`);
 const auth = getAuth(app), client = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient: client})});
+// Keep these checks scoped to disposable test records.
 const users = [], stores = [], createdStoreIds = new Set(), result = {passed: false, checks: []};
+// Encode one test value as a Firestore REST field.
 function field(value) {
   if (typeof value === 'boolean') return {booleanValue: value};
   return {stringValue: value};
 }
+// Send a test HTTP request and read its response.
 async function request(url, user, body) {
   const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})}, body: JSON.stringify(body)});
   const text = await response.text();
   let parsed;
+  // Run this operation and handle any reported failure.
   try {parsed = text ? JSON.parse(text) : null;} catch (_) {parsed = {nonJsonResponse: text.slice(0, 600)};}
   return {status: response.status, body: parsed};
 }
+// Invoke the selected backend action using the test account.
 async function call(user, name, data, status = 200) {
   const response = await request(`https://asia-southeast1-${project}.cloudfunctions.net/${name}`, user, {data});
   assert.equal(response.status, status, `${name}: ${JSON.stringify(response.body)}`);
   return response.body?.result;
 }
+// Create an authenticated disposable test account.
 async function user(label) {
   const email = `stockwise-admin-functions-${run}-${label}@example.invalid`, password = `${randomUUID()}Aa9!`;
   const account = await auth.createUser({email, password, emailVerified: true});
@@ -39,9 +45,11 @@ async function user(label) {
   await db.doc(`users/${created.uid}`).set({displayName: `Temporary ${label}`, preferences: {orderUpdates: false, expiryAlerts: false, promotions: false}});
   return created;
 }
+// Set the temporary shop membership used by this check.
 async function membership(storeId, account, role = 'admin', isActive = true) {
   await db.doc(`stores/${storeId}/members/${account.uid}`).set({storeId, userId: account.uid, email: account.email, role, isActive});
 }
+// Create the isolated shop used by the function checks.
 async function seedStore(suffix, creator) {
   const id = `admin_functions_test_${run}_${suffix}`; stores.push(id);
   await db.doc(`stores/${id}`).set({name: `Temporary Admin ${run} ${suffix}`, status: 'admin_role_test', ownerUid: creator.uid, operatingHours: {opens: 0, closes: 1440, closedDays: []}});
@@ -124,6 +132,7 @@ async function seedStore(suffix, creator) {
     assert.equal((await db.doc(`stores/${created.id}`).get()).exists, false);
     result.checks.push('A newly created store grants its creator Admin (without an Owner role), initializes all categories, and can be deleted normally');
     result.passed = true;
+  // Clean up temporary test resources.
   } finally {
     for (const id of stores) {
       assert.ok(id.startsWith(`admin_functions_test_${run}_`) || createdStoreIds.has(id));

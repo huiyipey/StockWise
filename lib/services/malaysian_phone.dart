@@ -54,9 +54,11 @@ String? normalizeMalaysianPhone(String? value) {
   return _nationalPattern.hasMatch(national) ? '+60$national' : null;
 }
 
+// Check the number against the Malaysian phone patterns.
 bool isValidMalaysianPhone(String? value) =>
     normalizeMalaysianPhone(value) != null;
 
+// Return a readable message when the phone number is invalid.
 String? malaysianPhoneError(String? value, {bool isRequired = false}) {
   if ((value?.trim() ?? '').isEmpty) {
     return isRequired ? 'Enter a phone number' : null;

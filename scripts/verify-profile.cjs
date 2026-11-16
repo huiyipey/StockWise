@@ -7,13 +7,16 @@ const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
 const bucket = `${project}.firebasestorage.app`;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+// Keep these checks scoped to disposable test records.
 const users = [];
 const avatars = [];
+// Send the authenticated test request and parse its JSON response.
 async function jsonRequest(url, body, idToken, method = 'POST') {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(idToken ? {Authorization: `Bearer ${idToken}`} : {})}, body: body ? JSON.stringify(body) : undefined});
   return {status: response.status, data: await response.json()};
 }
+// Create a disposable account for the verification checks.
 async function signUp() {
   const email = `stockwise-profile-test-${randomUUID()}@example.invalid`;
   const password = randomUUID() + 'Aa9!';
@@ -21,15 +24,19 @@ async function signUp() {
   assert.equal(result.status, 200, 'Temporary sign-up failed');
   const user = {...result.data, password}; users.push(user); return user;
 }
+// Build the current test account profile endpoint.
 const profileUrl = uid => `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/users/${uid}`;
+// Build the endpoint for the disposable storage object.
 const storageUrl = path => `https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encodeURIComponent(path)}`;
 const pixels = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==', 'base64');
+// Upload the small test image using this account.
 async function upload(path, user, contentType = 'image/png') {
   return fetch(`https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(path)}`, {
     method: 'POST', headers: {Authorization: `Firebase ${user.idToken}`, 'Content-Type': contentType}, body: pixels,
   });
 }
 (async () => {
+  // Run this operation and handle any reported failure.
   try {
     const owner = await signUp(); const other = await signUp();
     const path = `user-avatars/${owner.localId}/profile-test-${randomUUID()}.png`;
@@ -66,6 +73,7 @@ async function upload(path, user, contentType = 'image/png') {
     const removed = await fetch(storageUrl(path), {method: 'DELETE', headers: {Authorization: `Firebase ${owner.idToken}`}});
     assert.ok([200, 204].includes(removed.status), 'Own previous avatar cleanup failed');
     console.log('PASS: live name/phone/photo persistence after login, preserved preferences and profile/avatar ownership.');
+  // Clean up temporary test resources.
   } finally {
     const access = await token();
     for (const path of avatars) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+// Build the shared report email preference component.
 class ReportEmailPreference extends StatefulWidget {
   final Stream<bool> values;
   final Future<void> Function(bool) save;
@@ -12,8 +13,11 @@ class ReportEmailPreference extends StatefulWidget {
   State<ReportEmailPreference> createState() => _ReportEmailPreferenceState();
 }
 
+// Manage the report email preference values and actions.
 class _ReportEmailPreferenceState extends State<ReportEmailPreference> {
+  // Keep this component's values, selections, and request state.
   bool saving = false;
+  // Render the report email preference component.
   @override
   Widget build(BuildContext context) => StreamBuilder<bool>(
     stream: widget.values,

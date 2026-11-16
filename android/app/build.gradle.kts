@@ -1,3 +1,4 @@
+// Apply the Android, Firebase, and Flutter build plugins.
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -7,17 +8,20 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Configure the Android app namespace and SDK versions.
 android {
     namespace = "com.example.stock_wise"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+// Compile Java 17 code with library desugaring.
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+// Read the app version and SDK limits from Flutter.
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.stock_wise"
@@ -38,15 +42,18 @@ android {
     }
 }
 
+// Compile Kotlin for the same Java 17 target.
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
+// Locate the Flutter project from this Android module.
 flutter {
     source = "../.."
 }
+// Provide Java APIs required on older Android devices.
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

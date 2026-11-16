@@ -7,42 +7,53 @@ typedef PasswordChanger =
       required String newPassword,
     });
 
+// Require the current account password.
 String? currentPasswordError(String? value) =>
     value == null || value.isEmpty ? 'Enter your current password' : null;
 
+// Validate the new password strength.
 String? newPasswordError(String? value, String currentPassword) {
   if (value == null || value.isEmpty) return 'Enter a new password';
   if (value == currentPassword) return 'Choose a different password';
   return passwordPolicyError(value);
 }
 
+// Require the confirmation to match the new password.
 String? confirmPasswordError(String? value, String newPassword) {
   if (value == null || value.isEmpty) return 'Confirm your new password';
   if (value != newPassword) return 'Passwords do not match';
   return null;
 }
 
+// Reauthenticate before changing the account password.
 class PasswordChangeFailure implements Exception {
   final String message;
   const PasswordChangeFailure(this.message);
 }
 
+// Define the account actions needed for a password change.
 abstract class PasswordAccount {
+  // Check whether this account supports password sign-in.
   bool get supportsPassword;
+  // Reauthenticate using the current password.
   Future<void> verifyCurrentPassword(String password);
+  // Save the new password after reauthentication.
   Future<void> updatePassword(String password);
 }
 
+// Reauthenticate before changing the account password.
 class _FirebasePasswordAccount implements PasswordAccount {
   final FirebaseAuth auth;
   final User user;
   _FirebasePasswordAccount(this.auth, this.user);
 
+  // Check whether this account supports password sign-in.
   @override
   bool get supportsPassword =>
       user.email != null &&
       user.providerData.any((provider) => provider.providerId == 'password');
 
+  // Reauthenticate using the current password.
   @override
   Future<void> verifyCurrentPassword(String password) async {
     await user.reauthenticateWithCredential(
@@ -50,6 +61,7 @@ class _FirebasePasswordAccount implements PasswordAccount {
     );
   }
 
+  // Save the new password after reauthentication.
   @override
   Future<void> updatePassword(String password) async {
     if (auth.currentUser?.uid != user.uid) {
@@ -61,11 +73,13 @@ class _FirebasePasswordAccount implements PasswordAccount {
   }
 }
 
+// Reauthenticate before changing the account password.
 class PasswordChangeService {
   final PasswordAccount? _account;
   PasswordChangeService([this._account]);
   static final instance = PasswordChangeService();
 
+  // Validate all password fields before changing the password.
   Future<void> change({
     required String currentPassword,
     required String newPassword,

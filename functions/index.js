@@ -30,48 +30,67 @@ const geminiApiKey = defineSecret('GEMINI_API_KEY');
 initializeApp();
 setGlobalOptions({region: 'asia-southeast1', maxInstances: 5});
 const db = getFirestore();
+// Wrap the callable with authoritative account verification.
 const verifiedCall = (options, handler) => onCall(options, withVerifiedAccount(getAuth(), handler));
 const commerce=commerceHandlers({db,serverTimestamp:()=>FieldValue.serverTimestamp(),Timestamp,bucket:getStorage().bucket()});
 const notifications=notificationHandlers({db,messaging:getMessaging(),serverTimestamp:()=>FieldValue.serverTimestamp(),Timestamp});
+// Associate this notification token with the signed-in account.
 exports.registerPushToken=verifiedCall({timeoutSeconds:30},notifications.registerPushToken);
+// Remove the signed-in account notification token.
 exports.unregisterPushToken=verifiedCall({timeoutSeconds:30},notifications.unregisterPushToken);
+// Notify active shop admins when an order is placed.
 exports.notifyNewOrder=onDocumentCreated('stores/{storeId}/orders/{orderId}',notifications.newOrder);
+// Notify the customer when the order status changes.
 exports.notifyOrderStatus=onDocumentWritten('stores/{storeId}/orders/{orderId}',notifications.orderStatus);
+// Notify eligible customers about a new promotion.
 exports.notifyPromotion=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.promotion);
+// Notify the conversation recipient about a new message.
 exports.notifyChatMessage=onDocumentCreated('stores/{storeId}/conversations/{customerId}/messages/{messageId}',notifications.chatMessage);
+// Update stored shelf-life metadata after an inventory change.
 exports.classifyInventory=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.inventoryWritten);
+// Process expiry alerts and expired stock on the schedule.
 exports.inventoryClock=onSchedule({schedule:'every 1 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},notifications.inventoryClock);
 for(const name of ['quoteCart','placeOrder','updateOrderStatus','discardInventory','removeInventory','saveDeliveryFees','deleteStore']) {
   exports[name]=verifiedCall({timeoutSeconds:name==='deleteStore'?540:120,memory:'512MiB'},commerce[name]);
 }
+// Expose the guarded signup verification operations.
 exports.manageEmailVerification = onCall({timeoutSeconds: 45, maxInstances: 3},
   createVerificationHandler({db, auth: getAuth(),
     sendEmail: identityEmailSender(require('./auth_web_config.json'))}));
+// Expose the rate-limited email registration lookup.
 exports.checkRegisteredEmail = onCall({timeoutSeconds: 15, maxInstances: 3},
   createEmailRegistrationHandler({db, auth: getAuth()}));
+// Create a validated shop and its first Admin membership.
 exports.createStore = verifiedCall({timeoutSeconds: 60, maxInstances: 3}, createStoreHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
+// Update shop details after checking Admin access.
 exports.updateStore = verifiedCall({timeoutSeconds: 60, maxInstances: 3}, updateStoreHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
+// Invite a verified existing account to administer this shop.
 exports.createAdminInvite = verifiedCall({timeoutSeconds: 30}, createAdminInviteHandler({
   db, auth: getAuth(), serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
+// Change Admin access while protecting the last active admin.
 exports.setStoreAdminActive = verifiedCall({timeoutSeconds: 60}, setStoreAdminActiveHandler({
   db, serverTimestamp: () => FieldValue.serverTimestamp(),
 }));
+// Expose the server-side unused-category deletion check.
 exports.deleteCategory = verifiedCall({timeoutSeconds: 120, memory: '512MiB'}, deleteCategoryHandler({db}));
+// Read the selected shop from the verified request.
 function storeFor(request) {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
   const id = request.data?.storeId;
   if (typeof id !== 'string' || !/^[\w-]{1,128}$/.test(id)) throw new HttpsError('invalid-argument', 'Select a store.');
   return db.collection('stores').doc(id);
 }
+// Require active administrative membership for this shop.
 async function requireMember(store, uid) {
   const member = (await store.collection('members').doc(uid).get()).data();
   if (!isActiveStoreAdmin(member)) throw new HttpsError('permission-denied', 'Store admin access is required.');
 }
+// Read the selected report records using Malaysia date boundaries.
 async function buildReport(store, kind, start, end) {
   if (!['sales', 'waste'].includes(kind)) throw new HttpsError('invalid-argument', 'Select sales or waste.');
   let bounds;
@@ -85,6 +104,7 @@ async function buildReport(store, kind, start, end) {
   return report(kind, records.docs.map(d => ({id: d.id, ...d.data()})), start, end,
     Object.fromEntries(categories.docs.map(d => [d.id, d.data().name])));
 }
+// Return the authorized report and its CSV data.
 exports.getStoreReport = verifiedCall({timeoutSeconds: 120, memory: '512MiB'}, async request => {
   const store = storeFor(request);
   await requireMember(store, request.auth.uid);
@@ -107,9 +127,13 @@ async function mailTransport() {
   return {transport, from: config.from};
 }
 const orderEmails=orderEmailHandlers({db,auth:getAuth(),transportFactory:mailTransport,bucket:getStorage().bucket(),serverTimestamp:()=>FieldValue.serverTimestamp()});
+// Send the new-order confirmation through the email delivery handler.
 exports.emailOrderConfirmation=onDocumentCreated({document:'stores/{storeId}/orders/{orderId}',timeoutSeconds:120,memory:'512MiB'},orderEmails.created);
+// Retry confirmations that have a safely retryable delivery state.
 exports.retryOrderConfirmations=onSchedule({schedule:'every 15 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},orderEmails.retry);
+// Resolve eligible report recipients from active Admin memberships.
 async function teamEmails(store) { return storeReportRecipients(store, getAuth()); }
+// Email each due report using the admin selected schedules.
 exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/Kuala_Lumpur',
   timeoutSeconds: 540, memory: '512MiB', maxInstances: 1, retryCount: 3}, async event => {
   const periods = duePeriods(new Date(event.scheduleTime), ['daily', 'weekly', 'monthly', 'yearly']);
@@ -172,6 +196,7 @@ exports.emailStoreReports = onSchedule({schedule: '0 9 * * *', timeZone: 'Asia/K
   if (failed) throw Error('Some report deliveries require review.');
 });
 
+// Load verified catalogue and purchase facts for this shop.
 async function assistantContext(store, uid) {
   const [stock, orders, categories] = await Promise.all([
     store.collection('inventoryBatches').where('status', '==', 'active').orderBy('expiryAt').limit(150).get(),
@@ -191,6 +216,7 @@ async function assistantContext(store, uid) {
   }
   return {catalog, history: lines};
 }
+// Return rule-based suggestions or a contextual Gemini reply.
 exports.shoppingAssistant = verifiedCall({timeoutSeconds: 120, memory: '512MiB', maxInstances: 3, secrets: [geminiApiKey]}, async request => {
   const store = storeFor(request);
   if ((await store.get()).data()?.status !== 'active') throw new HttpsError('not-found', 'This store is unavailable.');
@@ -206,7 +232,7 @@ exports.shoppingAssistant = verifiedCall({timeoutSeconds: 120, memory: '512MiB',
   });
   const context = await assistantContext(store, request.auth.uid);
   const picks = recommendations(context.catalog, context.history);
-  const reply = await assistantReply({request: input, context, picks, generate: options => {
+  const reply = await assistantReply({request: input, context, picks, /* Ask Gemini using the bounded server-provided conversation. */ generate: options => {
     const ai = new GoogleGenAI({apiKey: geminiApiKey.value(), httpOptions: {timeout: 90000}});
     return ai.models.generateContent({model: process.env.SHOPPING_AI_MODEL || 'gemini-3.5-flash-lite', ...options});
   }});

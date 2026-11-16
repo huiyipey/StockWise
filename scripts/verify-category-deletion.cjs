@@ -11,12 +11,14 @@ const {GoogleAuth, OAuth2Client} = backend('google-auth-library');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
 const run = randomUUID().replaceAll('-', '').slice(0, 16);
+// Keep these checks scoped to disposable test records.
 const storeId = `category_delete_test_${run}`, otherId = `${storeId}_other`;
-const app = initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, `category-${run}`);
+const app = initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}}, `category-${run}`);
 const auth = getAuth(app), client = new OAuth2Client();
 const db = new Firestore({projectId: project, preferRest: true, auth: new GoogleAuth({authClient: client})});
 const users = [], result = {passed: false, checks: []};
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
+// Create or sign in the disposable test account.
 async function account(label) {
   const email = `stockwise-category-${run}-${label}@example.invalid`, password = randomUUID() + 'Aa9!';
   const record = await auth.createUser({email, password, emailVerified: true});
@@ -28,13 +30,16 @@ async function account(label) {
   user.idToken = (await response.json()).idToken;
   return user;
 }
+// Send a test HTTP request and read its response.
 async function request(url, user, method, body) {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})}, ...(body ? {body: JSON.stringify(body)} : {})});
   const text = await response.text();
   let data; try { data = text ? JSON.parse(text) : {}; } catch { data = {nonJson: true}; }
   return {status: response.status, body: data};
 }
+// Remove the disposable record created by this test.
 const remove = (user, categoryId, shop = storeId) => request(`https://asia-southeast1-${project}.cloudfunctions.net/deleteCategory`, user, 'POST', {data: {storeId: shop, categoryId}});
+// Encode or read the Firestore value used by the test.
 function value(input) {
   if (typeof input === 'string') return {stringValue: input};
   if (typeof input === 'boolean') return {booleanValue: input};
@@ -42,21 +47,26 @@ function value(input) {
   if (input instanceof Date) return {timestampValue: input.toISOString()};
   throw Error('Unsupported fixture field');
 }
+// Apply the test document update using the selected account.
 const patch = (user, document, fields) => request(`${base}/${document}`, user, 'PATCH', {fields: Object.fromEntries(Object.entries(fields).map(([key, val]) => [key, value(val)]))});
+// Check the expected HTTP result and report a useful failure.
 async function expectStatus(promise, status, label) {
   const reply = await promise;
   assert.equal(reply.status, status, `${label}: ${JSON.stringify(reply.body)}`);
   return reply;
 }
+// Create the temporary category used by this test case.
 async function category(id, isActive = true, shop = storeId) {
   await db.doc(`stores/${shop}/categories/${id}`).set({storeId: shop, name: `Temporary ${id}`, isActive, sortOrder: 0});
 }
+// Create the shop membership used by this test case.
 async function member(user, role = 'admin', active = true, shop = storeId) {
   await db.doc(`stores/${shop}/members/${user.uid}`).set({storeId: shop, userId: user.uid, role, isActive: active});
 }
 (async () => {
   client.setCredentials({access_token: await token(), expiry_date: Date.now() + 3500000});
   let orderCreated = false;
+  // Run this operation and handle any reported failure.
   try {
     const admin = await account('admin'), customer = await account('customer'), outsider = await account('outsider');
     for (const id of [storeId, otherId]) await db.doc(`stores/${id}`).set({name: 'Temporary category deletion verification', status: 'category_delete_test', ownerUid: admin.uid});
@@ -128,6 +138,7 @@ async function member(user, role = 'admin', active = true, shop = storeId) {
     assert.equal((await db.doc(`stores/${storeId}/orderEmails/legacy`).get()).data()?.status, 'skipped');
     result.noEmailOrPushSent = true;
     result.passed = true;
+  // Clean up temporary test resources.
   } finally {
     if (orderCreated && !result.passed) {
       // Allow the async .invalid-recipient handler to finish before removing it.

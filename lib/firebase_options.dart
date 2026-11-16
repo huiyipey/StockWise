@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart'
 /// );
 /// ```
 class DefaultFirebaseOptions {
+  // Return the Firebase options for Android or iOS.
   static FirebaseOptions get currentPlatform {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -34,6 +35,7 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // Connect the android app to this Firebase project.
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyA-My-UWs6Nb9xyt9f0DaXznDWTtc4mtxs',
     appId: '1:580473531764:android:dc7ff54cce46216347d021',
@@ -41,6 +43,7 @@ class DefaultFirebaseOptions {
     projectId: 'stockwise-190a9',
     storageBucket: 'stockwise-190a9.firebasestorage.app',
   );
+  // Connect the ios app to this Firebase project.
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyAAseFDXWF8isu76gNZOFMePuH7qUrJwXg',
     appId: '1:580473531764:ios:add86eb8175eb06b47d021',

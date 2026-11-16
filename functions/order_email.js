@@ -1,7 +1,10 @@
 // Customer order confirmations use the authenticated account address, never a client-supplied recipient.
 const {orderConfirmation}=require('./order_email_template');
 const {orderImages}=require('./order_email_images');
+const {isImportedDemoOrder}=require('./demo_data');
+// Create confirmation delivery and safe retry handlers.
 function orderEmailHandlers({db,auth,transportFactory,serverTimestamp,bucket,now=()=>Date.now()}){
+ // Prevent duplicate attempts and record the email delivery outcome.
  async function deliver(storeId,orderId){
   const store=db.collection('stores').doc(storeId),queue=store.collection('orderEmails').doc(orderId);
   const claimed=await db.runTransaction(async tx=>{const saved=(await tx.get(queue)).data();
@@ -13,7 +16,9 @@ function orderEmailHandlers({db,auth,transportFactory,serverTimestamp,bucket,now
   try{
    const [shop,orderDoc,rows]=await Promise.all([store.get(),store.collection('orders').doc(orderId).get(),store.collection('orders').doc(orderId).collection('items').get()]);
    if(!shop.exists||!orderDoc.exists){await queue.update({status:'skipped',updatedAt:serverTimestamp()});return;}
-   const order=orderDoc.data(),user=await auth.getUser(order.userId);
+   const order=orderDoc.data();
+   if(isImportedDemoOrder(order)){await queue.update({status:'skipped',reason:'demo_import',updatedAt:serverTimestamp()});return;}
+   const user=await auth.getUser(order.userId);
    if(user.disabled||!user.email||user.email.endsWith('.invalid')){await queue.update({status:'skipped',updatedAt:serverTimestamp()});return;}
    mail=await transportFactory();
    const items=rows.docs.map(doc=>doc.data());
@@ -30,8 +35,11 @@ function orderEmailHandlers({db,auth,transportFactory,serverTimestamp,bucket,now
   }finally{mail?.transport?.close();}
  }
  return {
-  created:event=>event.data?deliver(event.params.storeId,event.params.orderId):Promise.resolve(),
+  // Send the initial confirmation for the newly placed order.
+  created:event=>event.data&&!isImportedDemoOrder(event.data.data?.())?deliver(event.params.storeId,event.params.orderId):Promise.resolve(),
+  // Retry email attempts that are explicitly safe to send again.
   retry:async()=>{try{const sender=await transportFactory();sender.transport.close();}catch(_){return;}const stores=await db.collection('stores').where('status','==','active').get();for(const store of stores.docs){const pending=await store.ref.collection('orderEmails').where('status','in',['configuration_required','preparing']).limit(50).get();for(const doc of pending.docs)await deliver(store.id,doc.id);}},
  };
 }
+// Export the helpers used by the app backend and tests.
 module.exports={orderConfirmation,orderEmailHandlers};

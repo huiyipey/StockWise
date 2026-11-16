@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'inventory_ui.dart';
 
+// Build the shared profile tag component.
 class ProfileTag extends StatelessWidget {
   const ProfileTag(this.label, {super.key, this.pending = false});
   final String label;
   final bool pending;
+  // Render the profile tag component.
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),

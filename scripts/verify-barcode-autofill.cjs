@@ -6,32 +6,39 @@ const {initializeApp} = backendRequire('firebase-admin/app');
 const {getAuth} = backendRequire('firebase-admin/auth');
 const {token, project} = require('./cloud-access.cjs');
 const apiKey = require('../android/app/google-services.json').client[0].api_key[0].current_key;
-initializeApp({projectId: project, credential: {getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+initializeApp({projectId: project, credential: {/* Provide the authenticated token to this Firebase client. */ getAccessToken: async () => ({access_token: await token(), expires_in: 3500})}});
+// Keep these checks scoped to disposable test records.
 const stores = [`barcode_test_${randomUUID()}`, `barcode_test_${randomUUID()}`];
 const base = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents`;
 const prefix = `projects/${project}/databases/(default)/documents`;
 const barcode = '0012345678905';
 let user;
+// Send a test HTTP request and read its response.
 async function request(url, body, access, method = 'POST') {
   const response = await fetch(url, {method, headers: {'Content-Type': 'application/json', ...(access ? {Authorization: `Bearer ${access}`} : {})}, body: body ? JSON.stringify(body) : undefined});
   const text = await response.text();
   return {status: response.status, data: text ? JSON.parse(text) : null};
 }
+// Encode the test values as Firestore REST fields.
 function fields(data) {
   return Object.fromEntries(Object.entries(data).map(([key, value]) => [key,
     value instanceof Date ? {timestampValue: value.toISOString()} :
     value === null ? {nullValue: null} : typeof value === 'boolean' ? {booleanValue: value} :
     typeof value === 'number' ? {integerValue: String(value)} : {stringValue: value}]));
 }
+// Create the disposable records needed by this test case.
 async function seed(path, data) {
   const result = await request(`${base}/${path}`, {fields: fields(data)}, await token(), 'PATCH');
   assert.equal(result.status, 200, 'Temporary fixture setup failed');
 }
+// Read the disposable document using the supplied test account.
 const read = path => request(`${base}/${path}`, null, user.idToken, 'GET');
+// Write the disposable document using the supplied test account.
 function write(path, data, transforms = []) {
   return {update: {name: `${prefix}/${path}`, fields: fields(data)}, updateMask: {fieldPaths: Object.keys(data)},
     ...(transforms.length ? {updateTransforms: transforms.map(fieldPath => ({fieldPath, setToServerValue: 'REQUEST_TIME'}))} : {})};
 }
+// Request the registration or saved-product lookup under test.
 async function lookup(store, code) {
   const result = await request(`${base}/stores/${store}:runQuery`, {structuredQuery: {
     from: [{collectionId: 'products'}], where: {fieldFilter: {field: {fieldPath: 'barcode'}, op: 'EQUAL', value: {stringValue: code}}},
@@ -39,6 +46,7 @@ async function lookup(store, code) {
   assert.equal(result.status, 200, 'Saved barcode query failed');
   return result.data.filter(row => row.document).map(row => row.document);
 }
+// Submit the tested inventory receive operation.
 async function receive(store, productId, batchId, productData, expiry, quantity, isNew = false) {
   const product = {storeId: store, ...productData, isActive: true};
   const batch = {storeId: store, productId, productName: product.name, categoryId: product.categoryId,
@@ -54,6 +62,7 @@ async function receive(store, productId, batchId, productData, expiry, quantity,
   assert.equal(result.status, 200, 'Receiving a new batch failed');
 }
 (async () => {
+  // Run this operation and handle any reported failure.
   try {
     const email = `stockwise-barcode-test-${randomUUID()}@example.invalid`;
     const signup = await request(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
@@ -100,6 +109,7 @@ async function receive(store, productId, batchId, productData, expiry, quantity,
     await receive(store, 'manual', 'manual-batch', {...template, name: 'Manual bread', barcode: 'unknown-code', imagePath: null}, new Date('2027-05-01T00:00:00Z'), 3, true);
     assert.equal((await lookup(store, 'unknown-code')).length, 1, 'Manual entry records a new barcode');
     console.log('PASS: live store barcode lookup, duplicate selection, reused product/photo, separate stock/expiry and manual product creation.');
+  // Clean up temporary test resources.
   } finally {
     const access = await token();
     for (const store of stores) {

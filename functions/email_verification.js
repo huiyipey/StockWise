@@ -6,10 +6,12 @@ const WINDOW_MS = 60 * 60 * 1000;
 const MAX_SENDS = 10;
 const RECENT_SIGN_IN_MS = 5 * 60 * 1000;
 
+// Accept verified accounts and the supported legacy exemption.
 function canAccessAccount(user) {
   return !user.disabled && (user.emailVerified === true || user.customClaims?.[LEGACY_CLAIM] === true);
 }
 
+// Check the authoritative Auth account before protected actions.
 function withVerifiedAccount(auth, handler) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -21,6 +23,7 @@ function withVerifiedAccount(auth, handler) {
   };
 }
 
+// Build verification status from the current Auth record.
 function statusFor(user, state, time) {
   return {
     email: user.email,
@@ -31,6 +34,7 @@ function statusFor(user, state, time) {
   };
 }
 
+// Convert email delivery failures to readable callable errors.
 function deliveryError(message) {
   if (/TOO_MANY_ATTEMPTS|QUOTA_EXCEEDED|TOO_MANY_REQUESTS/.test(message)) {
     return new HttpsError('resource-exhausted', 'Too many requests. Please try again later.', {retryAfter: 60});
@@ -50,6 +54,7 @@ function deliveryError(message) {
   return new HttpsError('unavailable', 'Could not send the email. Please try again.');
 }
 
+// Manage verification status, email changes, and resend limits.
 function createVerificationHandler({db, auth, sendEmail, now = Date.now}) {
   return async request => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -157,6 +162,7 @@ function createVerificationHandler({db, auth, sendEmail, now = Date.now}) {
   };
 }
 
+// Send verification using Firebase Identity Toolkit.
 function identityEmailSender({apiKey, fetchImpl = fetch}) {
   return async ({idToken, newEmail}) => {
     const response = await fetchImpl(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`, {
@@ -170,5 +176,6 @@ function identityEmailSender({apiKey, fetchImpl = fetch}) {
   };
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {LEGACY_CLAIM, COOLDOWN_MS, WINDOW_MS, MAX_SENDS, canAccessAccount,
   withVerifiedAccount, createVerificationHandler, identityEmailSender};

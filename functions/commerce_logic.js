@@ -1,9 +1,14 @@
 const {DateTime} = require('luxon');
 const zone = 'Asia/Kuala_Lumpur';
+// Normalize supported stored date values.
 const date = value => value?.toDate ? value.toDate() : value instanceof Date ? value : new Date(value);
+// Validate a non-negative amount in integer cents.
 const cents = value => Number.isSafeInteger(value) && value >= 0;
+// Require a positive whole-number quantity.
 const positive = value => Number.isSafeInteger(value) && value > 0;
+// Capitalize each word for display.
 const titleCase = value => String(value || '').trim().replace(/\s+/gu, ' ').replace(/(^|[\s-])(\S)/gu, (_,a,b)=>a+b.toUpperCase());
+// Normalize the saved shop hours and closed weekdays.
 function operatingHours(value) {
   const hours = value || {opens:540,closes:1260};
   if (!Number.isInteger(hours.opens) || !Number.isInteger(hours.closes) || hours.opens < 0 || hours.closes > 1440 || hours.closes <= hours.opens + 30) throw Error('Set operating hours with at least 30 minutes for orders.');
@@ -11,17 +16,20 @@ function operatingHours(value) {
   if (!Array.isArray(closedDays) || closedDays.length > 7 || closedDays.some(day => !Number.isInteger(day) || day < 1 || day > 7)) throw Error('Choose closed days from Monday through Sunday.');
   return {opens:hours.opens,closes:hours.closes,closedDays:[...new Set(closedDays)].sort((a,b)=>a-b)};
 }
+// Check whether the shop currently accepts orders.
 function orderingOpen(store, now = new Date()) {
   const h=operatingHours(store.operatingHours), local=DateTime.fromJSDate(now).setZone(zone);
   const minute=local.hour*60+local.minute;
   return store.status==='active' && !h.closedDays.includes(local.weekday) && minute>=h.opens && minute<h.closes-30;
 }
+// Explain the current shop closing or ordering cutoff.
 function orderingClosedMessage(store, now = new Date()) {
   const local=DateTime.fromJSDate(now).setZone(zone);
   return operatingHours(store.operatingHours).closedDays.includes(local.weekday)
     ? 'The store is closed today. Please return on an open day.'
     : 'Ordering is closed. Orders close 30 minutes before the store closes.';
 }
+// Classify a batch by its total shelf life.
 function shelfLife(batch, now=new Date()) {
   const expiry=DateTime.fromJSDate(date(batch.expiryAt)).setZone(zone).startOf('day');
   const received=DateTime.fromJSDate(date(batch.receivedAt||batch.createdAt||now)).setZone(zone).startOf('day');
@@ -31,6 +39,7 @@ function shelfLife(batch, now=new Date()) {
   const [orange, red]=type==='short'?[3,1]:type==='medium'?[20,6]:[60,29];
   return {totalShelfLifeDays:days,shelfLifeType:type,daysLeft:left,colour:left>orange?'green':left<=red?'red':'orange',orange,red};
 }
+// Choose the current expiry warning stage.
 function expiryStage(batch, store, now=new Date()) {
   if (batch.notifyOnExpiry===false || batch.status!=='active' || batch.quantityOnHand<=0 || date(batch.expiryAt)<=now) return null;
   const life=shelfLife(batch,now), h=operatingHours(store.operatingHours), local=DateTime.fromJSDate(now).setZone(zone);
@@ -42,6 +51,7 @@ function expiryStage(batch, store, now=new Date()) {
   if (life.daysLeft<=middle) return 2;
   return life.daysLeft<=life.orange?1:null;
 }
+// Reject invalid discount and bundle promotion settings.
 function validatePromotion(p, base) {
   if (!p) return null;
   if (!['percentage','fixed','bundle'].includes(p.type)) throw Error('Choose a promotion type.');
@@ -56,6 +66,7 @@ function validatePromotion(p, base) {
   }
   return p;
 }
+// Choose the valid current selling price.
 function sellingPrice(batch) {
   if (!batch.promotionEnabled) return batch.basePriceCents;
   const p=batch.promotion;
@@ -63,14 +74,17 @@ function sellingPrice(batch) {
   if (p?.type==='fixed') return Math.max(1,batch.basePriceCents-p.amountCents);
   return p?.type==='bundle'?batch.basePriceCents:batch.promotionPriceCents??batch.basePriceCents;
 }
+// Resolve the fixed or matching postcode delivery charge.
 function deliveryFee(settings, postcode) {
   if (settings?.deliveryFeeMode!=='postcode') return settings?.deliveryFeeCents??500;
   if (!/^\d{5}$/.test(postcode||'')) return null;
   const fee=settings.postcodeFees?.[postcode];
   return cents(fee)?fee:null;
 }
+// Calculate current cart prices, offers, and delivery availability.
 function quoteCart(cart, inventory, {now=new Date()}={}) {
   return require('./bundle_quote').bundleQuote(cart, inventory, {now, sellingPrice, validatePromotion, titleCase, shelfLife});
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports={titleCase,operatingHours,orderingOpen,orderingClosedMessage,shelfLife,expiryStage,validatePromotion,sellingPrice,deliveryFee,quoteCart};

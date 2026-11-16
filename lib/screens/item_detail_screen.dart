@@ -11,6 +11,7 @@ import '../widgets/catalogue_cache_notice.dart';
 import 'product_image_screen.dart';
 import 'cart_screen.dart';
 
+// Show product prices, availability, and add-to-cart controls.
 class ItemDetailScreen extends StatefulWidget {
   const ItemDetailScreen({
     super.key,
@@ -27,11 +28,16 @@ class ItemDetailScreen extends StatefulWidget {
   State<ItemDetailScreen> createState() => _ItemDetailScreenState();
 }
 
+// Manage the item detail screen values and actions.
 class _ItemDetailScreenState extends State<ItemDetailScreen> {
+  // Keep this component's values, selections, and request state.
   int quantity = 1;
   bool adding = false;
+  // Read the current product from the latest inventory update.
   InventoryBatch get item => widget.item;
+  // Read the current selling price.
   bool get selling => item.canSellAt(DateTime.now());
+  // Choose the product unit label.
   String get unit =>
       const {
         'packs': 'pack',
@@ -42,6 +48,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       }[item.unitLabel.toLowerCase()] ??
       item.unitLabel;
 
+  // Build the item detail screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -50,17 +57,20 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Product Details',
                 back: true,
                 onBack: () => Navigator.maybePop(context),
               ),
+              // Explain when a saved catalogue snapshot is being displayed.
               const CatalogueCacheNotice(),
               Expanded(
                 child: ListView(
                   key: const ValueKey('customer-product-scroll'),
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   children: [
+                    // Group the related order details in one card.
                     OrderPanel(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,11 +201,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     ),
   );
 
+  // Use the current shelf-life warning colour.
   Color get expiryColour => switch (item.expiryColour) {
     ShelfLifeColour.green => InventoryColors.green,
     ShelfLifeColour.orange => InventoryColors.amber,
     ShelfLifeColour.red => InventoryColors.error,
   };
+  // Show available units and expiry information.
   Widget stockCard() {
     final days = item.daysUntilExpiry;
     final countdown = days < 0
@@ -203,6 +215,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         : days == 0
         ? 'Today'
         : '$days ${days == 1 ? 'day' : 'days'} left';
+    // Group the related order details in one card.
     return OrderPanel(
       key: const ValueKey('customer-product-stock'),
       child: Column(
@@ -303,6 +316,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     );
   }
 
+  // Add the selected quantity and show customer feedback.
   Future<void> add() async {
     if (adding || !selling) return;
     setState(() {
@@ -352,6 +366,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   }
 }
 
+// Group the product photo values and actions.
 class _ProductPhoto extends StatefulWidget {
   const _ProductPhoto({required this.item, this.provider});
   final InventoryBatch item;
@@ -360,8 +375,11 @@ class _ProductPhoto extends StatefulWidget {
   State<_ProductPhoto> createState() => _ProductPhotoState();
 }
 
+// Manage the product photo values and actions.
 class _ProductPhotoState extends State<_ProductPhoto> {
+  // Keep this component's values, selections, and request state.
   late final Future<ImageProvider?> image = resolve();
+  // Load the stored image or receipt download URL.
   Future<ImageProvider?> resolve() async {
     if (widget.provider != null) return widget.provider;
     final path = widget.item.imagePath;
@@ -372,6 +390,7 @@ class _ProductPhotoState extends State<_ProductPhoto> {
     return url == null ? null : NetworkImage(url);
   }
 
+  // Show fallback artwork when no image is available.
   Widget placeholder() => const Center(
     child: Column(
       mainAxisSize: MainAxisSize.min,
@@ -385,6 +404,7 @@ class _ProductPhotoState extends State<_ProductPhoto> {
       ],
     ),
   );
+  // Build the product photo layout.
   @override
   Widget build(BuildContext context) => ClipRRect(
     borderRadius: BorderRadius.circular(16),
@@ -392,6 +412,7 @@ class _ProductPhotoState extends State<_ProductPhoto> {
       height: 204,
       width: double.infinity,
       color: InventoryColors.background,
+      // Show loading, errors, or the completed request.
       child: FutureBuilder<ImageProvider?>(
         future: image,
         builder: (context, snapshot) {

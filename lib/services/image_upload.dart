@@ -1,13 +1,16 @@
 import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 
+// Validate image bytes and identify their file format.
 class ImageUpload {
   final Uint8List bytes;
   final String contentType;
   final String extension;
   ImageUpload(this.bytes, this.contentType, this.extension);
+  // Read and validate the selected image.
   static Future<ImageUpload> read(XFile file) async =>
       fromBytes(await file.readAsBytes());
+  // Detect the image format and reject unsupported image bytes.
   static ImageUpload fromBytes(Uint8List bytes) {
     if (bytes.isEmpty || bytes.length >= 5 * 1024 * 1024) {
       throw ArgumentError('Choose an image smaller than 5 MB.');

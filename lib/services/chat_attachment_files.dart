@@ -7,9 +7,12 @@ import 'package:open_filex/open_filex.dart';
 
 import '../models/chat_attachment.dart';
 
+// Pick, open, or save chat attachment files.
 enum ChatAttachmentSource { photo, file }
 
+// Pick, open, or save chat attachment files.
 class ChatAttachmentFiles {
+  // Open the calendar for one report boundary.
   static Future<ChatAttachmentDraft?> pick(ChatAttachmentSource source) async {
     final XFile? file;
     if (source == ChatAttachmentSource.photo) {
@@ -28,6 +31,7 @@ class ChatAttachmentFiles {
     return file == null ? null : ChatAttachmentDraft.fromFile(file);
   }
 
+  // Open the downloaded attachment in a suitable app.
   static Future<void> open(
     Uint8List data,
     String name,
@@ -44,6 +48,7 @@ class ChatAttachmentFiles {
     }
   }
 
+  // Save the attachment through the native file dialog.
   static Future<bool> save(
     Uint8List data,
     String name,

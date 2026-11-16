@@ -1,6 +1,7 @@
 const {isActiveStoreAdmin} = require('./store_roles');
 const {reportCadences} = require('./reporting');
 
+// Select active admins and their authoritative Auth email addresses.
 async function storeReportRecipients(store, auth) {
   const members = await store.collection('members').get();
   const result = [];
@@ -22,4 +23,5 @@ async function storeReportRecipients(store, auth) {
   return result;
 }
 
+// Export the helpers used by the app backend and tests.
 module.exports = {storeReportRecipients};

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// Keep the saved address values used by the app.
 class SavedAddress {
   final String id;
   final String label;
@@ -23,6 +24,7 @@ class SavedAddress {
     required this.postalCode,
   });
 
+  // Read this record from a Firestore document.
   factory SavedAddress.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
     return SavedAddress(
@@ -39,6 +41,7 @@ class SavedAddress {
     );
   }
 
+  // Convert this record to fields that can be saved.
   Map<String, dynamic> toData() => {
     'label': label.trim(),
     'name': name.trim(),
@@ -51,6 +54,7 @@ class SavedAddress {
     'countryCode': 'MY',
   };
 
+  // Join the non-empty address fields for display.
   String get formatted => [
     addressLine1.trim(),
     if (addressLine2.trim().isNotEmpty) addressLine2.trim(),
@@ -58,11 +62,13 @@ class SavedAddress {
   ].join(', ');
 }
 
+// Keep the address book values used by the app.
 class AddressBook {
   final List<SavedAddress> addresses;
   final String? defaultAddressId;
   const AddressBook({this.addresses = const [], this.defaultAddressId});
 
+  // Find the saved default address, if one exists.
   SavedAddress? get defaultAddress {
     for (final address in addresses) {
       if (address.id == defaultAddressId) return address;
@@ -70,6 +76,7 @@ class AddressBook {
     return addresses.firstOrNull;
   }
 
+  // Find the saved address with this identifier.
   SavedAddress? find(String? id) =>
       addresses.where((a) => a.id == id).firstOrNull;
 }

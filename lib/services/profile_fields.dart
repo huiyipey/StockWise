@@ -8,6 +8,7 @@ typedef ProfileSaver =
       XFile? photo,
     });
 
+// Validate the account display name.
 String? profileNameError(String? value) {
   final name = value?.trim() ?? '';
   if (name.isEmpty) return 'Enter your name';

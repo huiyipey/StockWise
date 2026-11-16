@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/report_data.dart';
 import 'inventory_ui.dart';
 
+// Open the custom report date range picker.
 Future<DateTimeRange?> showReportDateRange({
   required BuildContext context,
   required DateTime firstDate,
@@ -20,6 +21,7 @@ Future<DateTimeRange?> showReportDateRange({
   ),
 );
 
+// Build the shared report date range page component.
 class ReportDateRangePage extends StatefulWidget {
   const ReportDateRangePage({
     super.key,
@@ -33,10 +35,13 @@ class ReportDateRangePage extends StatefulWidget {
   State<ReportDateRangePage> createState() => _ReportDateRangePageState();
 }
 
+// Manage the report date range page values and actions.
 class _ReportDateRangePageState extends State<ReportDateRangePage> {
+  // Keep this component's values, selections, and request state.
   DateTime? start, end;
   late DateTime month;
   bool years = false;
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -45,8 +50,10 @@ class _ReportDateRangePageState extends State<ReportDateRangePage> {
     month = DateTime(start!.year, start!.month);
   }
 
+  // Check whether the date range exceeds the report limit.
   bool get tooLong =>
       start != null && end != null && reportDayCount(start!, end!) > 366;
+  // Open the calendar for one report boundary.
   void pick(DateTime value) => setState(() {
     if (start == null || end != null) {
       start = value;
@@ -58,6 +65,7 @@ class _ReportDateRangePageState extends State<ReportDateRangePage> {
       end = value;
     }
   });
+  // Open manual start and end date entry.
   Future<void> manual() async {
     final picked = await showDialog<DateTimeRange>(
       context: context,
@@ -73,6 +81,7 @@ class _ReportDateRangePageState extends State<ReportDateRangePage> {
     if (picked != null && mounted) Navigator.pop(context, picked);
   }
 
+  // Render the report date range page component.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -92,6 +101,7 @@ class _ReportDateRangePageState extends State<ReportDateRangePage> {
           body: SafeArea(
             child: Column(
               children: [
+                // Show the page title, shop name, and header actions.
                 InventoryHeader(
                   title: 'Report date range',
                   back: true,
@@ -360,6 +370,7 @@ class _ReportDateRangePageState extends State<ReportDateRangePage> {
   );
 }
 
+// Build the shared report date entry component.
 class _ReportDateEntry extends StatefulWidget {
   const _ReportDateEntry({
     required this.first,
@@ -373,7 +384,9 @@ class _ReportDateEntry extends StatefulWidget {
   State<_ReportDateEntry> createState() => _ReportDateEntryState();
 }
 
+// Manage the report date entry values and actions.
 class _ReportDateEntryState extends State<_ReportDateEntry> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   final format = DateFormat('dd/MM/yyyy');
   late final start = TextEditingController(
@@ -382,6 +395,7 @@ class _ReportDateEntryState extends State<_ReportDateEntry> {
   late final end = TextEditingController(
     text: widget.end == null ? '' : format.format(widget.end!),
   );
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     start.dispose();
@@ -389,6 +403,7 @@ class _ReportDateEntryState extends State<_ReportDateEntry> {
     super.dispose();
   }
 
+  // Parse a manually entered report boundary date.
   DateTime? parse(String value) {
     try {
       return reportDay(format.parseStrict(value.trim()));
@@ -397,6 +412,7 @@ class _ReportDateEntryState extends State<_ReportDateEntry> {
     }
   }
 
+  // Require valid dates in order and within the report limit.
   String? validate(String? value, bool last) {
     final date = parse(value ?? '');
     if (date == null) return 'Enter a valid date.';
@@ -413,6 +429,7 @@ class _ReportDateEntryState extends State<_ReportDateEntry> {
     return null;
   }
 
+  // Render the report date entry component.
   @override
   Widget build(BuildContext context) => Dialog(
     insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -424,6 +441,7 @@ class _ReportDateEntryState extends State<_ReportDateEntry> {
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+              // Group the inputs under one validation key.
               child: Form(
                 key: form,
                 child: Column(

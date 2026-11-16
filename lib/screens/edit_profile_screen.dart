@@ -9,6 +9,7 @@ import '../models/product_name.dart';
 import '../widgets/inventory_ui.dart';
 import '../widgets/profile_ui.dart';
 
+// Edit the account name, phone number, and profile photo.
 class EditProfileScreen extends StatefulWidget {
   final String displayName;
   final String phoneNumber;
@@ -31,7 +32,9 @@ class EditProfileScreen extends StatefulWidget {
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
+// Manage the edit profile screen values and actions.
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  // Keep this component's values, selections, and request state.
   final form = GlobalKey<FormState>();
   late final name = TextEditingController(text: widget.displayName);
   late final phone = TextEditingController(text: widget.phoneNumber);
@@ -41,11 +44,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool picking = false;
   String? error;
   bool completed = false;
+  // Check whether the form has unsaved changes.
   bool get dirty =>
       name.text != widget.displayName ||
       phone.text != widget.phoneNumber ||
       photo != null;
 
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
@@ -53,6 +58,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     phone.addListener(refresh);
   }
 
+  // Build the edit profile screen layout.
   @override
   Widget build(BuildContext context) => ProfileFormPage(
     title: 'Edit Profile',
@@ -60,11 +66,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     busy: saving || picking,
     completed: completed,
     discardTitle: 'Discard profile changes?',
+    // Group the inputs under one validation key.
     body: Form(
       key: form,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
+          // Keep related profile details together.
           ProfilePanel(
             padding: 20,
             child: Column(
@@ -162,10 +170,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       onPressed: saving || picking ? null : _save,
     ),
   );
+  // Refresh the unsaved-change and validation state.
   void refresh() {
     if (mounted) setState(() {});
   }
 
+  // Release controllers, timers, and subscriptions held by this component.
   @override
   void dispose() {
     name.dispose();
@@ -173,6 +183,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  // Choose a new profile photo.
   Future<void> _pickPhoto() async {
     if (saving || picking) return;
     setState(() => picking = true);
@@ -209,6 +220,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  // Validate profile values and save the chosen photo changes.
   Future<void> _save() async {
     if (saving || picking || !(form.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();

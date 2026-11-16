@@ -8,6 +8,7 @@ import '../services/local_data_session.dart';
 import '../services/store_session.dart';
 import '../widgets/inventory_ui.dart';
 
+// Inspect the signed-in account local cache without editing it.
 class LocalDatabaseScreen extends StatefulWidget {
   const LocalDatabaseScreen({
     super.key,
@@ -22,7 +23,9 @@ class LocalDatabaseScreen extends StatefulWidget {
   State<LocalDatabaseScreen> createState() => _LocalDatabaseScreenState();
 }
 
+// Manage the local database screen values and actions.
 class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
+  // Keep this component's values, selections, and request state.
   late final database = widget.database ?? LocalDatabase.instance;
   late final scope = widget.scope ?? LocalDataSession.instance.scope;
   late final storeName =
@@ -33,16 +36,19 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
   LocalTable? table;
   Map<String, Object?>? record;
   List<String> columns = [];
+  // Require a matching signed-in account and selected shop.
   bool get allowed =>
       scope != null &&
       database.owns(scope!) &&
       (widget.scope != null || LocalDataSession.instance.scope == scope);
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     refresh();
   }
 
+  // Reload the current cache table or page.
   void refresh() {
     if (!allowed) return;
     if (table == null) {
@@ -52,6 +58,7 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     }
   }
 
+  // Return from record rows to the cache table list.
   void back() {
     if (!allowed) {
       Navigator.maybePop(context);
@@ -69,10 +76,12 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     }
   }
 
+  // Open the first page of the selected cache table.
   void openTable(LocalTable value) => setState(() {
     table = value;
     rows = database.inspectTable(scope!, value);
   });
+  // Build the local database screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -87,6 +96,7 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
             body: SafeArea(
               child: Column(
                 children: [
+                  // Show the page title, shop name, and header actions.
                   InventoryHeader(
                     title: !allowed
                         ? 'Local Database'
@@ -128,6 +138,7 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     ),
   );
 
+  // Show a readable local database error.
   Widget _error(Object? error) => _ViewerMessage(
     icon: Icons.storage_rounded,
     text: error is StateError
@@ -139,6 +150,8 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     ),
   );
 
+  // Show the cache tables and their row counts.
+  // Show loading, errors, or the completed request.
   Widget _tableList() => FutureBuilder<List<LocalTableSummary>>(
     future: tables,
     builder: (context, snapshot) {
@@ -224,6 +237,8 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     },
   );
 
+  // Show one page of cached records.
+  // Show loading, errors, or the completed request.
   Widget _tableRows() => FutureBuilder<LocalTablePage>(
     future: rows,
     builder: (context, snapshot) {
@@ -325,12 +340,14 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     },
   );
 
+  // Choose a readable title for the cached record.
   String _title(Map<String, Object?> row) => switch (table!) {
     LocalTable.inventory => '${row['product_name']}',
     LocalTable.categories => '${row['name']}',
     LocalTable.sync => '${row['dataset']}',
     LocalTable.preferences => '${row['view_name']}',
   };
+  // Summarize the cached record below its title.
   String _subtitle(Map<String, Object?> row) => switch (table!) {
     LocalTable.inventory =>
       '${row['batch_id']}\nStock: ${row['quantity_on_hand']} · ${row['unit_label']}',
@@ -340,12 +357,14 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
     LocalTable.preferences =>
       'Category: ${row['category_id']} · ${row['ascending'] == 1 ? 'Asc' : 'Desc'}',
   };
+  // Convert a stored date to readable text.
   String _date(Object? value) => value is int
       ? DateFormat(
           'd MMM yyyy, HH:mm:ss',
         ).format(DateTime.fromMillisecondsSinceEpoch(value))
       : '—';
 
+  // Show every stored field of the selected cached record.
   Widget _recordDetails() => ListView(
     key: const ValueKey('local-record-fields'),
     padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -394,6 +413,7 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
         ),
     ],
   );
+  // Format a cached field value for inspection.
   String _format(Object? value, String column) {
     if (value == null) return 'NULL';
     if (column.endsWith('_json') && value is String) {
@@ -407,11 +427,13 @@ class _LocalDatabaseScreenState extends State<LocalDatabaseScreen> {
   }
 }
 
+// Group the viewer message values and actions.
 class _ViewerMessage extends StatelessWidget {
   const _ViewerMessage({required this.icon, required this.text, this.action});
   final IconData icon;
   final String text;
   final Widget? action;
+  // Build the viewer message layout.
   @override
   Widget build(BuildContext context) => Center(
     child: SingleChildScrollView(

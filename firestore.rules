@@ -2,40 +2,48 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Require a signed-in account with verified or exempt email.
     function signedIn() {
       return request.auth != null
         && (request.auth.token.email_verified == true
           || request.auth.token.get('stockwise_legacy_account', false) == true);
     }
 
+    // Limit account-owned data to the signed-in user.
     function owns(uid) {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // Build this account membership path for the selected shop.
     function memberPath(storeId) {
       return /databases/$(database)/documents/stores/$(storeId)/members/$(request.auth.uid);
     }
 
+    // Require an existing active shop membership.
     function isActiveMember(storeId) {
       return signedIn()
         && exists(memberPath(storeId))
         && get(memberPath(storeId)).data.isActive == true;
     }
 
+    // Accept active Admin and supported legacy administrative roles.
     function isStoreAdmin(storeId) {
       return isActiveMember(storeId)
         // Read compatibility for stores created before the two-role migration.
         && get(memberPath(storeId)).data.role in ['admin', 'owner', 'manager', 'staff'];
     }
 
+    // Use shop Admin access for inventory actions.
     function managesInventory(storeId) {
       return isStoreAdmin(storeId);
     }
 
+    // Use the same Admin access for shop management.
     function managesStore(storeId) {
       return isStoreAdmin(storeId);
     }
 
+    // Require an existing category, including atomic category creation.
     function validCategoryReference(storeId, data) {
       return data.get('categoryId', '') is string
         && data.categoryId.matches('^[^/]{1,256}$')
@@ -43,6 +51,7 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/stores/$(storeId)/categories/$(data.categoryId));
     }
 
+    // Allow only supported sales and waste email cadences.
     function validReportSchedules(data) {
       return !data.keys().hasAny(['reportEmailSchedules'])
         || (data.reportEmailSchedules is map
@@ -56,6 +65,7 @@ service cloud.firestore {
           && data.reportEmailSchedules.waste.hasOnly(['daily', 'weekly', 'monthly', 'yearly']));
     }
 
+    // Match cart snapshots and quantity to current sellable stock.
     function validCartItem(storeId, batchId) {
       let batch = get(/databases/$(database)/documents/stores/$(storeId)/inventoryBatches/$(batchId)).data;
       let sellingPrice = batch.promotionEnabled == true
@@ -76,10 +86,12 @@ service cloud.firestore {
         && request.resource.data.unitPriceCents == sellingPrice;
     }
 
+    // Allow the conversation customer and this shop admins.
     function chatReadable(storeId, customerId) {
       return owns(customerId) || managesStore(storeId);
     }
 
+    // Validate attachment fields and the exact conversation storage path.
     function validChatAttachment(storeId, customerId, messageId, data) {
       return data is map
         && data.keys().hasOnly(['storagePath', 'fileName', 'contentType', 'size'])
@@ -90,11 +102,13 @@ service cloud.firestore {
         && data.size is int && data.size > 0 && data.size <= 20 * 1024 * 1024;
     }
 
+    // Build a preview from the message text or attachment metadata.
     function chatPreviewText(message) {
       return message.text.size() > 0 ? message.text
         : (message.attachment.contentType.matches('image/.*') ? 'Photo: ' : 'File: ') + message.attachment.fileName;
     }
 
+    // Validate sender identity, content, attachment, and server time.
     function validChatMessage(storeId, customerId, messageId, data) {
       return signedIn()
         && data.keys().hasOnly(['senderId', 'senderName', 'senderRole', 'text', 'sentAt', 'attachment'])
@@ -110,6 +124,7 @@ service cloud.firestore {
         && data.sentAt == request.time;
     }
 
+    // Require the preview to match a newly published message.
     function validChatPreview(storeId, customerId) {
       let data = request.resource.data;
       let path = /databases/$(database)/documents/stores/$(storeId)/conversations/$(customerId)/messages/$(data.lastMessageId);
@@ -123,6 +138,7 @@ service cloud.firestore {
         && validChatMessage(storeId, customerId, data.lastMessageId, message);
     }
 
+    // Advance only the viewer read timestamp without moving backwards.
     function validChatRead(field) {
       let data = request.resource.data;
       return data.diff(resource.data).affectedKeys().hasOnly([field])
@@ -140,6 +156,7 @@ service cloud.firestore {
         && national.matches("(?:427[01]\\d{4}|(?:3(?:2[0-36-9]|3[0-368]|4[0-278]|5[0-24-8]|6[0-467]|7[1246-9]|8\\d|9[0-57])\\d|4(?:2[0-689]|[3-79]\\d|8[1-35689])|5(?:2[0-589]|[3468]\\d|5[0-489]|7[1-9]|9[23])|6(?:2[2-9]|3[1357-9]|[46]\\d|5[0-6]|7[0-35-9]|85|9[015-8])|7(?:[2579]\\d|3[03-68]|4[0-8]|6[5-9]|8[0-35-9])|8(?:[24][2-8]|3[2-5]|5[2-7]|6[2-589]|7[2-578]|[89][2-9])|9(?:0[57]|13|[25-7]\\d|[3489][0-8]))\\d{5}|1(?:(?:1888[689]|4400|8(?:47|8[27])[0-4])\\d{4}|9\\d{7,8})|1(?:0(?:[23568]\\d|4[0-6]|7[016-9]|9[0-8])|1(?:[1-5]\\d\\d|6(?:0[5-9]|[1-9]\\d)|7(?:[0-4]\\d|5[0-79]|6[02-4]|8[02-5]))|(?:[26]\\d|[37][1-9]|4[235-9])\\d|5(?:31|9\\d\\d)|8(?:1[23]|[236]\\d|4[06]|5(?:46|[7-9])|7[016-9]|8[01]|9[0-8]))\\d{5}|15(?:4(?:6[0-4]\\d|8(?:0[125]|[17]\\d|21|3[01]|4[01589]|5[014]|6[02]))|6(?:32[0-6]|78\\d))\\d{4}|1[378]00\\d{6}|1600\\d{6})");
     }
 
+    // Accept the supported Malaysian phone formats.
     function validMalaysianPhone(value) {
       return value is string
         && value.trim().size() <= 64
@@ -148,16 +165,19 @@ service cloud.firestore {
         && validCompactMalaysianPhone(value.trim().replace('[ ()-]', ''));
     }
 
+    // Allow an empty optional phone or a valid Malaysian number.
     function validOptionalPhone(value) {
       return value == null || (value is string
         && (value.trim().size() == 0 || validMalaysianPhone(value)));
     }
 
+    // Require a non-empty address field within its length limit.
     function nonemptyAddressText(value, maximum) {
       return value is string && value.size() <= maximum
         && value.matches('(?s).*\\S.*');
     }
 
+    // Validate address fields and the canonical postcode state.
     function validSavedAddress(data) {
       let line2 = data.get('addressLine2', '');
       let expectedState = get(/databases/$(database)/documents/validationData/malaysiaPostcodes).data.states.get(data.postalCode, '');
@@ -176,11 +196,13 @@ service cloud.firestore {
         && formatted.size() <= 500;
     }
 
+    // Validate the structured address saved for a shop.
     function validShopAddress(data) {
       return data.shopAddress is string && data.shopAddress.size() <= 500
         && data.shopAddress.matches('(?s).*\\S.*');
     }
 
+    // Keep normalized shop-name reservations server-controlled.
     match /storeNames/{nameKey} {
       allow read, write: if false;
     }
@@ -190,6 +212,7 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Protect each account profile and its private subcollections.
     match /users/{uid} {
       allow read: if owns(uid);
       allow create: if owns(uid) && validOptionalPhone(request.resource.data.get('phoneNumber', null));
@@ -199,21 +222,25 @@ service cloud.firestore {
           || validOptionalPhone(request.resource.data.get('phoneNumber', null)));
       allow delete: if false;
 
+      // Keep saved delivery addresses owned by this account.
       match /addresses/{addressId} {
         allow read, delete: if owns(uid);
         allow create, update: if owns(uid) && validSavedAddress(request.resource.data);
       }
 
+      // Keep notification device records owned by this account.
       match /devices/{deviceId} {
         allow read: if owns(uid);
         allow write: if false;
       }
     }
 
+    // Expose sender readiness without private mail credentials.
     match /systemStatus/reportEmail {
       allow read: if signedIn();
       allow write: if false;
     }
+    // Keep assistant usage counters under server control.
     match /assistantUsage/{uid} {
       allow read, write: if false;
     }
@@ -223,11 +250,13 @@ service cloud.firestore {
     match /{path=**}/members/{memberId} {
       allow list: if signedIn() && resource.data.userId == request.auth.uid;
     }
+    // Allow account-scoped invitation collection-group lookups.
     match /{path=**}/adminInvites/{inviteId} {
       allow list: if signedIn()
         && resource.data.emailLowercase
           == request.auth.token.email.lower();
     }
+    // Scope all business data and role checks to this shop.
     match /stores/{storeId} {
       allow read: if signedIn() && (resource.data.status == 'active' || isActiveMember(storeId));
       // Creation is server-only to require an address and reserve a unique name atomically.
@@ -238,7 +267,9 @@ service cloud.firestore {
           || validShopAddress(request.resource.data));
       allow delete: if false;
 
+      // Protect Admin access while allowing own report preferences.
       match /members/{uid} {
+        // Require atomic, verified invitation and membership acceptance.
         function acceptingAdminInvitation() {
           let data = request.resource.data;
           let invite = /databases/$(database)/documents/stores/$(storeId)/adminInvites/$(data.invitationId);
@@ -266,6 +297,7 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Restrict invitation reads and changes to their permitted actors.
       match /adminInvites/{inviteId} {
         allow read: if managesStore(storeId)
           || (signedIn()
@@ -295,6 +327,7 @@ service cloud.firestore {
         allow delete: if managesStore(storeId);
       }
 
+      // Allow Admin edits while keeping deletion server-controlled.
       match /categories/{categoryId} {
         allow read: if signedIn();
         allow create, update: if managesInventory(storeId)
@@ -306,11 +339,13 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Restrict report delivery records to shop administrators.
       match /reportDeliveries/{deliveryId} {
         allow read: if managesInventory(storeId);
         allow write: if false;
       }
 
+      // Protect the product catalogue and its category references.
       match /products/{productId} {
         allow read: if signedIn();
         allow create: if managesInventory(storeId)
@@ -321,13 +356,16 @@ service cloud.firestore {
         allow delete: if managesInventory(storeId);
       }
 
+      // Protect historical inventory retained for order and stock history.
       match /inventoryArchive/{batchId} {
         allow read: if managesInventory(storeId);
         allow write: if false;
       }
+      // Keep expiry-delivery records server-controlled.
       match /expiryNotifications/{notificationId} {
         allow read, write: if false;
       }
+      // Require Admin writes and valid category references.
       match /inventoryBatches/{batchId} {
         allow read: if signedIn();
         allow create: if managesInventory(storeId)
@@ -341,6 +379,7 @@ service cloud.firestore {
           && request.resource.data.basePriceCents is int && request.resource.data.basePriceCents > 0;
         allow delete: if false;
       }
+      // Constrain stock-history writes to supported administrative events.
       match /inventoryEvents/{eventId} {
         allow read: if managesInventory(storeId);
         allow create: if managesInventory(storeId)
@@ -349,6 +388,7 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // Keep each customer cart scoped to their account.
       match /carts/{uid} {
         allow read: if owns(uid);
         allow create, update: if owns(uid)
@@ -356,6 +396,7 @@ service cloud.firestore {
           && request.resource.data.storeId == storeId;
         allow delete: if owns(uid) || managesStore(storeId);
 
+        // Validate cart lines against current stock and pricing.
         match /items/{batchId} {
           allow read, delete: if owns(uid);
           allow create: if owns(uid) && validCartItem(storeId, batchId);
@@ -366,6 +407,7 @@ service cloud.firestore {
         }
       }
 
+      // Limit orders to their customer and shop administrators.
       match /orders/{orderId} {
         allow create: if false;
         allow read: if signedIn()
@@ -383,6 +425,7 @@ service cloud.firestore {
         );
         allow delete: if false;
 
+        // Protect product snapshots saved with this order.
         match /items/{itemId} {
           allow create: if false;
           allow read: if signedIn()
@@ -426,6 +469,7 @@ service cloud.firestore {
                   == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName)));
         allow delete: if false;
 
+        // Validate message writes and preserve published message history.
         match /messages/{messageId} {
           allow read: if chatReadable(storeId, customerId);
           allow create: if validChatMessage(storeId, customerId, messageId, request.resource.data)
@@ -435,6 +479,7 @@ service cloud.firestore {
         }
       }
 
+      // Apply recipient and Admin checks to shop notifications.
       match /notifications/{notificationId} {
         allow create: if signedIn()
           && (request.resource.data.recipientUid == request.auth.uid || managesInventory(storeId));
@@ -446,6 +491,7 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Apply shop settings read and administrative write checks.
       match /settings/{settingId} {
         allow read: if signedIn();
         allow write: if settingId != 'commerce' && managesStore(storeId);

@@ -12,10 +12,12 @@ import '../widgets/store_chat_button.dart';
 import 'add_item_screen.dart';
 import 'admin_item_detail_screen.dart';
 import 'items_screen.dart';
+import 'inventory_batches_screen.dart';
 import 'orders_screen.dart';
 import 'profile_screen.dart';
 import 'waste_analysis_screen.dart';
 
+// Show the admin inventory overview and expiring stock.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.inventoryStream, this.categoryStream});
   final Stream<List<InventoryBatch>>? inventoryStream;
@@ -24,16 +26,20 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+// Manage the home screen values and actions.
 class _HomeScreenState extends State<HomeScreen> {
+  // Keep this component's values, selections, and request state.
   String category = 'all';
   bool expiryAscending = true;
   final savedView = SavedCatalogueView('overview');
+  // Set up the initial values and screen state.
   @override
   void initState() {
     super.initState();
     _restoreView();
   }
 
+  // Restore the saved category and sort preferences.
   Future<void> _restoreView() async {
     final value = await savedView.restore();
     if (mounted && value != null) {
@@ -44,12 +50,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // Remember the current category and sort preferences.
   void _saveView() => savedView.save(category, expiryAscending);
   late final inventory =
       widget.inventoryStream ?? FirestoreService.instance.watchInventory();
   late final categories =
       widget.categoryStream ?? FirestoreService.instance.watchCategoryRecords();
 
+  // Build the home screen layout.
   @override
   Widget build(BuildContext context) => InventoryTheme(
     child: Builder(
@@ -58,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
           bottom: false,
           child: Column(
             children: [
+              // Show the page title, shop name, and header actions.
               InventoryHeader(
                 title: 'Overview',
                 enlarged: true,
@@ -76,11 +85,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ? const StoreChatButton(inventoryStyle: true)
                     : null,
               ),
+              // Explain when a saved catalogue snapshot is being displayed.
               const CatalogueCacheNotice(),
               Expanded(
+                // Follow category names and archive-state changes.
                 child: StreamBuilder<List<StoreCategory>>(
                   stream: categories,
                   builder: (context, records) =>
+                      // Follow live stock quantities, prices, and expiry updates.
                       StreamBuilder<List<InventoryBatch>>(
                         stream: inventory,
                         builder: (context, snapshot) {
@@ -163,6 +175,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
+                              // Apply the category, expiry, and sort filters.
                               InventoryFilters(
                                 compact: true,
                                 outlined: true,
@@ -188,14 +201,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     enlarged: true,
                                     title: 'All clear for the next 30 days',
                                     body:
-                                        'No stock expires in the next 7 days.',
+                                        'No stock expires in the next 30 days.',
                                     icon: Icons.check_rounded,
                                   ),
                                 )
                               else
-                                for (final item in expiring.take(5))
+                                for (final item in expiring)
                                   Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
+                                    // Show one stock batch with its expiry and quantity.
                                     child: InventoryBatchTile(
                                       enlarged: true,
                                       item: item,
@@ -262,47 +276,66 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   );
 
+  // Show the active batch and expiring stock totals.
   Widget _stats(int active, int expiring) => LayoutBuilder(
     builder: (context, constraints) {
-      final activeCard = Container(
-        height: 150,
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
+      final activeCard = Semantics(
+        button: true,
+        label: 'View Inventory batches',
+        child: Material(
           color: InventoryColors.ink,
           borderRadius: BorderRadius.circular(22),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'ACTIVE BATCHES',
-              style: TextStyle(
-                color: Color(0xFFC9DBCA),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: const ValueKey('home-inventory-batches'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const InventoryBatchesScreen()),
             ),
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  '$active',
-                  style: const TextStyle(
-                    fontSize: 52,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+            child: Container(
+              height: 150,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: InventoryColors.ink,
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'ACTIVE BATCHES',
+                    style: TextStyle(
+                      color: Color(0xFFC9DBCA),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$active',
+                        style: const TextStyle(
+                          fontSize: 52,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Across ${StoreSession.instance.store?.name ?? 'your store'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFFC9DBCA),
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              'Across ${StoreSession.instance.store?.name ?? 'your store'}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Color(0xFFC9DBCA), fontSize: 12),
-            ),
-          ],
+          ),
         ),
       );
       final expiringCard = Container(
@@ -334,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const Text(
-              'Expiring in\n7 days',
+              'Expiring in\n30 days',
               style: TextStyle(fontSize: 11.5, color: InventoryColors.muted),
             ),
           ],
@@ -358,6 +391,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   );
 
+  // Build the navigation links for this role.
+  // Show the admin navigation destinations.
   Widget _bottomNav(BuildContext context) => InventoryBottomNav(
     fontSize: 10.5,
     currentIndex: 0,

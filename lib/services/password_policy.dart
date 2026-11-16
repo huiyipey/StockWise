@@ -6,6 +6,7 @@ const _specialCharacters =
     r"""^$*.[]{}()?"!@#%&/\,><':;|_~"""
     '\u0060';
 
+// Require uppercase, lowercase, number, symbol, and eight characters.
 String? passwordPolicyError(String password) {
   if (password.length < 8) return 'Use at least 8 characters.';
   if (!RegExp(r'[A-Z]').hasMatch(password)) {
