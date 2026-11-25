@@ -1,9 +1,9 @@
 const {createHash}=require('node:crypto');
 const {HttpsError}=require('firebase-functions/v2/https');
-const {shelfLife,expiryStage,titleCase}=require('./commerce_logic');
+const {shelfLife,titleCase}=require('./commerce_logic');
 const {isActiveStoreAdmin}=require('./store_roles');
 const {isImportedDemoOrder}=require('./demo_data');
-const {inventorySnapshot}=require('./inventory_snapshot');
+const {inventoryExpiry}=require('./inventory_expiry');
 // Hash identifiers used by notification delivery records.
 const key=token=>createHash('sha256').update(token).digest('hex');
 // Create shop and account notification handlers.
@@ -36,16 +36,15 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
   }
   // Find the active Admin accounts of this shop.
   async function recipients(store){const members=await store.collection('members').get();return members.docs.filter(m=>isActiveStoreAdmin(m.data())).map(m=>m.id);}
-  // Archive expired inventory and record its remaining stock as waste.
-  async function cleanup(store,ref,now=new Date()){
-    return db.runTransaction(async tx=>{const snap=await tx.get(ref);if(!snap.exists)return;
-      const b=snap.data();if(!b.expiryAt?.toDate||b.expiryAt.toDate()>now)return;
-      tx.set(store.collection('inventoryArchive').doc(ref.id),{...inventorySnapshot(b),removedAt:serverTimestamp(),removalReason:'expired'});
-      if(b.quantityOnHand>0)tx.set(store.collection('inventoryEvents').doc(`expiry-${ref.id}`),{storeId:store.id,batchId:ref.id,productId:b.productId,
-        productName:b.productName,categoryId:b.categoryId||'others',eventType:'expired',quantity:b.quantityOnHand,quantityDelta:-b.quantityOnHand,actorUid:'system',occurredAt:serverTimestamp()});
-      tx.delete(ref);
-    });
-  }
+  const expiry = inventoryExpiry({db, Timestamp, serverTimestamp, sendReminder: async ({store, batchId, batch, stage, now}) => {
+    const days = shelfLife(batch, now).daysLeft;
+    const title = stage === 4 ? 'Last expiry reminder' : `${batch.productName} expires soon`;
+    const body = stage === 4 ? `${batch.productName}: review remaining stock before closing.`
+      : `${batch.productName}: ${days} day${days === 1 ? '' : 's'} left.`;
+    for (const uid of await recipients(store)) {
+      await notify(uid, title, body, {storeId: store.id, batchId, type: 'expiry', stage}, 'expiry');
+    }
+  }});
   return {
     // Associate this notification token with the signed-in account.
     registerPushToken:async request=>{
@@ -96,31 +95,26 @@ function notificationHandlers({db,messaging,serverTimestamp,Timestamp}) {
         for(const user of customers.docs)if(!team.has(user.id))await notify(user.id,`New promotion · ${shop.name}`,`${after.productName}${after.promotion?.label?': '+after.promotion.label:' is on promotion.'}`,{storeId:store.id,batchId:event.params.batchId,type:'promotion'},'promotion');
       });
     },
-    // Save shelf-life fields after the batch changes.
-    inventoryWritten:async event=>{const after=event.data?.after;if(!after?.exists)return;
-      const b=after.data(),now=new Date(),store=db.collection('stores').doc(event.params.storeId);
-      if(b.expiryAt?.toDate&&b.expiryAt.toDate()<=now){await cleanup(store,after.ref,now);return;}
-      if(!b.expiryAt?.toDate)return;const life=shelfLife(b,now);
-      if(b.totalShelfLifeDays!==life.totalShelfLifeDays||b.shelfLifeType!==life.shelfLifeType)await after.ref.update({totalShelfLifeDays:life.totalShelfLifeDays,shelfLifeType:life.shelfLifeType,receivedAt:b.receivedAt||b.createdAt||Timestamp.fromDate(now)});
-    },
-    // Process expiry alerts and expired stock on the schedule.
-    inventoryClock:async()=>{
-      const now=new Date(),stores=await db.collection('stores').where('status','==','active').get();
-      for(const shop of stores.docs){const store=shop.ref,inventory=await store.collection('inventoryBatches').get();
-        for(const doc of inventory.docs){const b=doc.data();if(!b.expiryAt?.toDate)continue;
-          if(b.expiryAt.toDate()<=now){await cleanup(store,doc.ref,now);continue;}
-          const life=shelfLife(b,now);if(b.totalShelfLifeDays!==life.totalShelfLifeDays||b.shelfLifeType!==life.shelfLifeType)await doc.ref.update({totalShelfLifeDays:life.totalShelfLifeDays,shelfLifeType:life.shelfLifeType,receivedAt:b.receivedAt||b.createdAt||Timestamp.fromDate(now)});
-          const stage=expiryStage(b,shop.data(),now);if(!stage)continue;
-          const marker=store.collection('expiryNotifications').doc(`${doc.id}-${b.expiryAt.toMillis()}-${stage}`);
-          const claimed=await db.runTransaction(async tx=>{const snap=await tx.get(marker);if(snap.exists)return false;tx.create(marker,{batchId:doc.id,stage,createdAt:serverTimestamp()});return true;});
-          if(!claimed)continue;
-          const title=stage===4?'Last expiry reminder':`${b.productName} expires soon`;
-          const body=stage===4?`${b.productName}: review remaining stock before closing.`:`${b.productName}: ${life.daysLeft} day${life.daysLeft===1?'':'s'} left.`;
-          try{for(const uid of await recipients(store))await notify(uid,title,body,{storeId:store.id,batchId:doc.id,type:'expiry',stage},'expiry');}
-          catch(e){await marker.delete();throw e;}
-        }
+    inventoryWritten: async event => {
+      const before = event.data?.before?.data(), after = event.data?.after?.data();
+      if (before && after?.expiryAt?.toMillis && after.expiryAt.toMillis() > Date.now()) {
+        const received = batch => (batch.receivedAt || batch.createdAt)?.toMillis?.();
+        const life = shelfLife(after);
+        if (before.expiryAt?.toMillis?.() === after.expiryAt.toMillis() && received(before) === received(after) &&
+            before.status === after.status && before.notifyOnExpiry === after.notifyOnExpiry &&
+            (before.quantityOnHand > 0) === (after.quantityOnHand > 0) &&
+            after.totalShelfLifeDays === life.totalShelfLifeDays && after.shelfLifeType === life.shelfLifeType) return;
       }
+      const store = db.collection('stores').doc(event.params.storeId);
+      return expiry.sync(store, store.collection('inventoryBatches').doc(event.params.batchId), {classify: true});
     },
+    storeHoursWritten: async event => {
+      const before = event.data?.before?.data(), after = event.data?.after?.data();
+      if (!after || (before?.status === after.status &&
+          JSON.stringify(before?.operatingHours) === JSON.stringify(after.operatingHours))) return;
+      return expiry.rescheduleStore(event.data.after.ref);
+    },
+    inventoryClock: expiry.runDue,
   };
 }
 // Export the helpers used by the app backend and tests.

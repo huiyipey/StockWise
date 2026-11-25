@@ -47,7 +47,8 @@ exports.notifyPromotion=onDocumentWritten('stores/{storeId}/inventoryBatches/{ba
 // Notify the conversation recipient about a new message.
 exports.notifyChatMessage=onDocumentCreated('stores/{storeId}/conversations/{customerId}/messages/{messageId}',notifications.chatMessage);
 // Update stored shelf-life metadata after an inventory change.
-exports.classifyInventory=onDocumentWritten('stores/{storeId}/inventoryBatches/{batchId}',notifications.inventoryWritten);
+exports.classifyInventory=onDocumentWritten({document:'stores/{storeId}/inventoryBatches/{batchId}',retry:true},notifications.inventoryWritten);
+exports.scheduleStoreExpiry=onDocumentWritten({document:'stores/{storeId}',retry:true,timeoutSeconds:540},notifications.storeHoursWritten);
 // Process expiry alerts and expired stock on the schedule.
 exports.inventoryClock=onSchedule({schedule:'every 1 minutes',timeZone:'Asia/Kuala_Lumpur',timeoutSeconds:540,maxInstances:1},notifications.inventoryClock);
 for(const name of ['quoteCart','placeOrder','updateOrderStatus','discardInventory','removeInventory','saveDeliveryFees','deleteStore']) {
